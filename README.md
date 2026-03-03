@@ -1,12 +1,17 @@
 # hockey
 [Similar to](https://hockeychallengehelper.com/)
 
+[5v5 hockey](https://5v5hockey.com/ai-betting/tims-picks/)
+
 [odds](https://www.rotowire.com/betting/nhl/player-props.php)
 
 [DraftKings](https://sportsbook.draftkings.com/leagues/hockey/nhl?category=goalscorer&subcategory=anytime-goalscorer)
 [FanDuel](https://on.sportsbook.fanduel.ca/navigation/nhl?tab=parlay-builder)
+[BetMGM](https://www.on.betmgm.ca/en/sports/hockey-12/betting/usa-9/nhl-34)
 [BetRivers](https://on.betrivers.ca/?page=sportsbook&group=1000093657&type=playerprops)
+[Caesars](https://sportsbook.caesars.com/icehockey?id=b7b715a9-c7e8-4c47-af0a-77385b525e09)
 [Hard Rock](https://www.hardrock.bet)
+[theScore](https://www.thescore.bet/)
 
 Reacts adaptively to light-dark scheme
 
