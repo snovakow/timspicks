@@ -296,12 +296,7 @@ const processOddsBetRivers = () => {
   const map = new Map<string, number>();
   for (const item of playerOddsBetRivers) {
     const outcome = item.outcomes[0];
-    const fraction = outcome.oddsFractional.split("/");
-    const num = Number(fraction[0]);
-    const den = Number(fraction[1]);
-    // outcome.odds outcome.oddsAmerican outcome.oddsFractional
-    const trueOdds = num / den + 1;
-    map.set(item.playerInfo.name, trueOdds);
+    map.set(item.playerInfo.name, outcome.odds);
   }
 
   const err: string[] = [];
