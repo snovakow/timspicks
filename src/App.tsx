@@ -3,14 +3,12 @@ import './App.css';
 import { getLogo, type Team } from './components/logo';
 import Table from './components/Table';
 import type { KeyType, RowKey, ColumnData, RequestSort, SortConfig } from './components/Table';
-import type { DataDraftKings, DataTimsHelper } from './data/Data';
+import type { DataTimsHelper } from './data/Data';
 import playerData from './data/helper.json';
 import playerOddsDraftKings from './data/draftkings.json';
 import playerOddsFanDuel from './data/fanduel.json';
 import playerOddsBetRivers from './data/betrivers.json';
 import { table_1_data as hockey5v5_1, table_2_data as hockey5v5_2, table_3_data as hockey5v5_3 } from './data/5v5hockey.ts';
-
-const directLoad = true;
 
 const nameMap = new Map<string, string>();
 nameMap.set("Alex Wennberg", "Alexander Wennberg"); // DraftKings, BetRivers
@@ -426,10 +424,7 @@ const logStats = () => {
   printRow("2", max1_2row, max2_2row, max3_2row);
   printRow("3", max1_3row, max2_3row, max3_3row);
 }
-
-if (directLoad) {
   logStats();
-}
 
 function App() {
 
@@ -452,21 +447,6 @@ function App() {
 
   const [rows3, setRows3] = useState(table3Rows);
   const sortedRows3 = [...rows3];
-
-  if (!directLoad) {
-    useEffect(() => {
-      const handleChange = () => {
-
-        setRows1([...table1Rows]);
-        setRows2([...table2Rows]);
-        setRows3([...table3Rows]);
-
-        logStats();
-      };
-      window.addEventListener("DraftKings", handleChange);
-      return () => window.removeEventListener('DraftKings', handleChange);
-    }, []);
-  }
 
   // Update theme when system preference changes
   useEffect(() => {

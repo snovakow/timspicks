@@ -27,32 +27,3 @@ export interface DataTimsHelper {
   ppLinemates: string,
   gameLogs: never[]
 }
-
-// DraftKings
-interface DisplayOdds {
-  american: string;
-  decimal: string;
-  fractional: string;
-}
-
-interface Participant {
-  id: string;
-  name: string;
-  type: string;
-  seoIdentifier: string;
-  venueRole: string;
-  isNationalTeam: boolean;
-}
-
-export interface DataDraftKings {
-  id: string;
-  marketId: string;
-  label: string;
-  displayOdds: DisplayOdds;
-  trueOdds: number;
-  outcomeType: string;
-  participants: Participant[];
-  sortOrder: number;
-  tags: string[];
-  metadata: Record<string, unknown>;
-}
