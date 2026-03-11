@@ -307,57 +307,62 @@ const logStats = () => {
     return max;
   };
 
-  let max1_1row = null;
-  let max1_2row = null;
-  let max1_3row = null;
-  let max2_1row = null;
-  let max2_2row = null;
-  let max2_3row = null;
-  let max3_1row = null;
-  let max3_2row = null;
-  let max3_3row = null;
-  max1_1row = processRow('bet1', table1Rows);
-  max2_1row = processRow('bet2', table1Rows);
-  max3_1row = processRow('bet3', table1Rows);
-  max1_2row = processRow('bet1', table2Rows);
-  max2_2row = processRow('bet2', table2Rows);
-  max3_2row = processRow('bet3', table2Rows);
-  max1_3row = processRow('bet1', table3Rows);
-  max2_3row = processRow('bet2', table3Rows);
-  max3_3row = processRow('bet3', table3Rows);
-  if (max1_1row === null || max2_1row === null || max3_1row === null) return;
-  if (max1_2row === null || max2_2row === null || max3_2row === null) return;
-  if (max1_3row === null || max2_3row === null || max3_3row === null) return;
-  const max1a = betChance(max1_1row[0].bet1);
-  const max2a = betChance(max1_2row[0].bet1);
-  const max3a = betChance(max1_3row[0].bet1);
-  const max1b = betChance(max2_1row[0].bet2);
-  const max2b = betChance(max2_2row[0].bet2);
-  const max3b = betChance(max2_3row[0].bet2);
-  const max1c = betChance(max3_1row[0].bet3);
-  const max2c = betChance(max3_2row[0].bet3);
-  const max3c = betChance(max3_3row[0].bet3);
-  if (max1a === null || max2a === null || max3a === null) return;
-  if (max1b === null || max2b === null || max3b === null) return;
-  if (max1c === null || max2c === null || max3c === null) return;
-  console.log("Any:",
-    "DraftKings: " + rountdToPercent(1 - (1 - max1a) * (1 - max2a) * (1 - max3a), 3),
-    "FanDuel: " + rountdToPercent(1 - (1 - max1b) * (1 - max2b) * (1 - max3b), 3),
-    "BetRivers: " + rountdToPercent(1 - (1 - max1c) * (1 - max2c) * (1 - max3c), 3),
-    "(70-74) 79.1 80.793"
-  );
-  console.log("Avg:",
-    "DraftKings: " + rountdToPercent((max1a + max2a + max3a) / 3, 3),
-    "FanDuel: " + rountdToPercent((max1b + max2b + max3b) / 3, 3),
-    "BetRivers: " + rountdToPercent((max1c + max2c + max3c) / 3, 3),
-    "(33-36) 38-39.7 42.054"
-  );
-  console.log("All:",
-    "DraftKings:  " + rountdToPercent(max1a * max2a * max3a, 3),
-    "FanDuel:  " + rountdToPercent(max1b * max2b * max3b, 3),
-    "BetRivers:  " + rountdToPercent(max1c * max2c * max3c, 3),
-    "(3-4) 5.5 7.259"
-  );
+  const max1_1row = processRow('bet1', table1Rows);
+  const max1_2row = processRow('bet1', table2Rows);
+  const max1_3row = processRow('bet1', table3Rows);
+
+  const max2_1row = processRow('bet2', table1Rows);
+  const max2_2row = processRow('bet2', table2Rows);
+  const max2_3row = processRow('bet2', table3Rows);
+
+  const max3_1row = processRow('bet3', table1Rows);
+  const max3_2row = processRow('bet3', table2Rows);
+  const max3_3row = processRow('bet3', table3Rows);
+
+  const logs1: string[] = ["Any:"];
+  const logs2: string[] = ["Avg:"];
+  const logs3: string[] = ["All:"];
+
+  if (max1_1row && max1_2row && max1_3row) {
+    const max1a = betChance(max1_1row[0].bet1);
+    const max2a = betChance(max1_2row[0].bet1);
+    const max3a = betChance(max1_3row[0].bet1);
+    if (max1a !== null && max2a !== null && max3a !== null) {
+      logs1.push("DraftKings: " + rountdToPercent(1 - (1 - max1a) * (1 - max2a) * (1 - max3a), 3));
+      logs2.push("DraftKings: " + rountdToPercent((max1a + max2a + max3a) / 3, 3));
+      logs3.push("DraftKings:  " + rountdToPercent(max1a * max2a * max3a, 3));
+    }
+  }
+
+  if (max2_1row && max2_2row && max2_3row) {
+    const max1b = betChance(max2_1row[0].bet2);
+    const max2b = betChance(max2_2row[0].bet2);
+    const max3b = betChance(max2_3row[0].bet2);
+    if (max1b !== null && max2b !== null && max3b !== null) {
+      logs1.push("FanDuel: " + rountdToPercent(1 - (1 - max1b) * (1 - max2b) * (1 - max3b), 3));
+      logs2.push("FanDuel: " + rountdToPercent((max1b + max2b + max3b) / 3, 3));
+      logs3.push("FanDuel:  " + rountdToPercent(max1b * max2b * max3b, 3));
+    }
+  }
+
+  if (max3_1row && max3_2row && max3_3row) {
+    const max1c = betChance(max3_1row[0].bet3);
+    const max2c = betChance(max3_2row[0].bet3);
+    const max3c = betChance(max3_3row[0].bet3);
+    if (max1c !== null && max2c !== null && max3c !== null) {
+      logs1.push("BetRivers: " + rountdToPercent(1 - (1 - max1c) * (1 - max2c) * (1 - max3c), 3));
+      logs2.push("BetRivers: " + rountdToPercent((max1c + max2c + max3c) / 3, 3));
+      logs3.push("BetRivers:  " + rountdToPercent(max1c * max2c * max3c, 3));
+    }
+  }
+
+  logs1.push("(70-74) 79.1 80.793");
+  logs2.push("(33-36) 38-39.7 42.054");
+  logs3.push("(3-4) 5.5 7.259");
+
+  console.log(...logs1);
+  console.log(...logs2);
+  console.log(...logs3);
 
   const isSameArray = (arr1: string[], arr2: string[]): boolean => {
     if (arr1.length !== arr2.length) return false;
@@ -377,12 +382,15 @@ const logStats = () => {
       odds.push(title);
     }
   }
-  const printRow = (header: string, max1row: RowKey[], max2row: RowKey[], max3row: RowKey[]) => {
+  const printRow = (header: string, max1row: RowKey[] | null, max2row: RowKey[] | null, max3row: RowKey[] | null) => {
     const pick = new Map<string, string[]>();
-    const allOdds = ["DraftKings", "FanDuel", "BetRivers"];
-    addPicks(pick, max1row, allOdds[0]);
-    addPicks(pick, max2row, allOdds[1]);
-    addPicks(pick, max3row, allOdds[2]);
+    const allOdds = [];
+    if (max1row) allOdds.push("DraftKings");
+    if (max2row) allOdds.push("FanDuel");
+    if (max3row) allOdds.push("BetRivers");
+    if (max1row) addPicks(pick, max1row, allOdds[0]);
+    if (max2row) addPicks(pick, max2row, allOdds[1]);
+    if (max3row) addPicks(pick, max3row, allOdds[2]);
 
     // Merge player names with the same odds sources
     const entries: [string, string[]][] = [...pick.entries()];
