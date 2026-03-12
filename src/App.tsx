@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import './App.css';
-import { getLogo, type Team } from './components/logo';
 import * as Picks from './components/Table';
 import type { DataTimsHelper } from './data/Data';
 import playerData from './data/helper.json';
@@ -56,30 +55,6 @@ nameMap4.set("Olli Maatta", "Olli Määttä");
 nameMap4.set("Matty Beniers", "Matthew Beniers");
 nameMap4.set("Tim Stützle", "Tim Stutzle");
 
-class PlayerOdds implements Picks.RowOdds {
-	name: string;
-	bet1: number | null = null;
-	bet2: number | null = null;
-	bet3: number | null = null;
-	betChance1: string = "-";
-	betChance2: string = "-";
-	betChance3: string = "-";
-	constructor(name: string) {
-		this.name = name;
-	}
-}
-
-const rountdToPercent = (num: number, places: number): string => {
-	return (num * 100).toFixed(places) + "%";
-}
-
-// Poisson distribution chance of 0 goals: e^(−μ)
-// Chance of at least one goal: 1 − e^(−μ)
-const ggChance = (x: number): string => {
-	const chance = 1 - Math.exp(-x);
-	return rountdToPercent(chance, 2);
-}
-
 // Implied Odds
 const betChance = (x: number | null): number | null => {
 	if (x === null) return null;
@@ -90,7 +65,7 @@ const betChance = (x: number | null): number | null => {
 const betChanceRounded = (x: number | null): string => {
 	const chance = betChance(x);
 	if (chance === null) return "-";
-	return rountdToPercent(chance, 2);
+	return Picks.rountdToPercent(chance, 2);
 }
 
 const trueOddsToAmerican = (x: number): number => {
@@ -102,23 +77,15 @@ const trueOddsToAmerican = (x: number): number => {
 	}
 }
 
-class PickOdds extends PlayerOdds implements Picks.RowKey {
-	logoLight: string;
-	logoDark: string;
-	gg: number;
-	ggChance: string;
-	bet5v5: number | null = null;
-	betChance5v5: string = "-";
-	constructor(item: DataTimsHelper) {
-		super(`${item.firstName} ${item.lastName}`);
-
-		this.logoLight = getLogo(item.team as Team, false);
-		this.logoDark = getLogo(item.team as Team, true);
-		this.gg = item.gamesPlayed > 0 ? item.goals / item.gamesPlayed : 0;
-		this.ggChance = ggChance(this.gg);
-	}
+type betKeys = "bet1" | "bet2" | "bet3";
+type betChanceKey = "betChance1" | "betChance2" | "betChance3";
+const assignOdds = (row: Picks.PlayerOdds | Picks.PickOdds, trueOdds: number, betKey: betKeys, betChanceKey: betChanceKey): void => {
+	const odds = trueOddsToAmerican(trueOdds);
+	row[betKey] = odds;
+	row[betChanceKey] = betChanceRounded(odds);
 }
 
+const tablePlayers: Picks.PlayerOdds[] = [];
 const compilePlayerList = () => {
 	const reverse1 = new Map<string, string>();
 	const reverse2 = new Map<string, string>();
@@ -127,45 +94,43 @@ const compilePlayerList = () => {
 	for (const [key, value] of nameMap2.entries()) reverse2.set(value, key);
 	for (const [key, value] of nameMap3.entries()) reverse3.set(value, key);
 
-	const allMap: Map<string, PlayerOdds> = new Map();
+	const allMap: Map<string, Picks.PlayerOdds> = new Map();
 	for (const item of playerOddsDraftKings) {
 		const name = reverse1.get(item.name) ?? item.name;
-		const player = new PlayerOdds(name);
-		player.bet1 = item.odds;
+		const player = new Picks.PlayerOdds(name);
+		assignOdds(player, item.odds, "bet1", "betChance1");
 		allMap.set(name, player);
 	}
 	for (const item of playerOddsFanDuel) {
 		const name = reverse2.get(item.name) ?? item.name;
 		let player = allMap.get(name);
 		if (!player) {
-			player = new PlayerOdds(name);
+			player = new Picks.PlayerOdds(name);
 			allMap.set(name, player);
 		}
-		player.bet2 = item.odds;
+		assignOdds(player, item.odds, "bet2", "betChance2");
 	}
 	for (const item of playerOddsBetRivers) {
 		const name = reverse3.get(item.name) ?? item.name;
 		let player = allMap.get(name);
 		if (!player) {
-			player = new PlayerOdds(name);
+			player = new Picks.PlayerOdds(name);
 			allMap.set(name, player);
 		}
-		player.bet3 = item.odds;
+		assignOdds(player, item.odds, "bet3", "betChance3");
 	}
 
-	const array = [...allMap.values()];
-	array.sort((a, b) => a.name.localeCompare(b.name));
-
-	console.log(array);
+	tablePlayers.push(...allMap.values());
+	tablePlayers.sort((a, b) => a.name.localeCompare(b.name));
 }
 compilePlayerList();
 
-const makeRows = (data: DataTimsHelper[]): Picks.RowKey[] => {
-	return data.map((item: DataTimsHelper): Picks.RowKey => new PickOdds(item));
+const makeRows = (data: DataTimsHelper[]): Picks.PickOdds[] => {
+	return data.map((item: DataTimsHelper): Picks.PickOdds => new Picks.PickOdds(item));
 }
 
 const sortFunction = (sortConfig: Picks.SortConfig) => {
-	return (a: Picks.RowKey, b: Picks.RowKey): number => {
+	return (a: any, b: any): number => {
 		for (const key of sortConfig.keyOrder) {
 			const aVal = a[key];
 			const bVal = b[key];
@@ -199,7 +164,7 @@ const sortFunction = (sortConfig: Picks.SortConfig) => {
 }
 
 const makeSort = (sortConfig: Picks.SortConfig, setSortConfig: (config: Picks.SortConfig) => void) => {
-	return (keyPrimary: Picks.KeyType) => {
+	return (keyPrimary: Picks.ColumnKeys) => {
 		if (sortConfig.keyOrder[0] === keyPrimary) return;
 		const keyOrder = [keyPrimary];
 		for (const key of sortConfig.keyOrder) {
@@ -218,20 +183,13 @@ const table1Rows = makeRows(table1Data);
 const table2Rows = makeRows(table2Data);
 const table3Rows = makeRows(table3Data);
 
-const betOddsFromMap = (row: Picks.RowKey, map: Map<string, number>, buMap: Map<string, string>): number | undefined => {
+const betOddsFromMap = (row: Picks.PickOdds, map: Map<string, number>, buMap: Map<string, string>): number | undefined => {
 	const trueOdds = map.get(row.name);
 	if (trueOdds === undefined) {
 		const name = buMap.get(row.name);
 		if (name !== undefined) return map.get(name);
 	}
 	return trueOdds;
-}
-type betKeys = "bet1" | "bet2" | "bet3" | "bet5v5";
-type betChanceKey = "betChance1" | "betChance2" | "betChance3" | "betChance5v5";
-const assignOdds = (row: Picks.RowKey, trueOdds: number, betKey: betKeys, betChanceKey: betChanceKey): void => {
-	const odds = trueOddsToAmerican(trueOdds);
-	row[betKey] = odds;
-	row[betChanceKey] = betChanceRounded(odds);
 }
 
 const processJSON = (json: any) => {
@@ -338,7 +296,7 @@ const processOdds5v5Hockey = () => {
 		if (odds === undefined) err.push(row.name);
 		else {
 			row.bet5v5 = odds;
-			row.betChance5v5 = ggChance(odds);
+			row.betChance5v5 = Picks.ggChance(odds);
 		}
 	}
 	// if (err.length > 0) console.log("5v5Hockey", err);
@@ -346,7 +304,7 @@ const processOdds5v5Hockey = () => {
 processOdds5v5Hockey();
 
 const logStats = () => {
-	const processRow = (key: 'bet1' | 'bet2' | 'bet3', rows: Picks.RowKey[]): Picks.RowKey[] | null => {
+	const processRow = (key: 'bet1' | 'bet2' | 'bet3', rows: Picks.PickOdds[]): Picks.PickOdds[] | null => {
 		let max = null;
 		for (const row of rows) {
 			const val = row[key];
@@ -385,9 +343,9 @@ const logStats = () => {
 		const max2a = betChance(max1_2row[0].bet1);
 		const max3a = betChance(max1_3row[0].bet1);
 		if (max1a !== null && max2a !== null && max3a !== null) {
-			logs1.push("DraftKings: " + rountdToPercent(1 - (1 - max1a) * (1 - max2a) * (1 - max3a), 3));
-			logs2.push("DraftKings: " + rountdToPercent((max1a + max2a + max3a) / 3, 3));
-			logs3.push("DraftKings:  " + rountdToPercent(max1a * max2a * max3a, 3));
+			logs1.push("DraftKings: " + Picks.rountdToPercent(1 - (1 - max1a) * (1 - max2a) * (1 - max3a), 3));
+			logs2.push("DraftKings: " + Picks.rountdToPercent((max1a + max2a + max3a) / 3, 3));
+			logs3.push("DraftKings:  " + Picks.rountdToPercent(max1a * max2a * max3a, 3));
 		}
 	}
 
@@ -396,9 +354,9 @@ const logStats = () => {
 		const max2b = betChance(max2_2row[0].bet2);
 		const max3b = betChance(max2_3row[0].bet2);
 		if (max1b !== null && max2b !== null && max3b !== null) {
-			logs1.push("FanDuel: " + rountdToPercent(1 - (1 - max1b) * (1 - max2b) * (1 - max3b), 3));
-			logs2.push("FanDuel: " + rountdToPercent((max1b + max2b + max3b) / 3, 3));
-			logs3.push("FanDuel:  " + rountdToPercent(max1b * max2b * max3b, 3));
+			logs1.push("FanDuel: " + Picks.rountdToPercent(1 - (1 - max1b) * (1 - max2b) * (1 - max3b), 3));
+			logs2.push("FanDuel: " + Picks.rountdToPercent((max1b + max2b + max3b) / 3, 3));
+			logs3.push("FanDuel:  " + Picks.rountdToPercent(max1b * max2b * max3b, 3));
 		}
 	}
 
@@ -407,9 +365,9 @@ const logStats = () => {
 		const max2c = betChance(max3_2row[0].bet3);
 		const max3c = betChance(max3_3row[0].bet3);
 		if (max1c !== null && max2c !== null && max3c !== null) {
-			logs1.push("BetRivers: " + rountdToPercent(1 - (1 - max1c) * (1 - max2c) * (1 - max3c), 3));
-			logs2.push("BetRivers: " + rountdToPercent((max1c + max2c + max3c) / 3, 3));
-			logs3.push("BetRivers:  " + rountdToPercent(max1c * max2c * max3c, 3));
+			logs1.push("BetRivers: " + Picks.rountdToPercent(1 - (1 - max1c) * (1 - max2c) * (1 - max3c), 3));
+			logs2.push("BetRivers: " + Picks.rountdToPercent((max1c + max2c + max3c) / 3, 3));
+			logs3.push("BetRivers:  " + Picks.rountdToPercent(max1c * max2c * max3c, 3));
 		}
 	}
 
@@ -431,7 +389,7 @@ const logStats = () => {
 		}
 		return true;
 	}
-	const addPicks = (pick: Map<string, string[]>, rows: Picks.RowKey[], title: string): void => {
+	const addPicks = (pick: Map<string, string[]>, rows: Picks.PickOdds[], title: string): void => {
 		for (const row of rows) {
 			const name = row.name;
 			if (!pick.has(name)) pick.set(name, []);
@@ -439,7 +397,7 @@ const logStats = () => {
 			odds.push(title);
 		}
 	}
-	const printRow = (header: string, max1row: Picks.RowKey[] | null, max2row: Picks.RowKey[] | null, max3row: Picks.RowKey[] | null) => {
+	const printRow = (header: string, max1row: Picks.PickOdds[] | null, max2row: Picks.PickOdds[] | null, max3row: Picks.PickOdds[] | null) => {
 		const pick = new Map<string, string[]>();
 		const allOdds = [];
 		if (max1row) allOdds.push("DraftKings");
@@ -485,6 +443,13 @@ const columns: Picks.ColumnData[] = [
 	{ key: "bet5v5", title: "5v5Hockey" },
 ];
 
+const columnsPlayer: Picks.ColumnData[] = [
+	{ key: "name", title: "Player" },
+	{ key: "bet1", title: "DraftKings" },
+	{ key: "bet2", title: "FanDuel" },
+	{ key: "bet3", title: "BetRivers" },
+];
+
 function App() {
 
 	const [chances, setChances] = useState(false);
@@ -507,6 +472,9 @@ function App() {
 	const [rows3, _setRows3] = useState(table3Rows);
 	const sortedRows3 = [...rows3];
 
+	const [rowsPlayer, _setRowsPlayer] = useState(tablePlayers);
+	const sortedRowsPlayer = [...rowsPlayer];
+
 	// Update theme when system preference changes
 	useEffect(() => {
 		const handleChange = (event: MediaQueryListEvent) => {
@@ -520,14 +488,17 @@ function App() {
 	const [sortConfig1, setSortConfig1] = useState<Picks.SortConfig>({ keyOrder: ['gg'] });
 	const [sortConfig2, setSortConfig2] = useState<Picks.SortConfig>({ keyOrder: ['gg'] });
 	const [sortConfig3, setSortConfig3] = useState<Picks.SortConfig>({ keyOrder: ['gg'] });
+	const [sortConfigPlayer, setSortConfigPlayer] = useState<Picks.SortConfig>({ keyOrder: ['bet1'] });
 
 	sortedRows1.sort(sortFunction(sortConfig1));
 	sortedRows2.sort(sortFunction(sortConfig2));
 	sortedRows3.sort(sortFunction(sortConfig3));
+	sortedRowsPlayer.sort(sortFunction(sortConfigPlayer));
 
 	const requestSort1: Picks.RequestSort = makeSort(sortConfig1, setSortConfig1);
 	const requestSort2: Picks.RequestSort = makeSort(sortConfig2, setSortConfig2);
 	const requestSort3: Picks.RequestSort = makeSort(sortConfig3, setSortConfig3);
+	const requestSortPlayer: Picks.RequestSort = makeSort(sortConfigPlayer, setSortConfigPlayer);
 
 	return (
 		<>
@@ -548,6 +519,10 @@ function App() {
 				<div className="table-container">
 					<h2>Pick #3</h2>
 					<Picks.Table columns={columns} sortedRows={sortedRows3} requestSort={requestSort3} sortConfig={sortConfig3} darkTheme={darkTheme} chances={chances} />
+				</div>
+				<div className="table-container">
+					<h2>Players</h2>
+					<Picks.Table columns={columnsPlayer} sortedRows={sortedRowsPlayer} requestSort={requestSortPlayer} sortConfig={sortConfigPlayer} darkTheme={darkTheme} chances={chances} />
 				</div>
 			</main>
 		</>
