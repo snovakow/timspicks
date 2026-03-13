@@ -45,10 +45,76 @@ if ($live) {
 
     if ($savesrc) file_put_contents('./src_games.json', $response);
 
-    $data = json_decode($response, true);
+    $data = json_decode($response, false);
 
     // Get games from the first day in the gameWeek structure (which is today)
-    $games = $data['gameWeek'][0]['games'] ?? [];
+    $games = $data->gameWeek[0]->games ?? [];
+
+    if (empty($games)) {
+        echo '<br>No games scheduled for today.<br>';
+    } else {
+            echo '<br>' . count($games) . ' games<br>';
+        foreach ($games as $game) {
+            $code = $game->homeTeam->abbrev;
+
+            $response = file_get_contents('https://api-web.nhle.com/v1/roster/' . $code . '/current');
+            if ($response === false) {
+                die("Error fetching NHL data.");
+            }
+
+            if ($savesrc) file_put_contents('./src_games_' . $code . '.json', $response);
+
+            $json = json_decode($response, false);
+
+            $players = [];
+            foreach ($json->forwards as $player) {
+                $players[] = [
+                    "id" => $player->id,
+                    "headshot" => $player->headshot,
+                    "firstName" => $player->firstName,
+                    "lastName" => $player->lastName
+                ];
+            }
+            foreach ($json->defensemen as $player) {
+                $players[] = [
+                    "id" => $player->id,
+                    "headshot" => $player->headshot,
+                    "firstName" => $player->firstName,
+                    "lastName" => $player->lastName
+                ];
+            }
+            $game->homeTeam->players = $players;
+
+            $code = $game->awayTeam->abbrev;
+
+            $response = file_get_contents('https://api-web.nhle.com/v1/roster/' . $code . '/current');
+            if ($response === false) {
+                die("Error fetching NHL data.");
+            }
+
+            if ($savesrc) file_put_contents('./src_games_' . $code . '.json', $response);
+
+            $json = json_decode($response, false);
+
+            foreach ($json->forwards as $player) {
+                $players[] = [
+                    "id" => $player->id,
+                    "headshot" => $player->headshot,
+                    "firstName" => $player->firstName,
+                    "lastName" => $player->lastName
+                ];
+            }
+            foreach ($json->defensemen as $player) {
+                $players[] = [
+                    "id" => $player->id,
+                    "headshot" => $player->headshot,
+                    "firstName" => $player->firstName,
+                    "lastName" => $player->lastName
+                ];
+            }
+            $game->awayTeam->players = $players;
+        }
+    }
 
     $json_string = json_encode($games, JSON_UNESCAPED_UNICODE);
 
@@ -56,7 +122,7 @@ if ($live) {
     if (file_put_contents($local_file, $json_string) === false) {
         die('Error saving local JSON file.');
     }
-    echo "<br>Data has been written to $local_file.";
+    echo "<br>Data has been written to $local_file";
 }
 
 $ch = curl_init();
@@ -128,7 +194,7 @@ if ($live) {
     if (file_put_contents($local_file, $json_string) === false) {
         die('Error saving local JSON file.');
     }
-    echo "<br>Data has been written to $local_file.";
+    echo "<br>Data has been written to $local_file";
 }
 
 /*
@@ -168,7 +234,7 @@ if ($live) {
     $local_file = './draftkings.json';
     if (file_put_contents($local_file, $json_string) === false) die();
 
-    echo "<br>Data has been written to $local_file.";
+    echo "<br>Data has been written to $local_file";
 }
 
 /*
@@ -239,7 +305,7 @@ if ($live) {
     $local_file = './fanduel.json';
     if (file_put_contents($local_file, $json_string) === false) die();
 
-    echo "<br>Data has been written to $local_file.";
+    echo "<br>Data has been written to $local_file";
 }
 
 /*
@@ -306,7 +372,7 @@ if ($live) {
 
     if (file_put_contents($local_file, $json_string, LOCK_EX) === false) die();
 
-    echo "<br>Data has been merged and written to $local_file.";
+    echo "<br>Data has been merged and written to $local_file";
 }
 // $json_data = file_get_contents($remote_url); // Append page number to the URL
 // if ($json_data === false) {
@@ -332,7 +398,7 @@ if ($live) {
 // $json_string = json_encode($merged_array, JSON_UNESCAPED_UNICODE);
 // $local_file = './betrivers.json'; // Update local file name for the current page
 // if (file_put_contents($local_file, $json_string, LOCK_EX) !== false) {
-//     echo "<br>Data has been merged and written to $local_file.";
+//     echo "<br>Data has been merged and written to $local_file";
 // } else {
 //     echo "Error occurred while writing to $local_file.";
 // }
@@ -368,5 +434,5 @@ if ($live) {
     $local_file = './5v5hockey.ts';
     if (file_put_contents($local_file, $data, LOCK_EX) === false) die();
 
-    echo "<br>Data has been written to $local_file.";
+    echo "<br>Data has been written to $local_file";
 }
