@@ -1,6 +1,7 @@
 <?php
 $live = true;
 $secure = true;
+$savesrc = false;
 
 if ($live && $secure) {
     session_start();
@@ -110,6 +111,8 @@ if ($live) {
 
     if ($response === false) die();
 
+    if ($savesrc) file_put_contents('./src_draftkings.json', $response);
+
     $data = json_decode($response, false);
     $data = $data->selections;
     $map = [];
@@ -167,6 +170,8 @@ if ($live) {
 
     if ($response === false) die();
 
+    if ($savesrc) file_put_contents('./src_fanduel.json', $response);
+
     $data = json_decode($response, false);
     $data = $data->attachments;
     $data = $data->markets;
@@ -212,6 +217,8 @@ if ($live) {
 
     if ($json_data === false) die();
 
+    if ($savesrc) file_put_contents('./src_betrivers1.json', $response);
+
     $data_array = json_decode($json_data, false);
     if (json_last_error() !== JSON_ERROR_NONE) die();
 
@@ -235,6 +242,8 @@ if ($live) {
 
         if ($json_data === false) die();
 
+        if ($savesrc) file_put_contents('./src_betrivers' . $i . '.json', $response);
+
         $data_array = json_decode($json_data, false);
         if (json_last_error() !== JSON_ERROR_NONE) die('Error decoding JSON: ' . json_last_error_msg());
 
@@ -253,10 +262,40 @@ if ($live) {
     $json_string = json_encode($map, JSON_UNESCAPED_UNICODE);
     $local_file = './betrivers.json';
 
+    // if ($savesrc) file_put_contents('./src_5v5hockey.json', $response);
+
     if (file_put_contents($local_file, $json_string, LOCK_EX) === false) die();
 
     echo "<br>Data has been merged and written to $local_file.";
 }
+// $json_data = file_get_contents($remote_url); // Append page number to the URL
+// if ($json_data === false) {
+//     die('Error fetching remote JSON file.');
+// }
+// $data_array = json_decode($json_data, false); // true for an associative array
+// if (json_last_error() !== JSON_ERROR_NONE) {
+//     die('Error decoding JSON: ' . json_last_error_msg());
+// }
+// $data_array = json_decode($json_data, false); // true for an associative array
+// $items = [$data_array->items];
+// $pages = $data_array->paging->totalPages;
+// for ($i = 2; $i <= $pages; $i++) {
+//     $remote_url = $remote_url_base . $i;
+//     $json_data = file_get_contents($remote_url); // Append page number to the URL
+//     $data_array = json_decode($json_data, false); // true for an associative array
+//     if (json_last_error() !== JSON_ERROR_NONE) {
+//         die('Error decoding JSON: ' . json_last_error_msg());
+//     }
+//     $items[] = $data_array->items;
+// }
+// $merged_array = array_merge([], ...$items);
+// $json_string = json_encode($merged_array, JSON_UNESCAPED_UNICODE);
+// $local_file = './betrivers.json'; // Update local file name for the current page
+// if (file_put_contents($local_file, $json_string, LOCK_EX) !== false) {
+//     echo "<br>Data has been merged and written to $local_file.";
+// } else {
+//     echo "Error occurred while writing to $local_file.";
+// }
 
 /*
 
@@ -271,6 +310,8 @@ if ($live) {
     $data = file_get_contents($remote_url);
 
     if ($data === false) die();
+
+    if ($savesrc) file_put_contents('./src_5v5hockey.json', $response);
 
     $start = strpos($data, 'const table_1_data');
     if ($start === false) die();
