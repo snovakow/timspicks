@@ -5,7 +5,9 @@ import playerData from './data/helper.json';
 import playerOddsDraftKings from './data/draftkings.json';
 import playerOddsFanDuel from './data/fanduel.json';
 import playerOddsBetRivers from './data/betrivers.json';
+import gamesListing from './data/games.json';
 import { table_1_data as hockey5v5_1, table_2_data as hockey5v5_2, table_3_data as hockey5v5_3 } from './data/5v5hockey.ts';
+import type { Team } from './components/logo.ts';
 
 const nameMap = new Map<string, string>();
 nameMap.set("Alex Wennberg", "Alexander Wennberg"); // DraftKings, BetRivers
@@ -53,6 +55,37 @@ const nameMap4 = new Map<string, string>(nameMap);
 nameMap4.set("Olli Maatta", "Olli Määttä");
 nameMap4.set("Matty Beniers", "Matthew Beniers");
 nameMap4.set("Tim Stützle", "Tim Stutzle");
+
+class TeamData {
+	place: string;
+	name: string;
+	code: Team;
+	logoLight: string;
+	logoDark: string;
+	constructor(data: any) {
+		this.place = data.placeName.default;
+		this.name = data.commonName.default;
+		this.code = data.abbrev;
+		this.logoLight = data.logo;
+		this.logoDark = data.darkLogo;
+	}
+}
+class GameData {
+	link:string;
+	home:TeamData;
+	away:TeamData;
+	time: Date;
+	constructor(data: any){
+		this.link = "https://www.nhl.com" + data.gameCenterLink;
+		this.home = new TeamData(data.homeTeam);
+		this.away = new TeamData(data.awayTeam);
+		this.time = new Date(data.startTimeUTC);
+	}
+}
+for (const data of gamesListing) {
+	const game = new GameData(data);
+	console.log(`${game.home.place} ${game.home.name} @ ${game.away.place} ${game.away.name}: ${game.time.toLocaleTimeString()}`);
+}
 
 // Implied Odds
 const betChance = (x: number | null): number | null => {

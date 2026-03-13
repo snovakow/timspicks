@@ -25,6 +25,40 @@ if ($live && $secure) {
 
 echo '<h1>Data Downloader</h1>';
 
+/*
+
+   Games
+
+*/
+if ($live) {
+    echo '<h2>Games</h2>';
+
+    // Endpoint for today's schedule
+    $url = 'https://api-web.nhle.com/v1/schedule/now';
+    echo "{$url}<br>";
+
+    // Fetch the JSON data
+    $response = file_get_contents($url);
+    if ($response === false) {
+        die("Error fetching NHL data.");
+    }
+
+    if ($savesrc) file_put_contents('./src_games.json', $response);
+
+    $data = json_decode($response, true);
+
+    // Get games from the first day in the gameWeek structure (which is today)
+    $games = $data['gameWeek'][0]['games'] ?? [];
+
+    $json_string = json_encode($games, JSON_UNESCAPED_UNICODE);
+
+    $local_file = './games.json';
+    if (file_put_contents($local_file, $json_string) === false) {
+        die('Error saving local JSON file.');
+    }
+    echo "<br>Data has been written to $local_file.";
+}
+
 $ch = curl_init();
 
 $timezone = new DateTimeZone('America/New_York');
