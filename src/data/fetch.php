@@ -30,7 +30,7 @@ echo '<h1>Data Downloader</h1>';
    Games
 
 */
-if ($live) {
+if ($live && false) {
     echo '<h2>Games</h2>';
 
     // Endpoint for today's schedule
