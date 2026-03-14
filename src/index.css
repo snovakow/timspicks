@@ -46,14 +46,13 @@ header {
   font-size: 2em;
   font-weight: 100;
   font-family: cursive;
-  --tes: 0.1em;
-  --test: 1.0em;
-  --test2: calc(var(--test) * -1);
+  --inset: 1.0em;
+  --insetInv: calc(var(--inset) * -1);
   box-shadow:
     0 0px 0.5em 0px light-dark(rgba(0, 0, 0, 1), hsl(351, 84%, 0%, 1)),
 
-    inset 0 var(--test) var(--test) var(--test2) light-dark(rgba(255, 255, 255, 0.8), hsl(351, 84%, 80%, 1)),
-    inset 0 var(--test2) var(--test) var(--test2) light-dark(rgba(0, 0, 0, 0.5), hsl(351, 84%, 0%, 0.5));
+    inset 0 var(--inset) var(--inset) var(--insetInv) light-dark(rgba(255, 255, 255, 0.8), hsl(351, 84%, 80%, 1)),
+    inset 0 var(--insetInv) var(--inset) var(--insetInv) light-dark(rgba(0, 0, 0, 0.5), hsl(351, 84%, 0%, 0.5));
   overflow: visible;
 
   z-index: 1;
