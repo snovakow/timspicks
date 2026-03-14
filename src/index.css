@@ -76,7 +76,7 @@ body {
   flex-direction: column;
   align-items: center;
   place-items: center;
-  
+
   margin-top: 4.875rem;
   overflow-y: auto;
 }

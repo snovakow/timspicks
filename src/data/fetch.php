@@ -40,7 +40,7 @@ if ($live) {
     // Fetch the JSON data
     $response = file_get_contents($url);
     if ($response === false) {
-        die("Error fetching NHL data.");
+        die('Error fetching NHL data.');
     }
 
     if ($savesrc) file_put_contents('./src_games.json', $response);
@@ -53,13 +53,14 @@ if ($live) {
     if (empty($games)) {
         echo '<br>No games scheduled for today.<br>';
     } else {
-            echo '<br>' . count($games) . ' games<br>';
+        echo '<br>' . count($games) . ' games<br>';
         foreach ($games as $game) {
             $code = $game->homeTeam->abbrev;
 
-            $response = file_get_contents('https://api-web.nhle.com/v1/roster/' . $code . '/current');
+            $url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
+            $response = file_get_contents($url);
             if ($response === false) {
-                die("Error fetching NHL data.");
+                die('Error fetching NHL data: ' . $url);
             }
 
             if ($savesrc) file_put_contents('./src_games_' . $code . '.json', $response);
@@ -87,9 +88,10 @@ if ($live) {
 
             $code = $game->awayTeam->abbrev;
 
-            $response = file_get_contents('https://api-web.nhle.com/v1/roster/' . $code . '/current');
+            $url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
+            $response = file_get_contents($url);
             if ($response === false) {
-                die("Error fetching NHL data.");
+                die('Error fetching NHL data: ' . $url);
             }
 
             if ($savesrc) file_put_contents('./src_games_' . $code . '.json', $response);
