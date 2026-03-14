@@ -41,7 +41,7 @@ if ($live && false) {
     // Fetch the JSON data
     $response = file_get_contents($url);
     if ($response === false) {
-        die('Error fetching NHL data.');
+        die('Error fetching NHL data: ' . $url);
     }
 
     if ($savesrc) file_put_contents('./src_games.json', $response);
