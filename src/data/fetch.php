@@ -1,6 +1,6 @@
 <?php
 $live = true;
-$secure = false;
+$secure = true;
 $savesrc = false;
 $debug = false;
 
@@ -30,12 +30,12 @@ echo '<h1>Data Downloader</h1>';
    Games
 
 */
-if ($live && false) {
+if ($live && isset($_GET['games'])) {
     echo '<h2>Games</h2>';
 
     // Endpoint for today's schedule
-    $currentDate = date('Y-m-d');
-    $url = 'https://api-web.nhle.com/v1/schedule/' . $currentDate;
+    $date = new DateTime('now', new DateTimeZone('America/New_York'));
+    $url = 'https://api-web.nhle.com/v1/schedule/' . $date->format('Y-m-d');
     echo "{$url}<br>";
 
     // Fetch the JSON data
@@ -54,8 +54,11 @@ if ($live && false) {
     if (empty($games)) {
         echo '<br>No games scheduled for today.<br>';
     } else {
+        $pauseSeconds = 0.1;
+
         echo '<br>' . count($games) . ' games<br>';
         foreach ($games as $game) {
+            sleep($pauseSeconds);
             $code = $game->homeTeam->abbrev;
 
             $url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
@@ -87,6 +90,7 @@ if ($live && false) {
             }
             $game->homeTeam->players = $players;
 
+            sleep($pauseSeconds);
             $code = $game->awayTeam->abbrev;
 
             $url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
@@ -120,7 +124,7 @@ if ($live && false) {
         }
     }
 
-    $json_string = json_encode($games, JSON_UNESCAPED_UNICODE);
+    $json_string = json_encode($games, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
     $local_file = './games.json';
     if (file_put_contents($local_file, $json_string) === false) {
@@ -140,7 +144,7 @@ $endOfDay = $endOfDay->getTimestamp();
    Helper
 
 */
-if ($live) {
+if ($live && isset($_GET['picks'])) {
     echo '<h2>Helper</h2>';
 
     $helper = 'https://api.hockeychallengehelper.com/api/picks';
@@ -192,7 +196,7 @@ if ($live) {
         }
     }
 
-    $json_string = json_encode($data, JSON_UNESCAPED_UNICODE);
+    $json_string = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
     $local_file = './helper.json';
     if (file_put_contents($local_file, $json_string) === false) {
@@ -206,7 +210,7 @@ if ($live) {
    DraftKings
 
 */
-if ($live) {
+if ($live && isset($_GET['odds'])) {
     echo '<h2>DraftKings</h2>';
 
     $draftkings = 'https://sportsbook-nash.draftkings.com/sites/CA-ON-SB/api/sportscontent/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=42133%2C13809&eventsQuery=%24filter%3DleagueId%20eq%20%2742133%27%20AND%20clientMetadata%2FSubcategories%2Fany%28s%3A%20s%2FId%20eq%20%2713809%27%29&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%2713809%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Events&entity=events';
@@ -234,7 +238,7 @@ if ($live) {
         ];
     }
 
-    $json_string = json_encode($map, JSON_UNESCAPED_UNICODE);
+    $json_string = json_encode($map, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $local_file = './draftkings.json';
     if (file_put_contents($local_file, $json_string) === false) die();
 
@@ -246,7 +250,7 @@ if ($live) {
    FanDuel
 
 */
-if ($live) {
+if ($live && isset($_GET['odds'])) {
     echo '<h2>FanDuel</h2>';
 
     $fanduel = 'https://sbapi.on.sportsbook.fanduel.ca/api/content-managed-page?page=CUSTOM&customPageId=nhl&pbHorizontal=false&_ak=FhMFpcPWXMeyZxOx&timezone=America%2FNew_York';
@@ -305,7 +309,7 @@ if ($live) {
         }
     }
 
-    $json_string = json_encode($map, JSON_UNESCAPED_UNICODE);
+    $json_string = json_encode($map, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $local_file = './fanduel.json';
     if (file_put_contents($local_file, $json_string) === false) die();
 
@@ -317,7 +321,7 @@ if ($live) {
    BetRivers
 
 */
-if ($live) {
+if ($live && isset($_GET['odds'])) {
     echo '<h2>BetRivers</h2>';
     $remote_url_base = 'https://on.betrivers.ca/api/service/sportsbook/offering/propcentral/offers?groupId=1000093657&marketCategory=TO_SCORE&pageSize=20&cageCode=249&t=' . time() . '&pageNr=';
 
@@ -369,7 +373,7 @@ if ($live) {
         }
     }
 
-    $json_string = json_encode($map, JSON_UNESCAPED_UNICODE);
+    $json_string = json_encode($map, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $local_file = './betrivers.json';
 
     // if ($savesrc) file_put_contents('./src_5v5hockey.json', $response);
@@ -399,7 +403,7 @@ if ($live) {
 //     $items[] = $data_array->items;
 // }
 // $merged_array = array_merge([], ...$items);
-// $json_string = json_encode($merged_array, JSON_UNESCAPED_UNICODE);
+// $json_string = json_encode($merged_array, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 // $local_file = './betrivers.json'; // Update local file name for the current page
 // if (file_put_contents($local_file, $json_string, LOCK_EX) !== false) {
 //     echo "<br>Data has been merged and written to $local_file";
@@ -412,7 +416,7 @@ if ($live) {
    5V5Hockey
 
 */
-if ($live) {
+if ($live && isset($_GET['odds'])) {
     echo '<h2>5v5Hockey</h2>';
     $remote_url = 'https://5v5hockey.com/ai-betting/tims-picks/';
 

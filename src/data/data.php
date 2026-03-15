@@ -18,6 +18,15 @@ $csrfToken = $_SESSION['csrf_token'];
 </head>
 
 <body>
+    <select id="option">
+        <option value="" disabled selected>Option</option>
+        <option value="picks">Picks</option>
+        <option value="odds">Odds</option>
+        <option value="picks,odds">Picks + Odds</option>
+        <option value="games">Games</option>
+        <option value="picks,odds,games">All</option>
+    </select>
+
     <input type="text" id="name" />
     <input type="password" id="input" />
     <button id="button">Submit</button>
@@ -39,6 +48,12 @@ $csrfToken = $_SESSION['csrf_token'];
         input.addEventListener("keydown", keydown);
 
         button.addEventListener('click', async () => {
+            const option = document.getElementById('option');
+            const options = option.value;
+            if (!options) return;
+
+            const optionList = options.split(",");
+
             const data = {
                 name: name.value,
                 code: input.value,
@@ -51,7 +66,7 @@ $csrfToken = $_SESSION['csrf_token'];
             // button.parentElement.removeChild(button); // Remove the button from the DOM
             // input.parentElement.removeChild(input); // Remove the input from the DOM
 
-            const response = await fetch("./fetch.php", {
+            const response = await fetch("./fetch.php?" + optionList.join("&"), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
