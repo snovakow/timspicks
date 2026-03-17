@@ -247,7 +247,19 @@ const compilePlayerList = () => {
 				decimal = map.get("Yegor Chinakhov"); // DraftKings BetRivers
 			}
 		}
-
+		if (decimal === undefined) {
+			if (player.fullName === "Elias Pettersson") {
+				if (player.playerId === 8480012) {
+					if (betKey === 'bet2') decimal = map.get("Elias Pettersson #40"); // FanDuel
+					if (betKey === 'bet3') decimal = map.get("Elias Pettersson (1998)"); // BetRivers
+				}
+				if (player.playerId === 8483678) {
+					if (betKey === 'bet1') decimal = map.get("Elias-Nils Pettersson"); // DraftKings
+					if (betKey === 'bet2') decimal = map.get("Elias Pettersson #25"); // FanDuel
+					if (betKey === 'bet3') decimal = map.get("Elias Pettersson (2004)"); // BetRivers
+				}
+			}
+		}
 
 		if (decimal !== undefined) {
 			const odds = trueOddsToAmerican(decimal);
