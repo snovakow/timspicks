@@ -54,7 +54,7 @@ if ($live && isset($_GET['games'])) {
 	if (empty($games)) {
 		echo '<br>No games scheduled for today.<br>';
 	} else {
-		$pauseSeconds = 0.1;
+		$pauseSeconds = 1; // Avoid hitting rate limits
 
 		echo '<br>' . count($games) . ' games<br>';
 		foreach ($games as $game) {
