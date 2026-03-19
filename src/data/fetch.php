@@ -2,6 +2,7 @@
 $live = true;
 $secure = true;
 $savesrc = false;
+$allPlayers = false;
 $debug = false;
 
 if ($live && $secure) {
@@ -133,6 +134,60 @@ if ($live && isset($_GET['games'])) {
 	echo "<br>Data has been written to $local_file";
 }
 
+/*
+
+   Save all players
+
+*/
+if ($allPlayers) {
+	$all = [
+		"ANA",
+		"BOS",
+		"BUF",
+		"CAR",
+		"CBJ",
+		"CGY",
+		"CHI",
+		"COL",
+		"DAL",
+		"DET",
+		"EDM",
+		"FLA",
+		"LAK",
+		"MIN",
+		"MTL",
+		"NJD",
+		"NSH",
+		"NYI",
+		"NYR",
+		"OTT",
+		"PHI",
+		"PIT",
+		"SEA",
+		"SJS",
+		"STL",
+		"TBL",
+		"TOR",
+		"UTA",
+		"VAN",
+		"VGK",
+		"WPG",
+		"WSH"
+	];
+
+	foreach ($all as $code) {
+		sleep(1);
+
+		$url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
+		$response = file_get_contents($url);
+		if ($response === false) {
+			die('Error fetching NHL data: ' . $url);
+		}
+
+		file_put_contents('./src_games_' . $code . '.json', $response);
+	}
+}
+
 $ch = curl_init();
 
 $timezone = new DateTimeZone('America/New_York');
@@ -233,6 +288,7 @@ if ($live && isset($_GET['odds'])) {
 	$map = [];
 
 	foreach ($data as $selection) {
+		if ($selection->outcomeType !== "ToScoreAnyTime") continue;
 		$map[] = [
 			"name" => $selection->participants[0]->seoIdentifier,
 			"odds" => $selection->trueOdds
