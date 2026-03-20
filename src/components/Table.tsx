@@ -244,6 +244,7 @@ export function Table(props: {
                                 {chances ? row.betChance5v5 : (row.bet5v5 === null ? "-" : row.bet5v5.toFixed(2))}
                             </td>)}
                             {!picks && (<td>{(row.pick === 0 ? "-" : row.pick)}</td>)}
+                            {!picks && (<td>{row.gameTime.toLocaleTimeString([], timeFormat)}</td>)}
                         </tr>
                     )
                 })}
