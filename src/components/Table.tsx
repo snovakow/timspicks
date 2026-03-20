@@ -226,7 +226,7 @@ export function Table(props: {
                         <tr key={idx} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
                             <td>
                                 <span className='cell-container'>
-                                    {picks && (<img className='td-name-logo' src={darkTheme ? row.logoDark : row.logoLight} />)}
+                                    <img className='td-name-logo' src={darkTheme ? row.logoDark : row.logoLight} />
                                     {row.fullName}
                                 </span>
                             </td>
