@@ -227,7 +227,7 @@ export function Table(props: {
                             <td>
                                 <span className='cell-container'>
                                     {picks && (<img className='td-name-logo' src={darkTheme ? row.logoDark : row.logoLight} />)}
-                                    {row.name}
+                                    {row.fullName}
                                 </span>
                             </td>
                             {picks && (<td>{chances ? row.ggChance : row.gg.toFixed(2)}</td>)}
