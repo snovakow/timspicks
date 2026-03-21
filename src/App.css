@@ -6,6 +6,7 @@
 }
 
 button {
+  color: black;
   justify-self: end;
 
   border-radius: 8px;
