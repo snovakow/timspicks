@@ -1,13 +1,49 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 import * as Picks from './components/Table';
-import playerData from './data/helper.json';
-import playerOddsDraftKings from './data/bet1.json';
-import playerOddsFanDuel from './data/bet2.json';
-import playerOddsBetMGM from './data/bet3.json';
-import playerOddsBetRivers from './data/bet4.json';
-import gamesListing from './data/games.json';
-import { table_1_data as hockey5v5_1, table_2_data as hockey5v5_2, table_3_data as hockey5v5_3 } from './data/bet5v5.ts';
+
+const fetchData = async (src: string) => {
+	const response = await fetch(src + "?t=" + new Date().getTime());
+	if (!response.ok) throw new Error(`Failed to load ${src}: ${response.status} ${response.statusText}`);
+	return response;
+}
+const loadData = async (src: string) => {
+	try {
+		const response = await fetchData(src);
+		const json = await response.json();
+		return json;
+	} catch (error) {
+		console.log(error);
+		return [];
+	}
+}
+const playerData = await loadData('./data/helper.json');
+const gamesListing = await loadData('./data/games.json');
+const playerOddsDraftKings = await loadData('./data/bet1.json');
+const playerOddsFanDuel = await loadData('./data/bet2.json');
+const playerOddsBetMGM = await loadData('./data/bet3.json');
+const playerOddsBetRivers = await loadData('./data/bet4.json');
+
+const loadEmbed = async (src: string) => {
+	try {
+		const response = await fetchData(src);
+		const text = await response.text();
+		return new Function(text)();
+	} catch (error) {
+		console.log(error);
+		return {
+			table_1_data: [],
+			table_2_data: [],
+			table_3_data: [],
+		}
+	}
+}
+
+const {
+	table_1_data: hockey5v5_1,
+	table_2_data: hockey5v5_2,
+	table_3_data: hockey5v5_3
+} = await loadEmbed('./data/bet5v5.txt');
 
 const oddsNameMap = new Map<string, string>();
 oddsNameMap.set("Aatu Räty", "Aatu Raty");

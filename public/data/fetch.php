@@ -630,11 +630,9 @@ if ($live && isset($_GET['odds'])) {
 
 	$data = substr($data, $start, $end - $start);
 
-	$data = str_replace('const table_1_data = ', 'export const table_1_data = ', $data);
-	$data = str_replace('const table_2_data = ', 'export const table_2_data = ', $data);
-	$data = str_replace('const table_3_data = ', 'export const table_3_data = ', $data);
+	$data .= 'return { table_1_data, table_2_data, table_3_data };';
 
-	$local_file = './bet5v5.ts';
+	$local_file = './bet5v5.txt';
 	if (file_put_contents($local_file, $data, LOCK_EX) === false) die();
 
 	echo "<br>Data has been written to $local_file";
