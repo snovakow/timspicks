@@ -56,6 +56,7 @@ oddsNameMap.set("Arseny Gritsyuk", "Arseni Gritsyuk"); // BetRivers
 oddsNameMap.set("Artem Zub", "Artyom Zub"); // BetRivers
 oddsNameMap.set("Axel Sandin-Pellikka", "Axel Sandin Pellikka"); // DraftKings
 oddsNameMap.set("Ben Kindel", "Benjamin Kindel"); // BetRivers
+oddsNameMap.set("Bo Groulx", "Benoit-Olivier Groulx"); // BetMGM
 oddsNameMap.set("Carl Grundstrom", "Carl Grundström"); // BetRivers (lang)
 oddsNameMap.set("Charle-Edouard D'Astous", "Charles-Edouard D'Astous"); // BetRivers
 oddsNameMap.set("Dmitry Orlov", "Dimitri Orlov"); // BetRivers
