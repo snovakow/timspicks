@@ -611,7 +611,7 @@ if ($live && isset($_GET['odds'])) {
    5v5Hockey
 
 */
-if (false && $live && isset($_GET['odds'])) {
+if ($live && isset($_GET['odds'])) {
 	echo '<h2>5v5Hockey</h2>';
 	$remote_url = 'https://5v5hockey.com/ai-betting/tims-picks/';
 
