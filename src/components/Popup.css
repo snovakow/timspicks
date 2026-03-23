@@ -22,7 +22,8 @@
   max-height: calc(100% - 40px);
   box-sizing: border-box;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .popup-body {

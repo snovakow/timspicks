@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import './Popup.css'; // Optional: for styling
 
 interface PopupProps {
@@ -8,6 +8,21 @@ interface PopupProps {
 }
 
 function Popup({ showPopUp, closePopUp, children }: PopupProps) {
+    useEffect(() => {
+        if (showPopUp) {
+            // Prevent scrolling of background content
+            document.body.style.overflow = 'hidden';
+        } else {
+            // Restore scrolling
+            document.body.style.overflow = 'auto';
+        }
+
+        // Cleanup on unmount
+        return () => {
+            document.body.style.overflow = 'auto';
+        };
+    }, [showPopUp]);
+
     if (!showPopUp) {
         return null;
     }
