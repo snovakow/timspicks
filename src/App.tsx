@@ -669,9 +669,9 @@ function App() {
 
 	return (
 		<>
-			<header className='header satisfy-regular'>
-				Tims Hockey Challenge Picks
+			<header className='header'>
 				<button className="button" onClick={() => setShowPopup(!showPopup)}>?</button>
+				Tims Hockey Picks
 				<button className={chances ? 'button chances-on' : 'button chances-off'} onClick={toggleHandler}>%</button>
 			</header>
 			<main className='content'>
