@@ -3,6 +3,8 @@ import './App.css';
 import * as Picks from './components/Table';
 import Popup from './components/Popup';
 
+const precision = Picks.precision;
+
 const fetchData = async (src: string) => {
 	const response = await fetch(src + "?t=" + new Date().getTime());
 	if (!response.ok) throw new Error(`Failed to load ${src}: ${response.status} ${response.statusText}`);
@@ -121,7 +123,7 @@ const betChance = (x: number | null): number | null => {
 const betChanceRounded = (x: number | null): string => {
 	const chance = betChance(x);
 	if (chance === null) return "-";
-	return Picks.rountdToPercent(chance, 2);
+	return Picks.rountdToPercent(chance, precision);
 }
 
 const trueOddsToAmerican = (x: number): number => {
@@ -379,8 +381,6 @@ const logStats = () => {
 	const logs2: string[] = ["Avg:"];
 	const logs3: string[] = ["All:"];
 
-	const precision = 2;
-
 	if (max1_1row && max1_2row && max1_3row) {
 		const max1a = betChance(max1_1row[0].bet1);
 		const max2a = betChance(max1_2row[0].bet1);
@@ -616,7 +616,7 @@ for (const i in dataStats) {
 function App() {
 	const [showPopup, setShowPopup] = useState(false);
 
-	const [chances, setChances] = useState(false);
+	const [chances, setChances] = useState(true);
 	const toggleHandler = () => {
 		setChances(prev => !prev); // Flips the state to the opposite value
 	};

@@ -1,5 +1,7 @@
 import { getLogo, type Team } from "./logo";
 
+export const precision = 1;
+
 export class TeamData {
     place: string;
     name: string;
@@ -147,7 +149,7 @@ export const rountdToPercent = (num: number, places: number): string => {
 // Chance of at least one goal: 1 − e^(−μ)
 export const ggChance = (x: number): string => {
     const chance = 1 - Math.exp(-x);
-    return rountdToPercent(chance, 2);
+    return rountdToPercent(chance, precision);
 }
 
 export class PickOdds {
