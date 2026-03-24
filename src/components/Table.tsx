@@ -128,6 +128,7 @@ export interface ColumnData {
     key: ColumnKeys;
     title: string;
     sort: boolean;
+    logo?: string;
 }
 
 export interface OddsItem {
@@ -184,18 +185,29 @@ export function Table(props: {
             <thead>
                 <tr>
                     {
-                        columns.map(item => (
-                            <th key={item.key}
-                                colSpan={item.key === "fullName" ? 2 : 1}
-                                className={item.sort ? 'sortable' : undefined}
-                                onClick={item.sort ? () => requestSort(item.key) : undefined}>
-                                <span className='cell-container'>
-                                    {item.sort && <span className='theader-pad'>▲</span>}
-                                    <span className='theader-title'>{item.title}</span>
-                                    {item.sort && <span className={sortConfig?.keyOrder[0] === item.key ? 'theader-sort' : 'theader-sort-hidden'}>▲</span>}
-                                </span>
-                            </th>
-                        ))
+                        columns.map(item => {
+                            return (
+                                <th key={item.key}
+                                    colSpan={item.key === "fullName" ? 2 : 1}
+                                    className={item.sort ? 'sortable' : undefined}
+                                    onClick={item.sort ? () => requestSort(item.key) : undefined}>
+                                    <span className={'cell-container'}>
+                                        {item.sort && <span className={'theader-pad'}>▲</span>}
+                                        {item.logo ? (
+                                            <img
+                                                className='theader-logo-bg logo-rounded'
+                                                src={item.logo}
+                                                alt=''
+                                                aria-hidden='true'
+                                            />
+                                        ) : (
+                                            <span className='theader-title'>{item.title}</span>
+                                        )}
+                                        {item.sort && <span className={sortConfig?.keyOrder[0] === item.key ? 'theader-sort' : 'theader-sort-hidden'}>▲</span>}
+                                    </span>
+                                </th>
+                            )
+                        })
                     }
                 </tr>
             </thead>

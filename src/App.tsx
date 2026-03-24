@@ -9,6 +9,20 @@ import logo4 from './images/sb-logo-16-betrivers.svg';
 
 const precision = Picks.precision;
 
+
+type Sportsbook = {
+	key: "bet1" | "bet2" | "bet3" | "bet4";
+	title: string;
+	logo: string;
+};
+
+const sportsbooks: Sportsbook[] = [
+	{ key: "bet1", title: "DraftKings", logo: logo1 },
+	{ key: "bet2", title: "FanDuel", logo: logo2 },
+	{ key: "bet3", title: "BetMGM", logo: logo3 },
+	{ key: "bet4", title: "BetRivers", logo: logo4 },
+];
+
 const fetchData = async (src: string) => {
 	const response = await fetch(src + "?t=" + new Date().getTime());
 	if (!response.ok) throw new Error(`Failed to load ${src}: ${response.status} ${response.statusText}`);
@@ -488,21 +502,22 @@ const logStats = () => {
 }
 logStats();
 
+const oddsColumns: Picks.ColumnData[] = sportsbooks.map((book) => ({
+	key: book.key,
+	title: book.title,
+	sort: true,
+	logo: book.logo,
+}));
+
 const columns: Picks.ColumnData[] = [
 	{ key: "fullName", title: "Player", sort: true },
 	{ key: "gg", title: "G/GP", sort: true },
-	{ key: "bet1", title: "DraftKings", sort: true },
-	{ key: "bet2", title: "FanDuel", sort: true },
-	{ key: "bet3", title: "BetMGM", sort: true },
-	{ key: "bet4", title: "BetRivers", sort: true },
+	...oddsColumns,
 ];
 
 const columnsPlayer: Picks.ColumnData[] = [
 	{ key: "fullName", title: "Player", sort: true },
-	{ key: "bet1", title: "DraftKings", sort: true },
-	{ key: "bet2", title: "FanDuel", sort: true },
-	{ key: "bet3", title: "BetMGM", sort: true },
-	{ key: "bet4", title: "BetRivers", sort: true },
+	...oddsColumns,
 	{ key: "pick", title: "Pick", sort: false },
 	{ key: "gameTime", title: "Start", sort: true },
 ];
@@ -629,6 +644,17 @@ function App() {
 					}
 				</Popup>
 
+				<div className="table-container">
+					<h2>Sportsbooks</h2>
+					<div className="sportsbook-list">
+						{sportsbooks.map((book) => (
+							<div key={book.key} className="sportsbook-item">
+								<img className="sportsbook-logo logo-rounded" src={book.logo} alt={`${book.title} logo`} />
+								<span>{book.title}</span>
+							</div>
+						))}
+					</div>
+				</div>
 				<div className="table-container">
 					<h2>Games</h2>
 					<Picks.Basic games={gamesList} darkTheme={darkTheme} />

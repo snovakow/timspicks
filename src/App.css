@@ -56,6 +56,35 @@ button:focus-visible {
   /* overflow-x: auto; */
 }
 
+.sportsbook-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.sportsbook-item {
+  display: inline-flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid light-dark(rgba(0, 0, 0, 0.14), rgba(255, 255, 255, 0.18));
+  border-radius: 8px;
+  background-color: light-dark(rgba(255, 255, 255, 0.8), rgba(18, 21, 26, 0.8));
+  text-align: center;
+}
+
+.logo-rounded {
+  object-fit: contain;
+  border-radius: 14%;
+}
+.sportsbook-logo {
+  width: 5rem;
+  height: 5rem;
+}
+
 table {
   border-collapse: collapse;
   border-color: rgb(224, 224, 224);
@@ -70,6 +99,15 @@ th {
 
 th .cell-container {
   justify-content: center;
+}
+
+
+.theader-logo-bg {
+  height: 2.0em;
+  width: 2.0em;
+  opacity: 0.9;
+  pointer-events: none;
+  display: block;
 }
 
 .sortable {
