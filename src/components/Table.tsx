@@ -215,6 +215,7 @@ export function Table(props: {
                                             <img
                                                 className='theader-logo-bg logo-rounded'
                                                 src={item.logo}
+                                                title={item.title}
                                                 alt=''
                                                 aria-hidden='true'
                                             />
