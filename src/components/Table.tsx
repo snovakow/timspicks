@@ -1,5 +1,6 @@
 import { type Team } from "./logo";
 import { roundToPercent } from "../utility";
+import "./Table.css";
 
 export const precision = 1;
 
