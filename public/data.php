@@ -3,9 +3,9 @@ session_start();
 
 // Generate a new token if one doesn't exist in the session
 if (empty($_SESSION['csrf_token'])) {
-    // Use a cryptographically secure method to generate the token
-    // random_bytes() is preferred over md5(uniqid())
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+	// Use a cryptographically secure method to generate the token
+	// random_bytes() is preferred over md5(uniqid())
+	$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
 $csrfToken = $_SESSION['csrf_token'];
@@ -14,74 +14,104 @@ $csrfToken = $_SESSION['csrf_token'];
 <html>
 
 <head>
-    <title>Data Fetcher</title>
-    <link rel="stylesheet" href="./data.css">
+	<title>Data Fetcher</title>
+	<link rel="stylesheet" href="./data.css">
 </head>
 
 <body>
-    <div id="form">
-        <select id="option">
-            <option value="" disabled selected>Option</option>
-            <option value="picks">Picks</option>
-            <option value="odds">Odds</option>
-            <option value="picks,odds">Picks + Odds</option>
-            <option value="games">Games</option>
-            <option value="picks,odds,games">All</option>
-        </select>
-        <input type="text" id="name" />
-        <input type="password" id="input" />
-        <button id="button">Submit</button>
-    </div>
+	<div id="form">
+		<select id="option">
+			<option value="" disabled selected>Option</option>
+			<option value="odds">Odds</option>
+			<option value="picks">Picks</option>
+			<option value="games">Games</option>
+			<option value="picks,odds">Picks + Odds</option>
+			<option value="picks,odds,games">Games + Picks + Odds</option>
+			<option value="players">Players</option>
+		</select>
+		<input type="text" id="name" />
+		<input type="password" id="input" />
+		<button id="button">Submit</button>
+	</div>
 
-    <div id="response"></div>
+	<div id="response"></div>
 
-    <script>
-        const button = document.getElementById('button');
-        const name = document.getElementById('name');
-        const input = document.getElementById('input');
+	<script>
+		const teams = [
+			"ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL", "DAL", "DET", "EDM",
+			"FLA", "LAK", "MIN", "MTL", "NJD", "NSH", "NYI", "NYR", "OTT", "PHI", "PIT",
+			"SEA", "SJS", "STL", "TBL", "TOR", "UTA", "VAN", "VGK", "WPG", "WSH"
+		];
 
-        const keydown = (e) => {
-            if (e.key === "Enter") {
-                e.preventDefault();
-                button.focus();
-                button.click();
-            }
-        };
-        name.addEventListener("keydown", keydown);
-        input.addEventListener("keydown", keydown);
+		const sendRequest = async (query) => {
+			const data = {
+				name: name.value,
+				code: input.value,
+				csrf_token: "<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>"
+			};
 
-        button.addEventListener('click', async () => {
-            const option = document.getElementById('option');
-            const options = option.value;
-            if (!options) return;
+			const response = await fetch("./fetch.php?" + query, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(data) // Converts JavaScript object to a JSON string
+			});
 
-            const optionList = options.split(",");
+			// Handle the response from the server
+			return await response.text();
+		};
 
-            const data = {
-                name: name.value,
-                code: input.value,
-                csrf_token: "<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>"
-            };
+		const button = document.getElementById('button');
+		const name = document.getElementById('name');
+		const input = document.getElementById('input');
 
-            const responseElement = document.getElementById('response');
-            responseElement.innerHTML = "";
-            // button.disabled = true; // Disable the button to prevent multiple clicks
-            // button.parentElement.removeChild(button); // Remove the button from the DOM
-            // input.parentElement.removeChild(input); // Remove the input from the DOM
+		const keydown = (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				button.focus();
+				button.click();
+			}
+		};
+		name.addEventListener("keydown", keydown);
+		input.addEventListener("keydown", keydown);
 
-            const response = await fetch("./fetch.php?" + optionList.join("&"), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data) // Converts JavaScript object to a JSON string
-            });
+		button.addEventListener('click', async () => {
+			const option = document.getElementById('option');
+			const options = option.value;
+			if (!options) return;
 
-            // Handle the response from the server
-            const result = await response.text();
-            if (result) responseElement.innerHTML = result;
-        });
-    </script>
+			const responseElement = document.getElementById('response');
+			responseElement.innerHTML = "";
+
+			if (options === "players") {
+				let teamIndex = 0;
+				const processTeam = async () => {
+					const result = await sendRequest("players&team=" + teams[teamIndex]);
+					if (result) responseElement.innerHTML += result;
+
+					teamIndex++;
+
+					if (teamIndex < teams.length) {
+						window.setTimeout(() => {
+							processTeam();
+						}, 1000);
+					} else {
+						responseElement.innerHTML += "<h2>All teams processed.</h2>";
+					}
+				}
+				processTeam();
+				return;
+			}
+
+			// button.disabled = true; // Disable the button to prevent multiple clicks
+			// button.parentElement.removeChild(button); // Remove the button from the DOM
+			// input.parentElement.removeChild(input); // Remove the input from the DOM
+
+			const result = await sendRequest(options.split(",").join("&"));
+			if (result) responseElement.innerHTML = result;
+		});
+	</script>
 
 </body>
 

@@ -37,6 +37,25 @@ if ($live && $secure) {
 	}
 }
 
+/*
+
+   Players
+
+*/
+if ($live && isset($_GET['players']) && isset($_GET['team'])) {
+	$code = $_GET['team'];
+	$url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
+	$response = file_get_contents($url);
+	if ($response === false) {
+		die('Error fetching NHL data: ' . $url);
+	}
+
+	$filename = 'players_' . $code . '.json';
+	file_put_contents('./players/' . $filename, $response);
+
+	die($filename . '<br>');
+}
+
 echo '<h1>Data Downloader</h1>';
 
 /*
@@ -68,20 +87,15 @@ if ($live && isset($_GET['games'])) {
 	if (empty($games)) {
 		echo '<br>No games scheduled for today.<br>';
 	} else {
-		$pauseSeconds = 1; // Avoid hitting rate limits
-
 		echo '<br>' . count($games) . ' games<br>';
 		foreach ($games as $game) {
-			sleep($pauseSeconds);
 			$code = $game->homeTeam->abbrev;
 
-			$url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
+			$url = './players/players_' . $code . '.json';
 			$response = file_get_contents($url);
 			if ($response === false) {
 				die('Error fetching NHL data: ' . $url);
 			}
-
-			if ($savesrc) file_put_contents('./data/src_games_' . $code . '.json', $response);
 
 			$json = json_decode($response, false);
 
@@ -104,16 +118,13 @@ if ($live && isset($_GET['games'])) {
 			}
 			$game->homeTeam->players = $players;
 
-			sleep($pauseSeconds);
 			$code = $game->awayTeam->abbrev;
 
-			$url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
+			$url = './players/players_' . $code . '.json';
 			$response = file_get_contents($url);
 			if ($response === false) {
 				die('Error fetching NHL data: ' . $url);
 			}
-
-			if ($savesrc) file_put_contents('./data/src_games_' . $code . '.json', $response);
 
 			$json = json_decode($response, false);
 
@@ -145,60 +156,6 @@ if ($live && isset($_GET['games'])) {
 		die('Error saving local JSON file.');
 	}
 	echo "<br>Data has been written to $local_file";
-}
-
-/*
-
-   Save all players
-
-*/
-if ($allPlayers) {
-	$all = [
-		"ANA",
-		"BOS",
-		"BUF",
-		"CAR",
-		"CBJ",
-		"CGY",
-		"CHI",
-		"COL",
-		"DAL",
-		"DET",
-		"EDM",
-		"FLA",
-		"LAK",
-		"MIN",
-		"MTL",
-		"NJD",
-		"NSH",
-		"NYI",
-		"NYR",
-		"OTT",
-		"PHI",
-		"PIT",
-		"SEA",
-		"SJS",
-		"STL",
-		"TBL",
-		"TOR",
-		"UTA",
-		"VAN",
-		"VGK",
-		"WPG",
-		"WSH"
-	];
-
-	foreach ($all as $code) {
-		sleep(1);
-
-		$url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
-		$response = file_get_contents($url);
-		if ($response === false) {
-			die('Error fetching NHL data: ' . $url);
-		}
-
-		file_put_contents('./data/src_games_' . $code . '.json', $response);
-	}
 }
 
 $ch = curl_init();
@@ -619,4 +576,4 @@ if ($live && isset($_GET['odds'])) {
 	echo "<br>Data has been merged and written to $local_file";
 }
 
-die("<br><br>Complete!");
+die("<h2>Complete.</h2>");
