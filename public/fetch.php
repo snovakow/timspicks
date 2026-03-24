@@ -168,11 +168,11 @@ $endOfDay = $endOfDay->getTimestamp();
 
 /*
 
-   Helper
+   Picks
 
 */
 if ($live && isset($_GET['picks'])) {
-	echo '<h2>Helper</h2>';
+	echo '<h2>Picks</h2>';
 
 	$helper = 'https://api.hockeychallengehelper.com/api/picks';
 	echo "{$helper}<br>";
