@@ -2,7 +2,6 @@
 $live = true;
 $secure = true;
 $savesrc = false;
-$allPlayers = false;
 $debug = false;
 
 if ($live && $secure) {
