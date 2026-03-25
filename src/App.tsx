@@ -409,7 +409,7 @@ const logStats = () => {
 	}
 	const addPicks = (pick: Map<string, string[]>, rows: Picks.Player[], title: string): void => {
 		for (const row of rows) {
-			const name = row.fullName;
+			const name = row.fullName + ` (${row.team.code})`;
 			if (!pick.has(name)) pick.set(name, []);
 			const odds = pick.get(name)!;
 			odds.push(title);
@@ -464,16 +464,23 @@ const logStats = () => {
 
 		for (const [name, odds] of entries) {
 			if (odds.length === allOdds) addLogout(`${header}: ${name}`, 1);
-			else addLogout(`${header}: ${name} (${odds.join(", ")})`, 1);
+			else addLogout(`${header}: ${name} - ${odds.join(", ")}`, 1);
 		}
 	}
-	printRow("1", max1_1row, max2_1row, max3_1row, max4_1row);
-	printRow("2", max1_2row, max2_2row, max3_2row, max4_2row);
-	printRow("3", max1_3row, max2_3row, max3_3row, max4_3row);
+	printRow("Top 1", max1_1row, max2_1row, max3_1row, max4_1row);
+	printRow("Top 2", max1_2row, max2_2row, max3_2row, max4_2row);
+	printRow("Top 3", max1_3row, max2_3row, max3_3row, max4_3row);
 
-	const calulateAvg = (rows: Picks.PickOdds[]): [number, string[]] => {
-		let avgMax = 0;
-		let avgPlayers: string[] = [];
+	interface AvgResult {
+		avg: number;
+		playerNames: string[];
+	}
+	interface Avg {
+		avg: number;
+		player: Picks.Player;
+	}
+	const calulateAvg = (rows: Picks.PickOdds[]): AvgResult[] => {
+		const avgs: Avg[] = [];
 		for (const row of rows) {
 			const player = row.player;
 			let avg = 0;
@@ -486,23 +493,48 @@ const logStats = () => {
 			if (bet3 !== null) { avg += bet3; count++; }
 			const bet4 = betChance(player.bet4);
 			if (bet4 !== null) { avg += bet4; count++; }
-			if (count === 0) continue;
-			avg /= count;
-			if (avg > avgMax) {
-				avgMax = avg;
-				avgPlayers = [player.fullName];
-			} else if (avg === avgMax) {
-				avgPlayers.push(player.fullName);
+			if (count > 0) avg /= count;
+			avgs.push({ avg, player });
+		}
+
+		avgs.sort((a, b) => b.avg - a.avg);
+
+		const results: AvgResult[] = [];
+		if (avgs.length === 0) return results;
+
+		const range = 0.04;
+		let prev: AvgResult | null = null;
+		let topAvg = 0;
+
+		for (const avg of avgs) {
+			if (prev === null) {
+				topAvg = avg.avg;
+				const result: AvgResult = { avg: topAvg, playerNames: [avg.player.fullName + ` (${avg.player.team.code})`] };
+				prev = result;
+				results.push(result);
+				continue;
+			}
+			if (avg.avg < topAvg - range) break;
+			if (avg.avg === prev.avg) {
+				prev.playerNames.push(avg.player.fullName + `(${avg.player.team.code})`);
+			} else {
+				const result: AvgResult = { avg: avg.avg, playerNames: [avg.player.fullName + ` (${avg.player.team.code})`] };
+				prev = result;
+				results.push(result);
 			}
 		}
-		return [avgMax, avgPlayers];
+		return results;
 	}
-	const [avg1, avgPlayers1] = calulateAvg(table1Rows);
-	const [avg2, avgPlayers2] = calulateAvg(table2Rows);
-	const [avg3, avgPlayers3] = calulateAvg(table3Rows);
-	addLogout(`Pick 1: ${roundToPercent(avg1, precision)} - ${avgPlayers1.join(", ")}`, 2);
-	addLogout(`Pick 2: ${roundToPercent(avg2, precision)} - ${avgPlayers2.join(", ")}`, 2);
-	addLogout(`Pick 3: ${roundToPercent(avg3, precision)} - ${avgPlayers3.join(", ")}`, 2);
+
+	for (const avg of calulateAvg(table1Rows)) {
+		addLogout(`Avg 1: ${roundToPercent(avg.avg, precision)} - ${avg.playerNames.join(", ")}`, 2);
+	}
+	for (const avg of calulateAvg(table2Rows)) {
+		addLogout(`Avg 2: ${roundToPercent(avg.avg, precision)} - ${avg.playerNames.join(", ")}`, 2);
+	}
+	for (const avg of calulateAvg(table3Rows)) {
+		addLogout(`Avg 3: ${roundToPercent(avg.avg, precision)} - ${avg.playerNames.join(", ")}`, 2);
+	}
 }
 logStats();
 
