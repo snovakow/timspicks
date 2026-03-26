@@ -332,8 +332,6 @@ const logStats = () => {
 			if (row.player.betAvg === null) continue;
 			avgs.push({ avg: row.player.betAvg, player: row.player });
 		}
-
-		avgs.sort((a, b) => b.avg - a.avg);
 		return avgs;
 	}
 	const avg1rows: Avg[] = calulateAvgRows(table1Rows);
@@ -540,9 +538,8 @@ const processMaxArray = (array: Picks.PickOdds[]) => {
 	for (const row of maxAvg) row.highlightAvg = true;
 }
 
-for (const i in dataStats) {
-	const stat = dataStats[i];
-	for (const j in stat) stat[j] = stat[j].replaceAll(' ', '\u00A0');
+for (const stat of dataStats) {
+	for (let j = 0; j < stat.length; j++) stat[j] = stat[j].replaceAll(' ', '\u00A0');
 }
 
 function App() {
@@ -550,10 +547,9 @@ function App() {
 
 	const [chances, setChances] = useState(true);
 	const toggleHandler = () => {
-		setChances(prev => !prev); // Flips the state to the opposite value
+		setChances(prev => !prev);
 	};
 
-	// Table data and sorting - regenerate when theme changes
 	const [rows1] = useState(table1Rows);
 	const sortedRows1 = [...rows1];
 

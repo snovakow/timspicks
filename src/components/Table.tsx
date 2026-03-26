@@ -186,6 +186,7 @@ export function Basic(props: {
                                 <img
                                     className='td-name-logo'
                                     src={darkTheme ? game.away.logoDark : game.away.logoLight}
+                                    alt=""
                                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                 />
                             </span>
@@ -196,6 +197,7 @@ export function Basic(props: {
                                 <img
                                     className='td-name-logo'
                                     src={darkTheme ? game.home.logoDark : game.home.logoLight}
+                                    alt=""
                                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                 />
                                 {teamName(game.home.place, game.home.name)}
@@ -354,7 +356,7 @@ export function Table(props: {
                         <tr key={idx} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
                             <td>
                                 <span className='cell-container'>
-                                    <img className='td-name-logo' src={darkTheme ? player.logoDark : player.logoLight} />
+                                    <img className='td-name-logo' src={darkTheme ? player.logoDark : player.logoLight} alt="" />
                                     {player.fullName}
                                 </span>
                             </td>

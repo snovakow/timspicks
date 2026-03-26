@@ -1,17 +1,9 @@
 #root {
-  max-width: 1280px;
-  height: 100vh;
-  margin: 0 auto;
-  overflow: hidden;
-  padding: 2rem;
   text-align: center;
-  box-sizing: border-box;
 }
 
 button {
   color: black;
-  justify-self: end;
-
   border-radius: 8px;
   border: 1px solid transparent;
   font-size: 1em;
