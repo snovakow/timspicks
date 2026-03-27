@@ -85,7 +85,7 @@ export function Basic(props: {
             const parent = table.parentElement;
             if (!parent) return;
 
-            const tableWidth = table.scrollWidth;
+            const tableWidth = table.offsetWidth;
             const availableWidth = parent.clientWidth;
 
             // --- Short-names toggle (first fallback) ---
