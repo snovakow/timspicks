@@ -539,7 +539,10 @@ const processMaxArray = (array: Picks.PickOdds[]) => {
 }
 
 for (const stat of dataStats) {
-	for (const i in stat) stat[i] = stat[i].replaceAll(' ', '\u00A0');
+	if (stat === undefined) continue;
+	stat.forEach((value, i) => {
+		if (typeof value === 'string') stat[i] = value.replaceAll(' ', '\u00A0');
+	});
 }
 
 function App() {
