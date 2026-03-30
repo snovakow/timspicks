@@ -424,90 +424,27 @@ const logStats = (betKey: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg') => {
 		return max1 * max2 * max3;
 	}
 
-	const gamesMap = new Map<Team, Team>();
-	for (const game of gamesList) {
-		gamesMap.set(game.home.code, game.away.code);
-		gamesMap.set(game.away.code, game.home.code);
+	const logRoot = () => {
+		addLog(`1: ${roundToPercent(max1row.avg, precision)} - ${names(max1row)}`);
+		addLog(`2: ${roundToPercent(max2row.avg, precision)} - ${names(max2row)}`);
+		addLog(`3: ${roundToPercent(max3row.avg, precision)} - ${names(max3row)}`);
+
+		const any = roundToPercent(calcAny(max1row.avg, max2row.avg, max3row.avg), precision);
+		const avg = roundToPercent(calcAvg(max1row.avg, max2row.avg, max3row.avg), precision);
+		const all = roundToPercent(calcAll(max1row.avg, max2row.avg, max3row.avg), precision);
+		addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, "center");
+		logSection++;
 	}
 
-	let isOptimal = true;
-	const usedTeams = new Set<Team>();
-	const remainder: AvgResult[] = [];
-	if (max1row.players.length === 1) {
-		const team = max1row.players[0].team.code;
-		usedTeams.add(team);
-		const opp = gamesMap.get(team);
-		if (opp) usedTeams.add(opp);
+	if (gamesList.length < 3) {
+		logRoot();
 	} else {
-		remainder.push(max1row);
-	}
-	if (max2row.players.length === 1) {
-		const team = max2row.players[0].team.code;
-		if (usedTeams.has(team)) {
-			isOptimal = false;
-		} else {
-			usedTeams.add(team);
-			const opp = gamesMap.get(team);
-			if (opp) {
-				if (usedTeams.has(opp)) {
-					isOptimal = false;
-				} else {
-					usedTeams.add(opp);
-				}
-			}
+		const gamesMap = new Map<Team, Team>();
+		for (const game of gamesList) {
+			gamesMap.set(game.home.code, game.away.code);
+			gamesMap.set(game.away.code, game.home.code);
 		}
-	} else {
-		remainder.push(max2row);
-	}
-	if (isOptimal) {
-		if (max3row.players.length === 1) {
-			const team = max3row.players[0].team.code;
-			if (usedTeams.has(team)) {
-				isOptimal = false;
-			} else {
-				usedTeams.add(team);
-				const opp = gamesMap.get(team);
-				if (opp) {
-					if (usedTeams.has(opp)) isOptimal = false;
-					else usedTeams.add(opp);
-				}
-			}
-		} else {
-			remainder.push(max3row);
-		}
-	}
-	if (isOptimal) {
-		let isSafe = true;
-		for (const max of remainder) {
-			let hasSafe = false;
-			for (const player of max.players) {
-				if (usedTeams.has(player.team.code)) continue;
-				const opp = gamesMap.get(player.team.code);
-				if (opp && usedTeams.has(opp)) continue;
-				hasSafe = true;
-				break;
-			}
-			if(!hasSafe) {
-				isSafe = false;
-				break;
-			}
-		}
-		if(isSafe) {
-			// Do something if isSafe is true
-		}
-	}
 
-	addLog(`1: ${roundToPercent(max1row.avg, precision)} - ${names(max1row)}`);
-	addLog(`2: ${roundToPercent(max2row.avg, precision)} - ${names(max2row)}`);
-	addLog(`3: ${roundToPercent(max3row.avg, precision)} - ${names(max3row)}`);
-
-	const any = roundToPercent(calcAny(max1row.avg, max2row.avg, max3row.avg), precision);
-	const avg = roundToPercent(calcAvg(max1row.avg, max2row.avg, max3row.avg), precision);
-	const all = roundToPercent(calcAll(max1row.avg, max2row.avg, max3row.avg), precision);
-	addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, "center");
-	logSection++;
-
-	if (gamesList.length > 2) {
 		class Choice {
 			avg: number;
 			player: Picks.Player;
@@ -564,7 +501,9 @@ const logStats = (betKey: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg') => {
 			}
 		}
 
-		if (bestCombos.length > 0) {
+		if (bestCombos.length === 0) {
+			logRoot();
+		} else {
 			const comboPrecision = 2;
 			const totalMax = max1row.avg + max2row.avg + max3row.avg;
 			for (const bestCombo of bestCombos) {
