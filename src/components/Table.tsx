@@ -273,6 +273,8 @@ export interface ColumnData {
 export interface OddsItem {
     playerId: number;
     gamesPlayed: number;
+    firstName: string;
+    lastName: string;
     goals: number;
 }
 

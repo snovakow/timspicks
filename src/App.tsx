@@ -189,6 +189,10 @@ const makeSort = (sortConfig: Picks.SortConfig, setSortConfig: (config: Picks.So
 	};
 }
 
+const removeAccentsNormalize = (name: string): string => {
+	return name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase();
+}
+
 const mapPlayers = () => {
 	const playerMap = new Map<number, Picks.Player>();
 	for (const player of playerList) {
@@ -199,13 +203,25 @@ const mapPlayers = () => {
 		const row: Picks.PickOdds[] = [];
 		for (const item of data) {
 			const playerId = item.playerId < 0 ? -item.playerId : item.playerId;
-			const player = playerMap.get(playerId);
+			let player = playerMap.get(playerId);
 			if (!player) {
-				console.warn(`Player not found for odds data:`, item);
-				continue;
+				console.warn(`Player not found for odds data:`, data);
+				const fullName = item.firstName + " " + item.lastName;
+				const fullNameNormalized = removeAccentsNormalize(fullName);
+				for (const playerItem of playerList) {
+					const playerItemNormalized = removeAccentsNormalize(playerItem.fullName);
+					if (playerItemNormalized === fullNameNormalized) {
+						console.log(`Found player with matching ID:`, playerItem);
+						item.playerId = playerItem.playerId;
+						player = playerItem;
+						break;
+					}
+				}
 			}
-			player.pick = pick;
-			row.push(new Picks.PickOdds(player, item));
+			if (player) {
+				player.pick = pick;
+				row.push(new Picks.PickOdds(player, item));
+			}
 		}
 		return row;
 	}
@@ -218,10 +234,6 @@ const mapPlayers = () => {
 const { table1Rows, table2Rows, table3Rows } = mapPlayers();
 
 const compilePlayerList = () => {
-	const removeAccentsNormalize = (name: string): string => {
-		return name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase();
-	}
-
 	type betKey = "bet1" | "bet2" | "bet3" | "bet4";
 	type betChanceKey = "betChance1" | "betChance2" | "betChance3" | "betChance4";
 	const nameFind = (player: Picks.Player, oddsMap: Map<string, number>, betKey: betKey, betChanceKey: betChanceKey) => {
