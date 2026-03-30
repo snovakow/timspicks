@@ -158,7 +158,7 @@ const sortFunction = (sortConfig: Picks.SortConfig) => {
 				if (bVal === 0) return -1;
 
 				if (aVal !== bVal) {
-					if (key === 'gg' || key === 'betAvg') return bVal - aVal;
+					if (key === 'gg') return bVal - aVal;
 					else return aVal - bVal;
 				}
 			}
@@ -320,7 +320,7 @@ const compilePlayerList = () => {
 		if (player.bet4 !== null) { avg += player.bet4; count++; }
 		if (count > 0) {
 			avg /= count;
-			player.betAvg = betChance(avg);
+			player.betAvg = avg;
 			player.betChanceAvg = betChanceRounded(avg);
 		}
 	}
@@ -567,11 +567,7 @@ const processMax = (row: Picks.PickOdds, max: Picks.PickOdds[], key: processKeys
 	if (rowVal === topBet) {
 		max.push(row);
 	} else {
-		if (reverse) {
-			if (rowVal > topBet) max.splice(0, max.length, row);
-		} else {
-			if (rowVal < topBet) max.splice(0, max.length, row);
-		}
+		if (rowVal < topBet) max.splice(0, max.length, row);
 	}
 }
 const processMaxArray = (array: Picks.PickOdds[]) => {
@@ -590,7 +586,7 @@ const processMaxArray = (array: Picks.PickOdds[]) => {
 		processMax(row, max2, 'bet2');
 		processMax(row, max3, 'bet3');
 		processMax(row, max4, 'bet4');
-		processMax(row, maxAvg, 'betAvg', true);
+		processMax(row, maxAvg, 'betAvg');
 	}
 	for (const row of max1) row.highlight1 = true;
 	for (const row of max2) row.highlight2 = true;

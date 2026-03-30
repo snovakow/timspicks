@@ -380,7 +380,7 @@ export function Table(props: {
                                 {chances ? player.betChance4 : (player.bet4 ?? "-")}
                             </td>
                             <td className={picks && row.highlightAvg ? "highlight" : undefined}>
-                                {player.betChanceAvg}
+                                {chances ? player.betChanceAvg : (player.betAvg ?? "-")}
                             </td>
                             {!picks && (<td>{(row.pick === 0 ? "-" : row.pick)}</td>)}
                             {!picks && (<td className="cell-container">{row.gameTime?.toLocaleTimeString([], timeFormat)}</td>)}
