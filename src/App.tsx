@@ -485,12 +485,14 @@ const logStats = (betKey: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg') => {
 		}
 
 		let bestCombos: BestCombo[] = [];
+		let maxCombo = 0;
 		for (const pick1 of choices1) {
 			for (const pick2 of choices2) {
 				if (pick2.collides(pick1.player)) continue;
 				for (const pick3 of choices3) {
 					if (pick3.collides(pick1.player) || pick3.collides(pick2.player)) continue;
 					const total = pick1.avg + pick2.avg + pick3.avg;
+					if (total > maxCombo) maxCombo = total;
 					const bestCombo = bestCombos[0];
 					if (bestCombo === undefined || total > bestCombo.total) {
 						bestCombos = [{ pick1, pick2, pick3, total }];
@@ -501,17 +503,40 @@ const logStats = (betKey: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg') => {
 			}
 		}
 
-		if (bestCombos.length === 0) {
-			logRoot();
-		} else {
-			const comboPrecision = 2;
-			const totalMax = max1row.avg + max2row.avg + max3row.avg;
-			for (const bestCombo of bestCombos) {
-				const pick1same = max1row.players.length === 1 && (max1row.players[0] === bestCombo.pick1.player);
-				const pick2same = max2row.players.length === 1 && (max2row.players[0] === bestCombo.pick2.player);
-				const pick3same = max3row.players.length === 1 && (max3row.players[0] === bestCombo.pick3.player);
-				if (pick1same && pick2same && pick3same) continue;
+		const totalMax = max1row.avg + max2row.avg + max3row.avg;
 
+		let optimized = bestCombos.length === 0;
+		if (!optimized) {
+			if (maxCombo === totalMax) {
+				const keepPlayers1 = new Set<Picks.Player>();
+				const keepPlayers2 = new Set<Picks.Player>();
+				const keepPlayers3 = new Set<Picks.Player>();
+				for (const combo of bestCombos) {
+					keepPlayers1.add(combo.pick1.player);
+					keepPlayers2.add(combo.pick2.player);
+					keepPlayers3.add(combo.pick3.player);
+				}
+				for (let i = max1row.players.length - 1; i >= 0; i--) {
+					const player = max1row.players[i];
+					if (!keepPlayers1.has(player)) max1row.players.splice(i, 1);
+				}
+				for (let i = max2row.players.length - 1; i >= 0; i--) {
+					const player = max2row.players[i];
+					if (!keepPlayers2.has(player)) max2row.players.splice(i, 1);
+				}
+				for (let i = max3row.players.length - 1; i >= 0; i--) {
+					const player = max3row.players[i];
+					if (!keepPlayers3.has(player)) max3row.players.splice(i, 1);
+				}
+
+				optimized = true;
+			}
+		}
+
+		logRoot();
+		if (!optimized) {
+			const comboPrecision = 2;
+			for (const bestCombo of bestCombos) {
 				let line1 = `1: ${printName(bestCombo.pick1.player)}`;
 				if (bestCombo.pick1.avg !== max1row.avg) line1 += " " + roundToPercent(bestCombo.pick1.avg - max1row.avg, comboPrecision);
 				let line2 = `2: ${printName(bestCombo.pick2.player)}`;
@@ -523,14 +548,12 @@ const logStats = (betKey: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg') => {
 				addLog(line2);
 				addLog(line3);
 
-				if (bestCombo.total !== totalMax) {
-					addLog(`Total: ${roundToPercent(bestCombo.total - totalMax, comboPrecision)}`, "center");
+				addLog(`Total: ${roundToPercent(bestCombo.total - totalMax, comboPrecision)}`, "center");
 
-					const any = roundToPercent(calcAny(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
-					const avg = roundToPercent(calcAvg(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
-					const all = roundToPercent(calcAll(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
-					addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, "center");
-				}
+				const any = roundToPercent(calcAny(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
+				const avg = roundToPercent(calcAvg(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
+				const all = roundToPercent(calcAll(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
+				addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, "center");
 
 				logSection++;
 			}
@@ -543,13 +566,13 @@ const addLogTitle = (title: string) => {
 	logSection++;
 }
 
-addLogTitle("Average");
+// addLogTitle("Average");
 logStats('betAvg');
-for (const book of sportsbooks) {
-	addLogTitle(book.title);
-	logSection++;
-	logStats(book.key);
-}
+// for (const book of sportsbooks) {
+// 	addLogTitle(book.title);
+// 	logSection++;
+// 	logStats(book.key);
+// }
 addLog("Any: (70-74 81.8) - Avg: (33-36 43.1) - All: (3-4 7.8)", "center");
 
 const oddsColumns: Picks.ColumnData[] = sportsbooks.map((book) => ({
