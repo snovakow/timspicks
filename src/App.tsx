@@ -330,13 +330,38 @@ compilePlayerList();
 
 type LogStatAlign = "left" | "center";
 interface LogStat {
+	isTitle: boolean;
 	align: LogStatAlign;
 	lines: string[];
 	break: boolean;
 }
 const dataStats: LogStat[] = [];
 
-const logStats = () => {
+let logSection = 0;
+let dataStatsPrev: LogStat | null = null;
+const addLog = (line: string, align: LogStatAlign = "left", isTitle: boolean = false) => {
+	console.log(line);
+	if (dataStatsPrev) {
+		const current = dataStats[logSection];
+		if (current) {
+			if (current.align === align) {
+				current.lines.push(line);
+			} else {
+				dataStatsPrev = { align, lines: [line], break: false, isTitle };
+				logSection++;
+				dataStats[logSection] = dataStatsPrev;
+			}
+		} else {
+			dataStatsPrev.break = true;
+			dataStatsPrev = { align, lines: [line], break: false, isTitle };
+			dataStats[logSection] = dataStatsPrev;
+		}
+	} else {
+		dataStatsPrev = { align, lines: [line], break: false, isTitle };
+		dataStats[logSection] = dataStatsPrev;
+	}
+}
+const logStats = (betKey: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg') => {
 	interface Avg {
 		avg: number;
 		player: Picks.Player;
@@ -349,8 +374,9 @@ const logStats = () => {
 	const calulateAvgRows = (rows: Picks.PickOdds[]): Avg[] => {
 		const avgs: Avg[] = [];
 		for (const row of rows) {
-			if (row.player.betAvg === null) continue;
-			avgs.push({ avg: row.player.betAvg, player: row.player });
+			const playerBetKey = betChance(row.player[betKey]);
+			if (playerBetKey === null) continue;
+			avgs.push({ avg: playerBetKey, player: row.player });
 		}
 		return avgs;
 	}
@@ -380,41 +406,13 @@ const logStats = () => {
 	const max2row = processRow(avg2rows);
 	const max3row = processRow(avg3rows);
 
-	let logSection = 0;
-
-	let dataStatsPrev: LogStat | null = null;
-	const addLog = (line: string, align: LogStatAlign = "left") => {
-		console.log(line);
-		if (dataStatsPrev) {
-			const current = dataStats[logSection];
-			if (current) {
-				if (current.align === align) {
-					current.lines.push(line);
-				} else {
-					dataStatsPrev = { align, lines: [line], break: false };
-					logSection++;
-					dataStats[logSection] = dataStatsPrev;
-				}
-			} else {
-				dataStatsPrev.break = true;
-				dataStatsPrev = { align, lines: [line], break: false };
-				dataStats[logSection] = dataStatsPrev;
-			}
-		} else {
-			dataStatsPrev = { align, lines: [line], break: false };
-			dataStats[logSection] = dataStatsPrev;
-		}
-	}
+	if (!max1row || !max2row || !max3row) return;
 
 	const printName = (player: Picks.Player) => `${player.fullName} (${player.team.code})`;
 
 	const names = (players: AvgResult) => {
-		return players.players.map(player => printName(player)).join(", ");
+		return players.players.map(player => printName(player)).join("\n           ");
 	}
-
-	if (max1row) addLog(`1: ${roundToPercent(max1row.avg, precision)} - ${names(max1row)}`);
-	if (max2row) addLog(`2: ${roundToPercent(max2row.avg, precision)} - ${names(max2row)}`);
-	if (max3row) addLog(`3: ${roundToPercent(max3row.avg, precision)} - ${names(max3row)}`);
 
 	const calcAny = (max1: number, max2: number, max3: number): number => {
 		return 1 - (1 - max1) * (1 - max2) * (1 - max3);
@@ -426,7 +424,82 @@ const logStats = () => {
 		return max1 * max2 * max3;
 	}
 
-	if (!max1row || !max2row || !max3row) return;
+	const gamesMap = new Map<Team, Team>();
+	for (const game of gamesList) {
+		gamesMap.set(game.home.code, game.away.code);
+		gamesMap.set(game.away.code, game.home.code);
+	}
+
+	let isOptimal = true;
+	const usedTeams = new Set<Team>();
+	const remainder: AvgResult[] = [];
+	if (max1row.players.length === 1) {
+		const team = max1row.players[0].team.code;
+		usedTeams.add(team);
+		const opp = gamesMap.get(team);
+		if (opp) usedTeams.add(opp);
+	} else {
+		remainder.push(max1row);
+	}
+	if (max2row.players.length === 1) {
+		const team = max2row.players[0].team.code;
+		if (usedTeams.has(team)) {
+			isOptimal = false;
+		} else {
+			usedTeams.add(team);
+			const opp = gamesMap.get(team);
+			if (opp) {
+				if (usedTeams.has(opp)) {
+					isOptimal = false;
+				} else {
+					usedTeams.add(opp);
+				}
+			}
+		}
+	} else {
+		remainder.push(max2row);
+	}
+	if (isOptimal) {
+		if (max3row.players.length === 1) {
+			const team = max3row.players[0].team.code;
+			if (usedTeams.has(team)) {
+				isOptimal = false;
+			} else {
+				usedTeams.add(team);
+				const opp = gamesMap.get(team);
+				if (opp) {
+					if (usedTeams.has(opp)) isOptimal = false;
+					else usedTeams.add(opp);
+				}
+			}
+		} else {
+			remainder.push(max3row);
+		}
+	}
+	if (isOptimal) {
+		let isSafe = true;
+		for (const max of remainder) {
+			let hasSafe = false;
+			for (const player of max.players) {
+				if (usedTeams.has(player.team.code)) continue;
+				const opp = gamesMap.get(player.team.code);
+				if (opp && usedTeams.has(opp)) continue;
+				hasSafe = true;
+				break;
+			}
+			if(!hasSafe) {
+				isSafe = false;
+				break;
+			}
+		}
+		if(isSafe) {
+			// Do something if isSafe is true
+		}
+	}
+
+	addLog(`1: ${roundToPercent(max1row.avg, precision)} - ${names(max1row)}`);
+	addLog(`2: ${roundToPercent(max2row.avg, precision)} - ${names(max2row)}`);
+	addLog(`3: ${roundToPercent(max3row.avg, precision)} - ${names(max3row)}`);
 
 	const any = roundToPercent(calcAny(max1row.avg, max2row.avg, max3row.avg), precision);
 	const avg = roundToPercent(calcAvg(max1row.avg, max2row.avg, max3row.avg), precision);
@@ -434,102 +507,111 @@ const logStats = () => {
 	addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, "center");
 	logSection++;
 
-	const gamesMap = new Map<Team, Team>();
-	for (const game of gamesList) {
-		gamesMap.set(game.home.code, game.away.code);
-		gamesMap.set(game.away.code, game.home.code);
-	}
-
-	class Choice {
-		avg: number;
-		player: Picks.Player;
-		on: Team;
-		opp: Team;
-		constructor(player: Picks.Player, avg: number, opp: Team) {
-			this.avg = avg;
-			this.player = player;
-			this.on = player.team.code;
-			this.opp = opp;
-		}
-		collides(player: Picks.Player): boolean {
-			return this.on === player.team.code || this.opp === player.team.code;
-		}
-	}
-
-	const makeChoices = (list: Picks.PickOdds[]): Choice[] => {
-		const choices: Choice[] = [];
-		for (const row of list) {
-			const avg = row.player.betAvg;
-			if (avg === null) continue;
-			const opp = gamesMap.get(row.player.team.code);
-			if (opp === undefined) continue;
-			choices.push(new Choice(row.player, avg, opp));
+	if (gamesList.length > 2) {
+		class Choice {
+			avg: number;
+			player: Picks.Player;
+			on: Team;
+			opp: Team;
+			constructor(player: Picks.Player, avg: number, opp: Team) {
+				this.avg = avg;
+				this.player = player;
+				this.on = player.team.code;
+				this.opp = opp;
+			}
+			collides(player: Picks.Player): boolean {
+				return this.on === player.team.code || this.opp === player.team.code;
+			}
 		}
 
-		return choices;
-	};
-	const choices1: Choice[] = makeChoices(table1Rows);
-	const choices2: Choice[] = makeChoices(table2Rows);
-	const choices3: Choice[] = makeChoices(table3Rows);
+		const makeChoices = (list: Picks.PickOdds[]): Choice[] => {
+			const choices: Choice[] = [];
+			for (const row of list) {
+				const avg = betChance(row.player[betKey]);
+				if (avg === null) continue;
+				const opp = gamesMap.get(row.player.team.code);
+				if (opp === undefined) continue;
+				choices.push(new Choice(row.player, avg, opp));
+			}
 
-	interface BestCombo {
-		pick1: Choice;
-		pick2: Choice;
-		pick3: Choice;
-		total: number;
-	}
+			return choices;
+		};
+		const choices1: Choice[] = makeChoices(table1Rows);
+		const choices2: Choice[] = makeChoices(table2Rows);
+		const choices3: Choice[] = makeChoices(table3Rows);
 
-	let bestCombos: BestCombo[] = [];
-	for (const pick1 of choices1) {
-		for (const pick2 of choices2) {
-			if (pick2.collides(pick1.player)) continue;
-			for (const pick3 of choices3) {
-				if (pick3.collides(pick1.player) || pick3.collides(pick2.player)) continue;
-				const total = pick1.avg + pick2.avg + pick3.avg;
-				const bestCombo = bestCombos[0];
-				if (bestCombo === undefined || total > bestCombo.total) {
-					bestCombos = [{ pick1, pick2, pick3, total }];
-				} else if (total === bestCombo.total) {
-					bestCombos.push({ pick1, pick2, pick3, total });
+		interface BestCombo {
+			pick1: Choice;
+			pick2: Choice;
+			pick3: Choice;
+			total: number;
+		}
+
+		let bestCombos: BestCombo[] = [];
+		for (const pick1 of choices1) {
+			for (const pick2 of choices2) {
+				if (pick2.collides(pick1.player)) continue;
+				for (const pick3 of choices3) {
+					if (pick3.collides(pick1.player) || pick3.collides(pick2.player)) continue;
+					const total = pick1.avg + pick2.avg + pick3.avg;
+					const bestCombo = bestCombos[0];
+					if (bestCombo === undefined || total > bestCombo.total) {
+						bestCombos = [{ pick1, pick2, pick3, total }];
+					} else if (total === bestCombo.total) {
+						bestCombos.push({ pick1, pick2, pick3, total });
+					}
 				}
 			}
 		}
-	}
 
-	if (bestCombos.length > 0) {
-		const comboPrecision = 2;
-		const totalMax = max1row.avg + max2row.avg + max3row.avg;
-		for (const bestCombo of bestCombos) {
-			let pick1same = max1row.players.length === 1 && (max1row.players[0] === bestCombo.pick1.player);
-			let pick2same = max2row.players.length === 1 && (max2row.players[0] === bestCombo.pick2.player);
-			let pick3same = max3row.players.length === 1 && (max3row.players[0] === bestCombo.pick3.player);
-			if (pick1same && pick2same && pick3same) continue;
+		if (bestCombos.length > 0) {
+			const comboPrecision = 2;
+			const totalMax = max1row.avg + max2row.avg + max3row.avg;
+			for (const bestCombo of bestCombos) {
+				const pick1same = max1row.players.length === 1 && (max1row.players[0] === bestCombo.pick1.player);
+				const pick2same = max2row.players.length === 1 && (max2row.players[0] === bestCombo.pick2.player);
+				const pick3same = max3row.players.length === 1 && (max3row.players[0] === bestCombo.pick3.player);
+				if (pick1same && pick2same && pick3same) continue;
 
-			let line1 = `1: ${printName(bestCombo.pick1.player)}`;
-			if (bestCombo.pick1.avg !== max1row.avg) line1 += " " + roundToPercent(bestCombo.pick1.avg - max1row.avg, comboPrecision);
-			let line2 = `2: ${printName(bestCombo.pick2.player)}`;
-			if (bestCombo.pick2.avg !== max2row.avg) line2 += " " + roundToPercent(bestCombo.pick2.avg - max2row.avg, comboPrecision);
-			let line3 = `3: ${printName(bestCombo.pick3.player)}`;
-			if (bestCombo.pick3.avg !== max3row.avg) line3 += " " + roundToPercent(bestCombo.pick3.avg - max3row.avg, comboPrecision);
+				let line1 = `1: ${printName(bestCombo.pick1.player)}`;
+				if (bestCombo.pick1.avg !== max1row.avg) line1 += " " + roundToPercent(bestCombo.pick1.avg - max1row.avg, comboPrecision);
+				let line2 = `2: ${printName(bestCombo.pick2.player)}`;
+				if (bestCombo.pick2.avg !== max2row.avg) line2 += " " + roundToPercent(bestCombo.pick2.avg - max2row.avg, comboPrecision);
+				let line3 = `3: ${printName(bestCombo.pick3.player)}`;
+				if (bestCombo.pick3.avg !== max3row.avg) line3 += " " + roundToPercent(bestCombo.pick3.avg - max3row.avg, comboPrecision);
 
-			addLog(line1);
-			addLog(line2);
-			addLog(line3);
+				addLog(line1);
+				addLog(line2);
+				addLog(line3);
 
-			addLog(`Total: ${roundToPercent(bestCombo.total - totalMax, comboPrecision)}`, "center");
+				if (bestCombo.total !== totalMax) {
+					addLog(`Total: ${roundToPercent(bestCombo.total - totalMax, comboPrecision)}`, "center");
 
-			const any = roundToPercent(calcAny(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
-			const avg = roundToPercent(calcAvg(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
-			const all = roundToPercent(calcAll(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
-			addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, "center");
+					const any = roundToPercent(calcAny(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
+					const avg = roundToPercent(calcAvg(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
+					const all = roundToPercent(calcAll(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
+					addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, "center");
+				}
 
-			logSection++;
+				logSection++;
+			}
 		}
 	}
-
-	addLog("Any: (70-74 81.8) - Avg: (33-36 43.1) - All: (3-4 7.8)", "center");
 }
-logStats();
+
+const addLogTitle = (title: string) => {
+	addLog(title, "center", true);
+	logSection++;
+}
+
+addLogTitle("Average");
+logStats('betAvg');
+for (const book of sportsbooks) {
+	addLogTitle(book.title);
+	logSection++;
+	logStats(book.key);
+}
+addLog("Any: (70-74 81.8) - Avg: (33-36 43.1) - All: (3-4 7.8)", "center");
 
 const oddsColumns: Picks.ColumnData[] = sportsbooks.map((book) => ({
 	key: book.key,
@@ -554,7 +636,7 @@ const columnsPlayer: Picks.ColumnData[] = [
 ];
 
 type processKeys = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg';
-const processMax = (row: Picks.PickOdds, max: Picks.PickOdds[], key: processKeys, reverse?: boolean) => {
+const processMax = (row: Picks.PickOdds, max: Picks.PickOdds[], key: processKeys) => {
 	const rowVal = row.player[key];
 	if (rowVal === null) return;
 
@@ -593,13 +675,6 @@ const processMaxArray = (array: Picks.PickOdds[]) => {
 	for (const row of max3) row.highlight3 = true;
 	for (const row of max4) row.highlight4 = true;
 	for (const row of maxAvg) row.highlightAvg = true;
-}
-
-for (const stat of dataStats) {
-	if (stat === undefined) continue;
-	stat.lines.forEach((line, index) => {
-		stat.lines[index] = line.replace(/ /g, '\u00A0');
-	});
 }
 
 function App() {
@@ -665,14 +740,18 @@ function App() {
 			<main className='content'>
 				<Popup showPopUp={showPopup} closePopUp={() => setShowPopup(false)}>
 					{
-						dataStats.map((stat, i) => (
-							<div key={i} className={`popup-section${stat.break ? ' popup-section-break' : ''}`}
-								style={{ textAlign: stat.align }}>
-								{stat.lines.map((line, j) => (
-									<div key={j}>{line}</div>
-								))}
-							</div>
-						))
+						dataStats.map((stat, i) => {
+							let className = 'popup-section';
+							if (stat.break) className += ' popup-section-break';
+							if (stat.isTitle) className += ' popup-section-title';
+							return (
+								<div key={i} className={className} style={{ textAlign: stat.align }}>
+									{stat.lines.map((line, j) => (
+										<div key={j}>{line}</div>
+									))}
+								</div>
+							)
+						})
 					}
 				</Popup>
 

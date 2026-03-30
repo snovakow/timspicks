@@ -52,6 +52,7 @@
   padding: 20px;
   overflow-y: auto;
   overflow-x: hidden;
+  white-space: pre-wrap;
   flex: 1;
 }
 
@@ -64,4 +65,8 @@
 
 .popup-section-break {
   margin-bottom: 1rem;
+}
+
+.popup-section-title {
+  font-weight: bold;
 }
