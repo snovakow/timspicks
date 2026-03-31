@@ -3,11 +3,12 @@ import './Popup.css';
 
 interface PopupProps {
     showPopUp: boolean;
+    title: string;
     closePopUp: () => void;
     children: ReactNode;
 }
 
-function Popup({ showPopUp, closePopUp, children }: PopupProps) {
+function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
     const overlayRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -65,7 +66,7 @@ function Popup({ showPopUp, closePopUp, children }: PopupProps) {
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="popup-header">
-                    Stats
+                    {title}
                     <button className="close-button" onClick={closePopUp}>
                         &times;
                     </button>

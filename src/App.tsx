@@ -340,8 +340,13 @@ const dataStats: LogStat[] = [];
 
 let logSection = 0;
 let dataStatsPrev: LogStat | null = null;
+const resetLogStats = () => {
+	dataStats.length = 0;
+	logSection = 0;
+	dataStatsPrev = null;
+}
 const addLog = (line: string, align: LogStatAlign = "left", isTitle: boolean = false) => {
-	console.log(line);
+	// console.log(line);
 	if (dataStatsPrev) {
 		const current = dataStats[logSection];
 		if (current) {
@@ -560,20 +565,8 @@ const logStats = (betKey: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg') => {
 			}
 		}
 	}
+	addLog("Any: (70-74 81.8) - Avg: (33-36 43.1) - All: (3-4 7.8)", "center");
 }
-
-// const addLogTitle = (title: string) => {
-// 	addLog(title, "center", true);
-// 	logSection++;
-// }
-// addLogTitle("Average");
-logStats('betAvg');
-// for (const book of sportsbooks) {
-// 	addLogTitle(book.title);
-// 	logSection++;
-// 	logStats(book.key);
-// }
-addLog("Any: (70-74 81.8) - Avg: (33-36 43.1) - All: (3-4 7.8)", "center");
 
 const oddsColumns: Picks.ColumnData[] = sportsbooks.map((book) => ({
 	key: book.key,
@@ -640,7 +633,21 @@ const processMaxArray = (array: Picks.PickOdds[]) => {
 }
 
 function App() {
-	const [showPopup, setShowPopup] = useState(false);
+	const [showPopup, setShowPopup] = useState({ visible: false, title: 'Stats', key: 'betAvg' });
+	const [popupStats, setPopupStats] = useState<LogStat[]>([]);
+
+	const openStatsPopup = (key: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg', title: string) => {
+		const shouldRefresh = showPopup.key !== key || popupStats.length === 0;
+		if (shouldRefresh) {
+			resetLogStats();
+			logStats(key);
+			setPopupStats(dataStats.map((stat) => ({
+				...stat,
+				lines: [...stat.lines],
+			})));
+		}
+		setShowPopup({ visible: true, title, key });
+	};
 
 	const [rows1] = useState(table1Rows);
 	const sortedRows1 = [...rows1];
@@ -691,14 +698,20 @@ function App() {
 		<>
 			<header>
 				<span className="header-title">Tims Hockey Picks</span>
-				<button className="button" onClick={() => setShowPopup(!showPopup)}>
+				<button className="button"
+					onClick={
+						() => {
+							if (showPopup.visible) setShowPopup({ ...showPopup, visible: false });
+							else openStatsPopup('betAvg', 'Stats');
+						}
+					}>
 					<img src={stats} alt="?" />
 				</button>
 			</header>
 			<main className='content'>
-				<Popup showPopUp={showPopup} closePopUp={() => setShowPopup(false)}>
+				<Popup title={showPopup.title} showPopUp={showPopup.visible} closePopUp={() => setShowPopup({ ...showPopup, visible: false })}>
 					{
-						dataStats.map((stat, i) => {
+						popupStats.map((stat, i) => {
 							let className = 'popup-section';
 							if (stat.break) className += ' popup-section-break';
 							if (stat.isTitle) className += ' popup-section-title';
@@ -717,10 +730,15 @@ function App() {
 					<h2>Sportsbooks</h2>
 					<div className="sportsbook-list">
 						{sportsbooks.map((book) => (
-							<div key={book.key} className="sportsbook-item">
+							<button
+								key={book.key}
+								type="button"
+								className="sportsbook-item"
+								aria-label={book.title}
+								onClick={() => openStatsPopup(book.key, book.title)}>
 								<img className="sportsbook-logo logo-rounded" src={book.logo} alt={`${book.title} logo`} />
 								<span>{book.title}</span>
-							</div>
+							</button>
 						))}
 					</div>
 				</div>

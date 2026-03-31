@@ -10,6 +10,7 @@
 }
 
 .sportsbook-item {
+  appearance: none;
   display: inline-flex;
   flex-direction: column-reverse;
   align-items: center;
@@ -20,6 +21,12 @@
   border-radius: 8px;
   background-color: light-dark(rgba(255, 255, 255, 0.8), rgba(18, 21, 26, 0.8));
   text-align: center;
+  color: inherit;
+}
+
+.sportsbook-item:focus-visible {
+  outline: 2px solid #646cff;
+  outline-offset: 2px;
 }
 
 .logo-rounded {
