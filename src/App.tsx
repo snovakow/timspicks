@@ -116,25 +116,15 @@ gamesList.sort((a: Picks.GameData, b: Picks.GameData): number => {
 });
 
 // Implied Odds
-const betChance = (x: number | null): number | null => {
+const betDisplay = (x: number | null): number | null => {
 	if (x === null) return null;
-	if (x < 0) return -x / (100 - x);
-	else return 100 / (x + 100);
+	return 1 / x;
 }
 
-const betChanceRounded = (x: number | null): string => {
-	const chance = betChance(x);
+const betDisplayRounded = (x: number | null): string => {
+	const chance = betDisplay(x);
 	if (chance === null) return "-";
 	return roundToPercent(chance, precision);
-}
-
-const trueOddsToAmerican = (x: number): number => {
-	if (x === 0) return 0;
-	if (x >= 2) {
-		return Math.round(100 * (x - 1));
-	} else {
-		return Math.round(100 / (1 - x));
-	}
 }
 
 const sortFunction = (sortConfig: Picks.SortConfig) => {
@@ -236,16 +226,15 @@ const { table1Rows, table2Rows, table3Rows } = mapPlayers();
 
 const compilePlayerList = () => {
 	type betKey = "bet1" | "bet2" | "bet3" | "bet4";
-	type betChanceKey = "betChance1" | "betChance2" | "betChance3" | "betChance4";
-	const nameFind = (player: Picks.Player, oddsMap: Map<string, number>, betKey: betKey, betChanceKey: betChanceKey) => {
+	type betDisplayKey = "betDisplay1" | "betDisplay2" | "betDisplay3" | "betDisplay4";
+	const nameFind = (player: Picks.Player, oddsMap: Map<string, number>, betKey: betKey, betDisplayKey: betDisplayKey) => {
 		const process = (name: string | undefined): boolean => {
 			if (name === undefined) return false;
 			const decimal = oddsMap.get(removeAccentsNormalize(name));
 			if (decimal === undefined) return false;
 
-			const odds = trueOddsToAmerican(decimal);
-			player[betKey] = odds;
-			player[betChanceKey] = betChanceRounded(odds);
+			player[betKey] = decimal;
+			player[betDisplayKey] = betDisplayRounded(decimal);
 			return true;
 		};
 
@@ -307,10 +296,10 @@ const compilePlayerList = () => {
 	for (const item of playerOddsBetMGM) mapNames(item, bet3);
 	for (const item of playerOddsBetRivers) mapNames(item, bet4);
 	for (const player of playerList) {
-		nameFind(player, bet1, "bet1", "betChance1");
-		nameFind(player, bet2, "bet2", "betChance2");
-		nameFind(player, bet3, "bet3", "betChance3");
-		nameFind(player, bet4, "bet4", "betChance4");
+		nameFind(player, bet1, "bet1", "betDisplay1");
+		nameFind(player, bet2, "bet2", "betDisplay2");
+		nameFind(player, bet3, "bet3", "betDisplay3");
+		nameFind(player, bet4, "bet4", "betDisplay4");
 	}
 	for (const player of playerList) {
 		let count = 0;
@@ -322,7 +311,7 @@ const compilePlayerList = () => {
 		if (count > 0) {
 			avg /= count;
 			player.betAvg = avg;
-			player.betChanceAvg = betChanceRounded(avg);
+			player.betDisplayAvg = betDisplayRounded(avg);
 		}
 	}
 	playerList.sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -380,7 +369,7 @@ const logStats = (betKey: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg') => {
 	const calulateAvgRows = (rows: Picks.PickOdds[]): Avg[] => {
 		const avgs: Avg[] = [];
 		for (const row of rows) {
-			const playerBetKey = betChance(row.player[betKey]);
+			const playerBetKey = betDisplay(row.player[betKey]);
 			if (playerBetKey === null) continue;
 			avgs.push({ avg: playerBetKey, player: row.player });
 		}
@@ -470,7 +459,7 @@ const logStats = (betKey: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg') => {
 		const makeChoices = (list: Picks.PickOdds[]): Choice[] => {
 			const choices: Choice[] = [];
 			for (const row of list) {
-				const avg = betChance(row.player[betKey]);
+				const avg = betDisplay(row.player[betKey]);
 				if (avg === null) continue;
 				const opp = gamesMap.get(row.player.team.code);
 				if (opp === undefined) continue;

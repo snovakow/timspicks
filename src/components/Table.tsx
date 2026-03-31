@@ -124,11 +124,11 @@ export class Player {
 	bet3: number | null = null;
 	bet4: number | null = null;
 	betAvg: number | null = null;
-	betChance1: string = "-";
-	betChance2: string = "-";
-	betChance3: string = "-";
-	betChance4: string = "-";
-	betChanceAvg: string = "-";
+	betDisplay1: string = "-";
+	betDisplay2: string = "-";
+	betDisplay3: string = "-";
+	betDisplay4: string = "-";
+	betDisplayAvg: string = "-";
 
 	pick: 0 | 1 | 2 | 3 = 0;
 
@@ -258,19 +258,19 @@ export function Table(props: {
 
 							{picks && (<td>{row.ggChance}</td>)}
 							<td className={picks && row.highlight1 ? "highlight" : undefined}>
-								{player.betChance1}
+								{player.betDisplay1}
 							</td>
 							<td className={picks && row.highlight2 ? "highlight" : undefined}>
-								{player.betChance2}
+								{player.betDisplay2}
 							</td>
 							<td className={picks && row.highlight3 ? "highlight" : undefined}>
-								{player.betChance3}
+								{player.betDisplay3}
 							</td>
 							<td className={picks && row.highlight4 ? "highlight" : undefined}>
-								{player.betChance4}
+								{player.betDisplay4}
 							</td>
 							<td className={picks && row.highlightAvg ? "highlight" : undefined}>
-								{player.betChanceAvg}
+								{player.betDisplayAvg}
 							</td>
 							{!picks && (<td>{(row.pick === 0 ? "-" : row.pick)}</td>)}
 							{!picks && (<td className="cell-container">{row.gameTime?.toLocaleTimeString([], timeFormat)}</td>)}
