@@ -65,131 +65,14 @@ export function Basic(props: {
     darkTheme: boolean
 }) {
     const { games, darkTheme } = props;
-    const tableRef = useRef<HTMLTableElement>(null);
-
-    const [shortNames, setShortNames] = useState(false);
-    const [awayShrinkPx, setAwayShrinkPx] = useState(0);
-    const [awayNaturalSpanWidth, setAwayNaturalSpanWidth] = useState<number | null>(null);
-    const shortNamesRef = useRef(false);
-    const longModeWidthRef = useRef<number | null>(null);
-    // Snapshot of widths taken at shrink-enter time; keeps diff stable so ResizeObserver doesn't cycle
-    const shrinkNaturalTableWidthRef = useRef<number | null>(null);
-    const shrinkNaturalSpanWidthRef = useRef<number | null>(null);
-
-    useEffect(() => {
-        const ENTER_TOLERANCE_PX = 0;
-        const EXIT_HYSTERESIS_PX = 0;
-
-        const checkOverflow = () => {
-            const table = tableRef.current;
-            if (!table) return;
-            const parent = table.parentElement;
-            if (!parent) return;
-
-            const extra = table.offsetWidth - table.clientWidth
-            const tableWidth = table.scrollWidth + extra;
-            const availableWidth = parent.clientWidth;
-
-            // --- Short-names toggle (first fallback) ---
-            if (!shortNamesRef.current) {
-                if (tableWidth > availableWidth - ENTER_TOLERANCE_PX) {
-                    longModeWidthRef.current = tableWidth;
-                    shortNamesRef.current = true;
-                    setShortNames(true);
-                    // Reset shrink snapshots; content is changing
-                    shrinkNaturalTableWidthRef.current = null;
-                    shrinkNaturalSpanWidthRef.current = null;
-                    setAwayNaturalSpanWidth(null);
-                    setAwayShrinkPx(0);
-                } else {
-                    longModeWidthRef.current = null;
-                }
-                return; // Shrink only activates once in short-names mode
-            }
-
-            const requiredLongWidth = longModeWidthRef.current ?? tableWidth;
-            if (availableWidth > requiredLongWidth + EXIT_HYSTERESIS_PX) {
-                longModeWidthRef.current = null;
-                shortNamesRef.current = false;
-                setShortNames(false);
-                shrinkNaturalTableWidthRef.current = null;
-                shrinkNaturalSpanWidthRef.current = null;
-                setAwayNaturalSpanWidth(null);
-                setAwayShrinkPx(0);
-                return;
-            }
-
-            // --- Away-span shrink (second fallback, only in short-names mode) ---
-            // Use the SNAPSHOT natural table width (not current) so the diff doesn't
-            // collapse to 0 after we shrink, which would cause an oscillation cycle.
-            if (shrinkNaturalTableWidthRef.current === null) {
-                // Not yet shrunk: measure and snapshot if overflowing
-                const diff = tableWidth - availableWidth;
-                if (diff > 0) {
-                    shrinkNaturalTableWidthRef.current = tableWidth;
-                    const awaySpans = table.querySelectorAll<HTMLElement>('.away-name-span');
-                    let maxSpanWidth = 0;
-                    awaySpans.forEach(s => { if (s.scrollWidth > maxSpanWidth) maxSpanWidth = s.scrollWidth; });
-                    shrinkNaturalSpanWidthRef.current = maxSpanWidth;
-                    setAwayNaturalSpanWidth(maxSpanWidth);
-                    setAwayShrinkPx(diff);
-                } else {
-                    setAwayNaturalSpanWidth(null);
-                    setAwayShrinkPx((prev) => (prev === 0 ? prev : 0));
-                }
-            } else {
-                // Already shrunk: compute diff from NATURAL width so re-layout doesn't reset us
-                const naturalTableWidth = shrinkNaturalTableWidthRef.current;
-                const diff = naturalTableWidth - availableWidth;
-                if (availableWidth > naturalTableWidth + EXIT_HYSTERESIS_PX) {
-                    // Parent grew enough — exit shrink mode
-                    shrinkNaturalTableWidthRef.current = null;
-                    shrinkNaturalSpanWidthRef.current = null;
-                    setAwayNaturalSpanWidth(null);
-                    setAwayShrinkPx(0);
-                } else {
-                    setAwayShrinkPx((prev) => (prev === diff ? prev : diff));
-                }
-            }
-        };
-
-        checkOverflow();
-        const observer = new ResizeObserver(checkOverflow);
-        if (tableRef.current) observer.observe(tableRef.current);
-        if (tableRef.current?.parentElement) observer.observe(tableRef.current.parentElement);
-        window.addEventListener('resize', checkOverflow);
-
-        return () => {
-            observer.disconnect();
-            window.removeEventListener('resize', checkOverflow);
-        };
-    }, [games.length]);
-
-    const teamName = (place: string, name: string) => shortNames ? name : `${place} ${name}`;
-
     return (
-        <table ref={tableRef}>
+        <table>
             <tbody>
                 {games.map((game, idx) => (
                     <tr key={idx} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
                         <td>
                             <span className='cell-container right-align'>
-                                <span
-                                    className='away-name-span'
-                                    style={{
-                                        display: 'block',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                        // Absolute pixel width shrinks the column in auto table layout
-                                        // (overflow:hidden + explicit width bounds max-content contribution)
-                                        ...(awayShrinkPx > 0 && awayNaturalSpanWidth !== null ? {
-                                            width: `${Math.max(0, awayNaturalSpanWidth - awayShrinkPx)}px`
-                                        } : {})
-                                    }}
-                                >
-                                    {teamName(game.away.place, game.away.name)}
-                                </span>
+                                {game.away.name}
                                 <img
                                     className='td-name-logo'
                                     src={darkTheme ? game.away.logoDark : game.away.logoLight}
@@ -207,7 +90,7 @@ export function Basic(props: {
                                     alt=""
                                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                 />
-                                {teamName(game.home.place, game.home.name)}
+                                {game.home.name}
                             </span>
                         </td>
                         <td className="cell-container">
