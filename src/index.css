@@ -32,7 +32,7 @@ header {
   position: fixed;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
 
   gap: 1rem;
   top: 0;
@@ -59,15 +59,19 @@ header {
 }
 
 .header-title {
-  flex: 1 1 auto;
-  min-width: 0;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+
+  width: calc(100% - 8rem);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
   font-size: clamp(1rem, 6vw, 1em);
 }
 
-header > .button {
+header>.button {
   flex: 0 0 auto;
 }
 

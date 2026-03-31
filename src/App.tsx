@@ -695,11 +695,11 @@ function App() {
 	return (
 		<>
 			<header>
+				<span className="header-title">Tims Hockey Picks Tims Hockey Picks Tims Hockey Picks</span>
 				<button className="button" onClick={() => setShowPopup(!showPopup)}>
 					<img src={stats} alt="?" />
 				</button>
-				<span className="header-title">Tims Hockey Picks</span>
-				<button className={chances ? 'button chances-on' : 'button chances-off'} onClick={toggleHandler}>%</button>
+				{/* <button className={chances ? 'button chances-on' : 'button chances-off'} onClick={toggleHandler}>%</button> */}
 			</header>
 			<main className='content'>
 				<Popup showPopUp={showPopup} closePopUp={() => setShowPopup(false)}>
