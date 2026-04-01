@@ -271,21 +271,21 @@ export function Table(props: {
 								<td><a href={player.link} target="_blank" rel="noopener noreferrer">🔗</a></td>
 							)}
 
-						{picks && (<td>{showNumbers ? row.gg.toFixed(2) : row.ggDisplay}</td>)}
-						<td className={picks ? cellClass(row.highlight1, row.statsHighlight1) : undefined}>
-							{showNumbers ? player.american1 : player.betDisplay1}
-						</td>
-						<td className={picks ? cellClass(row.highlight2, row.statsHighlight2) : undefined}>
-							{showNumbers ? player.american2 : player.betDisplay2}
-						</td>
-						<td className={picks ? cellClass(row.highlight3, row.statsHighlight3) : undefined}>
-							{showNumbers ? player.american3 : player.betDisplay3}
-						</td>
-						<td className={picks ? cellClass(row.highlight4, row.statsHighlight4) : undefined}>
-							{showNumbers ? player.american4 : player.betDisplay4}
-						</td>
-						<td className={picks ? cellClass(row.highlightAvg, row.statsHighlightAvg) : undefined}>
-							{player.betDisplayAvg}
+							{picks && (<td>{showNumbers ? row.gg.toFixed(2) : row.ggDisplay}</td>)}
+							<td className={picks ? cellClass(row.highlight1, row.statsHighlight1) : undefined}>
+								{showNumbers ? player.american1 : player.betDisplay1}
+							</td>
+							<td className={picks ? cellClass(row.highlight2, row.statsHighlight2) : undefined}>
+								{showNumbers ? player.american2 : player.betDisplay2}
+							</td>
+							<td className={picks ? cellClass(row.highlight3, row.statsHighlight3) : undefined}>
+								{showNumbers ? player.american3 : player.betDisplay3}
+							</td>
+							<td className={picks ? cellClass(row.highlight4, row.statsHighlight4) : undefined}>
+								{showNumbers ? player.american4 : player.betDisplay4}
+							</td>
+							<td className={picks ? cellClass(row.highlightAvg, row.statsHighlightAvg) : undefined}>
+								{player.betDisplayAvg}
 							</td>
 							{!picks && (<td>{(row.pick === 0 ? "-" : row.pick)}</td>)}
 							{!picks && (<td className="cell-container">{row.gameTime?.toLocaleTimeString([], timeFormat)}</td>)}
