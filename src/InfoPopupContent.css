@@ -1,0 +1,12 @@
+.info-popup-section {
+    width: fit-content;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: left;
+    line-height: 1.6;
+}
+
+.info-popup-section-break {
+    margin-bottom: 1rem;
+}
