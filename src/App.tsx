@@ -299,43 +299,46 @@ const compilePlayerList = () => {
 	if (deVig) {
 		const minProb = 0.0001;
 		const maxProb = 0.9999;
-		// Fully normalize each book to the cross-book level for the most accurate average.
-		const shrinkage = 1;
+		const minBookPlayers = 5;
 		const betKeys = ["bet1", "bet2", "bet3", "bet4"] as const;
 
-		// Compute per-book global average across all players that have 2+ books.
+		// Compute per-book scale factor using leave-one-out peer averages.
 		const bookTotals: Record<string, { sum: number; count: number }> = {};
-		const crossBookTotals: Record<string, { sum: number; count: number }> = {};
+		const peerTotals: Record<string, { sum: number; count: number }> = {};
 		for (const key of betKeys) {
 			bookTotals[key] = { sum: 0, count: 0 };
-			crossBookTotals[key] = { sum: 0, count: 0 };
+			peerTotals[key] = { sum: 0, count: 0 };
 		}
 		for (const player of playerList) {
-			let peerSum = 0, peerCount = 0;
+			let allSum = 0, allCount = 0;
 			for (const key of betKeys) {
-				if (player[key] !== null) { peerSum += player[key]!; peerCount++; }
+				if (player[key] !== null) { allSum += player[key]!; allCount++; }
 			}
-			if (peerCount < 2) continue;
-			const crossMean = peerSum / peerCount;
+			if (allCount < 2) continue;
 			for (const key of betKeys) {
 				if (player[key] === null) continue;
 				bookTotals[key].sum += player[key]!;
 				bookTotals[key].count++;
-				crossBookTotals[key].sum += crossMean;
-				crossBookTotals[key].count++;
+				// Leave-one-out: peer mean excludes this book's own value.
+				const peerMean = (allSum - player[key]!) / (allCount - 1);
+				peerTotals[key].sum += peerMean;
+				peerTotals[key].count++;
 			}
 		}
 
-		// Scale each book uniformly toward the cross-book level (preserves relative player diffs).
+		// Scale each book uniformly to the peer level (preserves relative player diffs).
+		const scales: Record<string, number> = {};
 		for (const key of betKeys) {
-			if (bookTotals[key].count === 0) continue;
+			if (bookTotals[key].count < minBookPlayers) continue;
 			const bookAvg = bookTotals[key].sum / bookTotals[key].count;
-			const crossAvg = crossBookTotals[key].sum / crossBookTotals[key].count;
+			const peerAvg = peerTotals[key].sum / peerTotals[key].count;
 			if (bookAvg === 0) continue;
-			const rawScale = crossAvg / bookAvg;
-			// Blend: 1 = no adjustment, rawScale = full adjustment.
-			const scale = 1 + (rawScale - 1) * shrinkage;
+			scales[key] = peerAvg / bookAvg;
+		}
 
+		for (const key of betKeys) {
+			const scale = scales[key];
+			if (scale === undefined) continue;
 			for (const player of playerList) {
 				if (player[key] === null) continue;
 				const scaled = Math.min(maxProb, Math.max(minProb, player[key]! * scale));
