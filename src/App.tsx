@@ -480,9 +480,9 @@ const logStats = (betKey: LogStatsKey): HighlightByPick => {
 	const calcAny = (max1: number, max2: number, max3: number): number => {
 		return 1 - (1 - max1) * (1 - max2) * (1 - max3);
 	}
-	const calcAvg = (max1: number, max2: number, max3: number): number => {
-		return (max1 + max2 + max3) / 3;
-	}
+	// const calcAvg = (max1: number, max2: number, max3: number): number => {
+	// 	return (max1 + max2 + max3) / 3;
+	// }
 	const calcAll = (max1: number, max2: number, max3: number): number => {
 		return max1 * max2 * max3;
 	}
@@ -493,9 +493,8 @@ const logStats = (betKey: LogStatsKey): HighlightByPick => {
 		addLog(`3: ${roundToPercent(max3row.avg, precision)} - ${names(max3row)}`);
 
 		const any = roundToPercent(calcAny(max1row.avg, max2row.avg, max3row.avg), precision);
-		const avg = roundToPercent(calcAvg(max1row.avg, max2row.avg, max3row.avg), precision);
 		const all = roundToPercent(calcAll(max1row.avg, max2row.avg, max3row.avg), precision);
-		addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, "center");
+		addLog(`Any: ${any} - All: ${all}`, "center");
 		logSection++;
 	}
 
@@ -618,9 +617,8 @@ const logStats = (betKey: LogStatsKey): HighlightByPick => {
 				addLog(`Total: ${roundToPercent(bestCombo.total - totalMax, comboPrecision)}`, "center");
 
 				const any = roundToPercent(calcAny(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
-				const avg = roundToPercent(calcAvg(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
 				const all = roundToPercent(calcAll(bestCombo.pick1.avg, bestCombo.pick2.avg, bestCombo.pick3.avg), precision);
-				addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, "center");
+				addLog(`Any: ${any} - All: ${all}`, "center");
 
 				addPlayersToHighlight(1, bestCombo.pick1.player);
 				addPlayersToHighlight(2, bestCombo.pick2.player);
@@ -630,7 +628,7 @@ const logStats = (betKey: LogStatsKey): HighlightByPick => {
 			}
 		}
 	}
-	addLog("Any: (70-74 81.8) - Avg: (33-36 43.1) - All: (3-4 7.8)", "center");
+	addLog("Any: (70-74 81.8) - All: (3-4 7.8)", "center");
 	return highlightByPick;
 }
 
