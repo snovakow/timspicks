@@ -1,5 +1,5 @@
 import { type Team } from "./logo";
-import { poissonChance, roundToPercent } from "../utility";
+import { poissonChance } from "../utility";
 import "./Table.css";
 
 export const precision = 1;
@@ -209,7 +209,7 @@ export function Table(props: {
 	darkTheme: boolean,
 	showNumbers: boolean
 }) {
-	const { columns, sortedRows, requestSort, sortConfig, darkTheme, showNumbers } = props;
+	const { columns, sortedRows, requestSort, sortConfig, darkTheme } = props;
 	const cellClass = (primary: boolean, stats: boolean): string | undefined => {
 		if (stats) return "highlight-stats";
 		if (primary) return "highlight";
