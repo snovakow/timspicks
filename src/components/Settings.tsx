@@ -37,7 +37,11 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 						/>
 						Show Probabilities
 					</div>
-					<div className="settings-description">Display values as probability percentages</div>
+					<div className="settings-description">
+						Show values as probability percentages.
+						Sportsbook odds are displayed as implied probabilities,
+						otherwise shown as American odds.
+					</div>
 				</label>
 			</div>
 
@@ -51,12 +55,16 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 						/>
 						Normalize Sportsbooks
 					</div>
-					<div className="settings-description">Remove sportsbook bias by adjusting odds to a consensus value</div>
+					<div className="settings-description">
+						Remove sportsbook bias by adjusting odds to a consensus value.
+					</div>
 				</label>
 			</div>
 
 			<div className="settings-group">
-				<label htmlFor="min-sportsbooks" className="settings-label">Minimum Sportsbooks for Highlight</label>
+				<label htmlFor="min-sportsbooks" className="settings-label">
+					Minimum Sportsbooks for Avg/Max
+				</label>
 				<select
 					id="min-sportsbooks"
 					className="settings-select"
@@ -68,21 +76,27 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					<option value="3">3 sportsbooks</option>
 					<option value="4">All 4 sportsbooks</option>
 				</select>
-				<div className="settings-description">Highlight avg column when value appears in at least this many sportsbooks</div>
+				<div className="settings-description">
+					Highlight Avg/Max when at least this many sportsbooks have values.
+				</div>
 			</div>
 
 			<div className="settings-group">
-				<label htmlFor="avg-display" className="settings-label">Avg Column Display</label>
+				<label htmlFor="avg-display" className="settings-label">
+					Avg/Max Column Display
+				</label>
 				<select
 					id="avg-display"
 					className="settings-select"
 					value={avgDisplayMode}
 					onChange={(e) => onAvgDisplayModeChange(e.target.value as AvgDisplayMode)}
 				>
-					<option value="avg">Average of sportsbooks</option>
-					<option value="max">Maximum sportsbook value</option>
+					<option value="avg">Avg of sportsbooks</option>
+					<option value="max">Max normalized sportsbook value</option>
 				</select>
-				<div className="settings-description">Choose what to display in the Avg column</div>
+				<div className="settings-description">
+					Choose what to display in the Avg column.
+				</div>
 			</div>
 		</div>
 	);
