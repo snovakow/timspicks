@@ -4,11 +4,13 @@ import './Stats.css';
 import * as Picks from './components/Table';
 import Popup from './components/Popup';
 import InfoPopupContent from './InfoPopupContent';
+import SettingsPanel, { type AvgDisplayMode } from './components/Settings';
 import { poissonChance, roundToPercent, probabilityToAmerican } from './utility';
 import logo1 from './images/sb-logo-16-draftkings.svg';
 import logo2 from './images/sb-logo-16-fanduel.svg';
 import logo3 from './images/sb-logo-16-mgm.svg';
 import logo4 from './images/sb-logo-16-betrivers.svg';
+import iconSettings from './images/settings_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconStats from './images/leaderboard_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconInfo from './images/info_i_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyDark from './images/sports_hockey_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
@@ -223,8 +225,7 @@ const { table1Rows, table2Rows, table3Rows } = mapPlayers();
 
 const compilePlayerList = () => {
 	type betKey = "bet1" | "bet2" | "bet3" | "bet4";
-	type betDisplayKey = "betDisplay1" | "betDisplay2" | "betDisplay3" | "betDisplay4";
-	const nameFind = (player: Picks.Player, oddsMap: Map<string, number>, betKey: betKey, betDisplayKey: betDisplayKey) => {
+	const nameFind = (player: Picks.Player, oddsMap: Map<string, number>, betKey: betKey) => {
 		const process = (name: string | undefined): boolean => {
 			if (name === undefined) return false;
 			const decimal = oddsMap.get(removeAccentsNormalize(name));
@@ -232,7 +233,6 @@ const compilePlayerList = () => {
 
 			const chance = 1 / decimal;
 			player[betKey] = chance;
-			player[betDisplayKey] = betDisplayRounded(chance);
 			return true;
 		};
 
@@ -294,17 +294,17 @@ const compilePlayerList = () => {
 	for (const item of playerOddsBetMGM) mapNames(item, bet3);
 	for (const item of playerOddsBetRivers) mapNames(item, bet4);
 	for (const player of playerList) {
-		nameFind(player, bet1, "bet1", "betDisplay1");
-		nameFind(player, bet2, "bet2", "betDisplay2");
-		nameFind(player, bet3, "bet3", "betDisplay3");
-		nameFind(player, bet4, "bet4", "betDisplay4");
+		nameFind(player, bet1, "bet1");
+		nameFind(player, bet2, "bet2");
+		nameFind(player, bet3, "bet3");
+		nameFind(player, bet4, "bet4");
 		player.betRaw1 = player.bet1;
 		player.betRaw2 = player.bet2;
 		player.betRaw3 = player.bet3;
 		player.betRaw4 = player.bet4;
 	}
 
-	const deVig = true;
+	const deVig = false;
 	if (deVig) {
 		const minProb = 0.0001;
 		const maxProb = 0.9999;
@@ -356,8 +356,6 @@ const compilePlayerList = () => {
 				if (player[key] === null) continue;
 				const scaled = Math.min(maxProb, Math.max(minProb, player[key]! * scale));
 				player[key] = scaled;
-				const displayKey = `betDisplay${key.slice(-1)}` as betDisplayKey;
-				player[displayKey] = betDisplayRounded(scaled);
 			}
 		}
 	}
@@ -400,7 +398,7 @@ const addLog = (line: string, align: LogStatAlign = "left", isTitle: boolean = f
 	if (dataStatsPrev) {
 		const current = dataStats[logSection];
 		if (current) {
-			if (current.align === align) {
+			if (current.align === align && current.isTitle === isTitle) {
 				current.lines.push(line);
 			} else {
 				dataStatsPrev = { align, lines: [line], break: false, isTitle };
@@ -793,40 +791,57 @@ const applyAllStatsHighlights = () => {
 };
 applyAllStatsHighlights();
 
-let displayState: boolean = false;
-const updateDisplayState = (showNumbers: boolean) => {
-	if (showNumbers === displayState) return;
-	displayState = showNumbers;
+let stateTracker: {
+	showPercentage: boolean;
+} | null = null;
 
-	if (showNumbers) {
-		for (const row of table1Rows) row.ggDisplay = row.ggRaw.toFixed(2);
-		for (const row of table2Rows) row.ggDisplay = row.ggRaw.toFixed(2);
-		for (const row of table3Rows) row.ggDisplay = row.ggRaw.toFixed(2);
-		for (const player of playerList) {
-			if (player.betRaw1 !== null) player.betDisplay1 = probabilityToAmerican(player.betRaw1);
-			if (player.betRaw2 !== null) player.betDisplay2 = probabilityToAmerican(player.betRaw2);
-			if (player.betRaw3 !== null) player.betDisplay3 = probabilityToAmerican(player.betRaw3);
-			if (player.betRaw4 !== null) player.betDisplay4 = probabilityToAmerican(player.betRaw4);
+const updateDisplayState = (state: { showPercentage: boolean }) => {
+	let updateShowPercentage = true;
+	if (stateTracker === null) {
+		stateTracker = {
+			showPercentage: state.showPercentage,
 		}
 	} else {
-		for (const row of table1Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
-		for (const row of table2Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
-		for (const row of table3Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
-		for (const player of playerList) {
-			if (player.betRaw1 !== null) player.betDisplay1 = roundToPercent(player.betRaw1, precision);
-			if (player.betRaw2 !== null) player.betDisplay2 = roundToPercent(player.betRaw2, precision);
-			if (player.betRaw3 !== null) player.betDisplay3 = roundToPercent(player.betRaw3, precision);
-			if (player.betRaw4 !== null) player.betDisplay4 = roundToPercent(player.betRaw4, precision);
+		if (stateTracker.showPercentage !== state.showPercentage) {
+			updateShowPercentage = stateTracker.showPercentage !== state.showPercentage;
+			stateTracker.showPercentage = state.showPercentage;
+		}
+	}
+
+	if (updateShowPercentage) {
+		if (state.showPercentage) {
+			for (const row of table1Rows) row.ggDisplay = row.ggRaw.toFixed(2);
+			for (const row of table2Rows) row.ggDisplay = row.ggRaw.toFixed(2);
+			for (const row of table3Rows) row.ggDisplay = row.ggRaw.toFixed(2);
+			for (const player of playerList) {
+				if (player.betRaw1 !== null) player.betDisplay1 = probabilityToAmerican(player.betRaw1);
+				if (player.betRaw2 !== null) player.betDisplay2 = probabilityToAmerican(player.betRaw2);
+				if (player.betRaw3 !== null) player.betDisplay3 = probabilityToAmerican(player.betRaw3);
+				if (player.betRaw4 !== null) player.betDisplay4 = probabilityToAmerican(player.betRaw4);
+			}
+		} else {
+			for (const row of table1Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
+			for (const row of table2Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
+			for (const row of table3Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
+			for (const player of playerList) {
+				if (player.betRaw1 !== null) player.betDisplay1 = roundToPercent(player.betRaw1, precision);
+				if (player.betRaw2 !== null) player.betDisplay2 = roundToPercent(player.betRaw2, precision);
+				if (player.betRaw3 !== null) player.betDisplay3 = roundToPercent(player.betRaw3, precision);
+				if (player.betRaw4 !== null) player.betDisplay4 = roundToPercent(player.betRaw4, precision);
+			}
 		}
 	}
 }
 function App() {
 	const [showPopup, setShowPopup] = useState({ visible: false, title: 'Stats', key: 'betAvg' });
 	const [popupStats, setPopupStats] = useState<LogStat[]>(() => cloneLogStats(statsCache.betAvg.stats));
-	const [popupView, setPopupView] = useState<'info' | 'stats'>('stats');
-	const [showNumbers, setShowNumbers] = useState(displayState);
+	const [popupView, setPopupView] = useState<'info' | 'stats' | 'settings'>('stats');
+	const [showPercentage, setShowPercentage] = useState(true);
+	const [deVigEnabled, setDeVigEnabled] = useState(true);
+	const [minSportsbooks, setMinSportsbooks] = useState(2);
+	const [avgDisplayMode, setAvgDisplayMode] = useState<AvgDisplayMode>('avg');
 
-	updateDisplayState(showNumbers);
+	updateDisplayState({ showPercentage });
 
 	const closePopup = () => {
 		setShowPopup({ ...showPopup, visible: false });
@@ -842,6 +857,11 @@ function App() {
 	const openInfoPopup = () => {
 		setPopupView('info');
 		setShowPopup({ visible: true, title: 'Info', key: showPopup.key });
+	};
+
+	const openSettingsPopup = () => {
+		setPopupView('settings');
+		setShowPopup({ visible: true, title: 'Settings', key: showPopup.key });
 	};
 
 	const [rows1] = useState(table1Rows);
@@ -892,20 +912,21 @@ function App() {
 					<button className="button"
 						onClick={
 							() => {
-								if (showPopup.visible && popupView === 'info') closePopup();
-								else openInfoPopup();
-							}
-						}>
-						<img src={iconInfo} alt="i" />
-					</button>
-					<button className="button"
-						onClick={
-							() => {
 								if (showPopup.visible && popupView === 'stats') closePopup();
 								else openStatsPopup('betAvg', 'Stats');
 							}
 						}>
 						<img src={iconStats} alt="?" />
+					</button>
+					<button className="button"
+						onClick={
+							() => {
+								if (showPopup.visible && popupView === 'settings') closePopup();
+								else openSettingsPopup();
+							}
+						}
+						aria-label="Settings">
+						<img src={iconSettings} alt="⚙" />
 					</button>
 				</div>
 				<span className="header-title">
@@ -914,9 +935,13 @@ function App() {
 				</span>
 				<div className='toolBar' style={{ justifySelf: 'end' }}>
 					<button className="button"
-						onClick={() => setShowNumbers(v => !v)}
-						aria-label="Toggle display">
-						{showNumbers ? '%' : '#'}
+						onClick={
+							() => {
+								if (showPopup.visible && popupView === 'info') closePopup();
+								else openInfoPopup();
+							}
+						}>
+						<img src={iconInfo} alt="i" />
 					</button>
 				</div>
 			</header>
@@ -924,6 +949,17 @@ function App() {
 				<Popup title={showPopup.title} showPopUp={showPopup.visible} closePopUp={closePopup}>
 					{popupView === 'info' ? (
 						<InfoPopupContent />
+					) : popupView === 'settings' ? (
+						<SettingsPanel
+							showPercentage={showPercentage}
+							onShowPercentageChange={setShowPercentage}
+							deVigEnabled={deVigEnabled}
+							onDeVigEnabledChange={setDeVigEnabled}
+							minSportsbooks={minSportsbooks}
+							onMinSportsbooksChange={setMinSportsbooks}
+							avgDisplayMode={avgDisplayMode}
+							onAvgDisplayModeChange={setAvgDisplayMode}
+						/>
 					) : (
 						<>
 							{
@@ -966,19 +1002,19 @@ function App() {
 				</div>
 				<div className="table-container">
 					<h2>Pick #1</h2>
-					<Picks.Table columns={columns} sortedRows={sortedRows1} requestSort={requestSort1} sortConfig={sortConfig1} darkTheme={darkTheme} showNumbers={showNumbers} />
+					<Picks.Table columns={columns} sortedRows={sortedRows1} requestSort={requestSort1} sortConfig={sortConfig1} darkTheme={darkTheme} />
 				</div>
 				<div className="table-container">
 					<h2>Pick #2</h2>
-					<Picks.Table columns={columns} sortedRows={sortedRows2} requestSort={requestSort2} sortConfig={sortConfig2} darkTheme={darkTheme} showNumbers={showNumbers} />
+					<Picks.Table columns={columns} sortedRows={sortedRows2} requestSort={requestSort2} sortConfig={sortConfig2} darkTheme={darkTheme} />
 				</div>
 				<div className="table-container">
 					<h2>Pick #3</h2>
-					<Picks.Table columns={columns} sortedRows={sortedRows3} requestSort={requestSort3} sortConfig={sortConfig3} darkTheme={darkTheme} showNumbers={showNumbers} />
+					<Picks.Table columns={columns} sortedRows={sortedRows3} requestSort={requestSort3} sortConfig={sortConfig3} darkTheme={darkTheme} />
 				</div>
 				<div className="table-container">
 					<h2>Players</h2>
-					<Picks.Table columns={columnsPlayer} sortedRows={sortedRowsPlayer} requestSort={requestSortPlayer} sortConfig={sortConfigPlayer} darkTheme={darkTheme} showNumbers={showNumbers} />
+					<Picks.Table columns={columnsPlayer} sortedRows={sortedRowsPlayer} requestSort={requestSortPlayer} sortConfig={sortConfigPlayer} darkTheme={darkTheme} />
 				</div>
 			</main>
 		</>

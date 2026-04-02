@@ -1,5 +1,4 @@
 import { type Team } from "./logo";
-import { poissonChance } from "../utility";
 import "./Table.css";
 
 export const precision = 1;
@@ -191,7 +190,7 @@ export class PickOdds {
 	constructor(player: Player, item: OddsItem) {
 		this.player = player;
 		this.ggRaw = item.gamesPlayed > 0 ? item.goals / item.gamesPlayed : 0;
-		this.ggDisplay = poissonChance(this.ggRaw, precision);
+		this.ggDisplay = "-";
 	}
 }
 
@@ -206,8 +205,7 @@ export function Table(props: {
 	sortedRows: (Player | PickOdds)[],
 	requestSort: RequestSort,
 	sortConfig: SortConfig,
-	darkTheme: boolean,
-	showNumbers: boolean
+	darkTheme: boolean
 }) {
 	const { columns, sortedRows, requestSort, sortConfig, darkTheme } = props;
 	const cellClass = (primary: boolean, stats: boolean): string | undefined => {
