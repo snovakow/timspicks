@@ -224,7 +224,7 @@ const mapPlayers = () => {
 const { table1Rows, table2Rows, table3Rows } = mapPlayers();
 
 const compilePlayerList = () => {
-	type betKey = "bet1" | "bet2" | "bet3" | "bet4";
+	type betKey = "betRaw1" | "betRaw2" | "betRaw3" | "betRaw4";
 	const nameFind = (player: Picks.Player, oddsMap: Map<string, number>, betKey: betKey) => {
 		const process = (name: string | undefined): boolean => {
 			if (name === undefined) return false;
@@ -238,14 +238,14 @@ const compilePlayerList = () => {
 
 		if (player.fullName === "Elias Pettersson") {
 			if (player.playerId === 8480012) {
-				if (betKey === 'bet1' && process("Elias Pettersson")) return; // DraftKings
-				if (betKey === 'bet2' && process("Elias Pettersson #40")) return; // FanDuel
-				if (betKey === 'bet4' && process("Elias Pettersson (1998)")) return; // BetRivers
+				if (betKey === 'betRaw1' && process("Elias Pettersson")) return; // DraftKings
+				if (betKey === 'betRaw2' && process("Elias Pettersson #40")) return; // FanDuel
+				if (betKey === 'betRaw4' && process("Elias Pettersson (1998)")) return; // BetRivers
 			}
 			if (player.playerId === 8483678) {
-				if (betKey === 'bet1' && process("Elias-Nils Pettersson")) return; // DraftKings
-				if (betKey === 'bet2' && process("Elias Pettersson #25")) return; // FanDuel
-				if (betKey === 'bet4' && process("Elias Pettersson (2004)")) return; // BetRivers
+				if (betKey === 'betRaw1' && process("Elias-Nils Pettersson")) return; // DraftKings
+				if (betKey === 'betRaw2' && process("Elias Pettersson #25")) return; // FanDuel
+				if (betKey === 'betRaw4' && process("Elias Pettersson (2004)")) return; // BetRivers
 			}
 			return;
 		}
@@ -294,17 +294,17 @@ const compilePlayerList = () => {
 	for (const item of playerOddsBetMGM) mapNames(item, bet3);
 	for (const item of playerOddsBetRivers) mapNames(item, bet4);
 	for (const player of playerList) {
-		nameFind(player, bet1, "bet1");
-		nameFind(player, bet2, "bet2");
-		nameFind(player, bet3, "bet3");
-		nameFind(player, bet4, "bet4");
-		player.betRaw1 = player.bet1;
-		player.betRaw2 = player.bet2;
-		player.betRaw3 = player.bet3;
-		player.betRaw4 = player.bet4;
+		nameFind(player, bet1, 'betRaw1');
+		nameFind(player, bet2, 'betRaw2');
+		nameFind(player, bet3, 'betRaw3');
+		nameFind(player, bet4, 'betRaw4');
+		player.bet1 = player.betRaw1;
+		player.bet2 = player.betRaw2;
+		player.bet3 = player.betRaw3;
+		player.bet4 = player.betRaw4;
 	}
 
-	const deVig = false;
+	const deVig = true;
 	if (deVig) {
 		const minProb = 0.0001;
 		const maxProb = 0.9999;
@@ -359,21 +359,6 @@ const compilePlayerList = () => {
 			}
 		}
 	}
-
-	for (const player of playerList) {
-		let count = 0;
-		let avg = 0;
-		if (player.bet1 !== null) { avg += player.bet1; count++; }
-		if (player.bet2 !== null) { avg += player.bet2; count++; }
-		if (player.bet3 !== null) { avg += player.bet3; count++; }
-		if (player.bet4 !== null) { avg += player.bet4; count++; }
-		if (count > 0) {
-			avg /= count;
-			player.betAvg = avg;
-			player.betDisplayAvg = betDisplayRounded(avg);
-		}
-	}
-	playerList.sort((a, b) => a.fullName.localeCompare(b.fullName));
 }
 compilePlayerList();
 
@@ -751,7 +736,6 @@ processMaxArray(table1Rows);
 processMaxArray(table2Rows);
 processMaxArray(table3Rows);
 
-const statsCache = precalculateLogStats();
 const applyAllStatsHighlights = () => {
 	const rows = [table1Rows, table2Rows, table3Rows];
 	for (const tableRows of rows) {
@@ -789,47 +773,73 @@ const applyAllStatsHighlights = () => {
 		applyToRows(table3Rows, 3, highlightByPick, key);
 	}
 };
+let statsCache = precalculateLogStats();
 applyAllStatsHighlights();
 
 let stateTracker: {
 	showPercentage: boolean;
+	deVigEnabled: boolean;
 } | null = null;
 
-const updateDisplayState = (state: { showPercentage: boolean }) => {
-	let updateShowPercentage = true;
+const updateDisplayState = (state: { showPercentage: boolean, deVigEnabled: boolean }) => {
+	let updatePercentage = true;
+	let updateDeVig = true;
 	if (stateTracker === null) {
 		stateTracker = {
 			showPercentage: state.showPercentage,
+			deVigEnabled: state.deVigEnabled,
 		}
 	} else {
-		if (stateTracker.showPercentage !== state.showPercentage) {
-			updateShowPercentage = stateTracker.showPercentage !== state.showPercentage;
-			stateTracker.showPercentage = state.showPercentage;
-		}
+		if (stateTracker.showPercentage === state.showPercentage) updatePercentage = false;
+		else stateTracker.showPercentage = state.showPercentage;
+		if (stateTracker.deVigEnabled === state.deVigEnabled) updateDeVig = false;
+		else stateTracker.deVigEnabled = state.deVigEnabled;
 	}
 
-	if (updateShowPercentage) {
-		if (state.showPercentage) {
-			for (const row of table1Rows) row.ggDisplay = row.ggRaw.toFixed(2);
-			for (const row of table2Rows) row.ggDisplay = row.ggRaw.toFixed(2);
-			for (const row of table3Rows) row.ggDisplay = row.ggRaw.toFixed(2);
-			for (const player of playerList) {
-				if (player.betRaw1 !== null) player.betDisplay1 = probabilityToAmerican(player.betRaw1);
-				if (player.betRaw2 !== null) player.betDisplay2 = probabilityToAmerican(player.betRaw2);
-				if (player.betRaw3 !== null) player.betDisplay3 = probabilityToAmerican(player.betRaw3);
-				if (player.betRaw4 !== null) player.betDisplay4 = probabilityToAmerican(player.betRaw4);
-			}
-		} else {
-			for (const row of table1Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
-			for (const row of table2Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
-			for (const row of table3Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
-			for (const player of playerList) {
-				if (player.betRaw1 !== null) player.betDisplay1 = roundToPercent(player.betRaw1, precision);
-				if (player.betRaw2 !== null) player.betDisplay2 = roundToPercent(player.betRaw2, precision);
-				if (player.betRaw3 !== null) player.betDisplay3 = roundToPercent(player.betRaw3, precision);
-				if (player.betRaw4 !== null) player.betDisplay4 = roundToPercent(player.betRaw4, precision);
+	if (!updatePercentage && !updateDeVig) return;
+	console.log(stateTracker.deVigEnabled);
+
+	type keyType = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betRaw1' | 'betRaw2' | 'betRaw3' | 'betRaw4';
+	const [key1, key2, key3, key4]: keyType[] = stateTracker.deVigEnabled ?
+		['bet1', 'bet2', 'bet3', 'bet4'] :
+		['betRaw1', 'betRaw2', 'betRaw3', 'betRaw4'];
+	if (state.showPercentage) {
+		for (const row of table1Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
+		for (const row of table2Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
+		for (const row of table3Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
+		for (const player of playerList) {
+			if (player[key1] !== null) player.betDisplay1 = roundToPercent(player[key1], precision);
+			if (player[key2] !== null) player.betDisplay2 = roundToPercent(player[key2], precision);
+			if (player[key3] !== null) player.betDisplay3 = roundToPercent(player[key3], precision);
+			if (player[key4] !== null) player.betDisplay4 = roundToPercent(player[key4], precision);
+		}
+	} else {
+		for (const row of table1Rows) row.ggDisplay = row.ggRaw.toFixed(2);
+		for (const row of table2Rows) row.ggDisplay = row.ggRaw.toFixed(2);
+		for (const row of table3Rows) row.ggDisplay = row.ggRaw.toFixed(2);
+		for (const player of playerList) {
+			if (player[key1] !== null) player.betDisplay1 = probabilityToAmerican(player[key1]);
+			if (player[key2] !== null) player.betDisplay2 = probabilityToAmerican(player[key2]);
+			if (player[key3] !== null) player.betDisplay3 = probabilityToAmerican(player[key3]);
+			if (player[key4] !== null) player.betDisplay4 = probabilityToAmerican(player[key4]);
+		}
+	}
+	if (updateDeVig) {
+		for (const player of playerList) {
+			let count = 0;
+			let avg = 0;
+			if (player[key1] !== null) { avg += player[key1]; count++; }
+			if (player[key2] !== null) { avg += player[key2]; count++; }
+			if (player[key3] !== null) { avg += player[key3]; count++; }
+			if (player[key4] !== null) { avg += player[key4]; count++; }
+			if (count > 0) {
+				avg /= count;
+				player.betAvg = avg;
+				player.betDisplayAvg = betDisplayRounded(avg);
 			}
 		}
+		statsCache = precalculateLogStats();
+		applyAllStatsHighlights();
 	}
 }
 function App() {
@@ -841,7 +851,7 @@ function App() {
 	const [minSportsbooks, setMinSportsbooks] = useState(2);
 	const [avgDisplayMode, setAvgDisplayMode] = useState<AvgDisplayMode>('avg');
 
-	updateDisplayState({ showPercentage });
+	updateDisplayState({ showPercentage, deVigEnabled });
 
 	const closePopup = () => {
 		setShowPopup({ ...showPopup, visible: false });
