@@ -507,6 +507,7 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 			gamesMap.set(game.away.code, game.home.code);
 		}
 
+		type Collide = "on" | "opp" | "team";
 		class Choice {
 			avg: number;
 			player: Picks.Player;
@@ -518,8 +519,15 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 				this.on = player.team.code;
 				this.opp = opp;
 			}
-			collides(player: Picks.Player): boolean {
-				return this.on === player.team.code || this.opp === player.team.code;
+			collides(player: Picks.Player, mode: Collide): boolean {
+				switch (mode) {
+					case "on":
+						return this.on === player.team.code;
+					case "opp":
+						return this.opp === player.team.code;
+					case "team":
+						return this.on === player.team.code || this.opp === player.team.code;
+				}
 			}
 		}
 
@@ -547,29 +555,33 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 			total: number;
 		}
 
-		let bestCombos: BestCombo[] = [];
-		let maxCombo = 0;
-		for (const pick1 of choices1) {
-			for (const pick2 of choices2) {
-				if (pick2.collides(pick1.player)) continue;
-				for (const pick3 of choices3) {
-					if (pick3.collides(pick1.player) || pick3.collides(pick2.player)) continue;
-					const total = pick1.avg + pick2.avg + pick3.avg;
-					if (total > maxCombo) maxCombo = total;
-					const bestCombo = bestCombos[0];
-					if (bestCombo === undefined || total > bestCombo.total) {
-						bestCombos = [{ pick1, pick2, pick3, total }];
-					} else if (total === bestCombo.total) {
-						bestCombos.push({ pick1, pick2, pick3, total });
+		const calcBestCombo = (type: Collide): BestCombo[] => {
+			const combos: BestCombo[] = [];
+			for (const pick1 of choices1) {
+				for (const pick2 of choices2) {
+					if (pick2.collides(pick1.player, type)) continue;
+					for (const pick3 of choices3) {
+						if (pick3.collides(pick1.player, type) || pick3.collides(pick2.player, type)) continue;
+						const total = pick1.avg + pick2.avg + pick3.avg;
+						const bestCombo = combos[0];
+						if (bestCombo === undefined || total > bestCombo.total) {
+							combos.splice(0, combos.length, { pick1, pick2, pick3, total });
+						} else if (total === bestCombo.total) {
+							combos.push({ pick1, pick2, pick3, total });
+						}
 					}
 				}
 			}
+			return combos;
 		}
+
+		const bestCombos = calcBestCombo('team');
 
 		const totalMax = max1row.avg + max2row.avg + max3row.avg;
 
 		let optimized = bestCombos.length === 0;
 		if (!optimized) {
+			const maxCombo = bestCombos[0].total;
 			if (maxCombo === totalMax) {
 				const keepPlayers1 = new Set<Picks.Player>();
 				const keepPlayers2 = new Set<Picks.Player>();
@@ -597,15 +609,12 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 		}
 
 		logRoot();
-		if (optimized) {
-			addPlayersToHighlight(1, ...max1row.players);
-			addPlayersToHighlight(2, ...max2row.players);
-			addPlayersToHighlight(3, ...max3row.players);
-		} else {
-			addLogTitle("Independent Games");
 
-			const comboPrecision = 2;
-			for (const bestCombo of bestCombos) {
+		const comboPrecision = 2;
+		const logComboSet = (title: string, combos: BestCombo[]) => {
+			addLogTitle(title);
+
+			for (const bestCombo of combos) {
 				let line1 = `1: ${printName(bestCombo.pick1.player)}`;
 				let reducedCount = 0;
 				if (bestCombo.pick1.avg !== max1row.avg) {
@@ -643,6 +652,19 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 				logSection++;
 			}
 		}
+
+		if (optimized) {
+			addPlayersToHighlight(1, ...max1row.players);
+			addPlayersToHighlight(2, ...max2row.players);
+			addPlayersToHighlight(3, ...max3row.players);
+		} else {
+			logComboSet("Independent Games", bestCombos);
+		}
+
+		const allCombos = calcBestCombo('opp');
+		logComboSet("All Games", allCombos);
+		const anyCombos = calcBestCombo('on');
+		logComboSet("Any Game", anyCombos);
 	}
 
 	addLogTitle("Good Ranges");
