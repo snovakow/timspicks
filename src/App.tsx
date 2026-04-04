@@ -736,7 +736,7 @@ processMaxArray(table1Rows);
 processMaxArray(table2Rows);
 processMaxArray(table3Rows);
 
-const applyAllStatsHighlights = () => {
+const applyAllStatsHighlights = (statsCache: Record<LogStatsKey, LogStatsCacheItem>) => {
 	const rows = [table1Rows, table2Rows, table3Rows];
 	for (const tableRows of rows) {
 		for (const row of tableRows) {
@@ -773,14 +773,12 @@ const applyAllStatsHighlights = () => {
 		applyToRows(table3Rows, 3, highlightByPick, key);
 	}
 };
-let statsCache = precalculateLogStats();
-applyAllStatsHighlights();
 
 let stateTracker: {
 	showPercentage: boolean;
 	deVigEnabled: boolean;
 } | null = null;
-
+let statsCacheTracker: Record<LogStatsKey, LogStatsCacheItem> | null = null;
 const updateDisplayState = (state: { showPercentage: boolean, deVigEnabled: boolean }) => {
 	let updatePercentage = true;
 	let updateDeVig = true;
@@ -796,62 +794,67 @@ const updateDisplayState = (state: { showPercentage: boolean, deVigEnabled: bool
 		else stateTracker.deVigEnabled = state.deVigEnabled;
 	}
 
-	if (!updatePercentage && !updateDeVig) return;
-	console.log(stateTracker.deVigEnabled);
-
-	type keyType = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betRaw1' | 'betRaw2' | 'betRaw3' | 'betRaw4';
-	const [key1, key2, key3, key4]: keyType[] = stateTracker.deVigEnabled ?
-		['bet1', 'bet2', 'bet3', 'bet4'] :
-		['betRaw1', 'betRaw2', 'betRaw3', 'betRaw4'];
-	if (state.showPercentage) {
-		for (const row of table1Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
-		for (const row of table2Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
-		for (const row of table3Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
-		for (const player of playerList) {
-			if (player[key1] !== null) player.betDisplay1 = roundToPercent(player[key1], precision);
-			if (player[key2] !== null) player.betDisplay2 = roundToPercent(player[key2], precision);
-			if (player[key3] !== null) player.betDisplay3 = roundToPercent(player[key3], precision);
-			if (player[key4] !== null) player.betDisplay4 = roundToPercent(player[key4], precision);
-		}
-	} else {
-		for (const row of table1Rows) row.ggDisplay = row.ggRaw.toFixed(2);
-		for (const row of table2Rows) row.ggDisplay = row.ggRaw.toFixed(2);
-		for (const row of table3Rows) row.ggDisplay = row.ggRaw.toFixed(2);
-		for (const player of playerList) {
-			if (player[key1] !== null) player.betDisplay1 = probabilityToAmerican(player[key1]);
-			if (player[key2] !== null) player.betDisplay2 = probabilityToAmerican(player[key2]);
-			if (player[key3] !== null) player.betDisplay3 = probabilityToAmerican(player[key3]);
-			if (player[key4] !== null) player.betDisplay4 = probabilityToAmerican(player[key4]);
-		}
-	}
-	if (updateDeVig) {
-		for (const player of playerList) {
-			let count = 0;
-			let avg = 0;
-			if (player[key1] !== null) { avg += player[key1]; count++; }
-			if (player[key2] !== null) { avg += player[key2]; count++; }
-			if (player[key3] !== null) { avg += player[key3]; count++; }
-			if (player[key4] !== null) { avg += player[key4]; count++; }
-			if (count > 0) {
-				avg /= count;
-				player.betAvg = avg;
-				player.betDisplayAvg = betDisplayRounded(avg);
+	if (updatePercentage || updateDeVig) {
+		type keyType = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betRaw1' | 'betRaw2' | 'betRaw3' | 'betRaw4';
+		const [key1, key2, key3, key4]: keyType[] = stateTracker.deVigEnabled ?
+			['bet1', 'bet2', 'bet3', 'bet4'] :
+			['betRaw1', 'betRaw2', 'betRaw3', 'betRaw4'];
+		if (updatePercentage || (updateDeVig && stateTracker.showPercentage)) {
+			if (state.showPercentage) {
+				for (const row of table1Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
+				for (const row of table2Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
+				for (const row of table3Rows) row.ggDisplay = poissonChance(row.ggRaw, precision);
+				for (const player of playerList) {
+					if (player[key1] !== null) player.betDisplay1 = roundToPercent(player[key1], precision);
+					if (player[key2] !== null) player.betDisplay2 = roundToPercent(player[key2], precision);
+					if (player[key3] !== null) player.betDisplay3 = roundToPercent(player[key3], precision);
+					if (player[key4] !== null) player.betDisplay4 = roundToPercent(player[key4], precision);
+				}
+			} else {
+				for (const row of table1Rows) row.ggDisplay = row.ggRaw.toFixed(2);
+				for (const row of table2Rows) row.ggDisplay = row.ggRaw.toFixed(2);
+				for (const row of table3Rows) row.ggDisplay = row.ggRaw.toFixed(2);
+				for (const player of playerList) {
+					if (player[key1] !== null) player.betDisplay1 = probabilityToAmerican(player[key1]);
+					if (player[key2] !== null) player.betDisplay2 = probabilityToAmerican(player[key2]);
+					if (player[key3] !== null) player.betDisplay3 = probabilityToAmerican(player[key3]);
+					if (player[key4] !== null) player.betDisplay4 = probabilityToAmerican(player[key4]);
+				}
 			}
 		}
-		statsCache = precalculateLogStats();
-		applyAllStatsHighlights();
+		if (updateDeVig) {
+			for (const player of playerList) {
+				let count = 0;
+				let avg = 0;
+				if (player[key1] !== null) { avg += player[key1]; count++; }
+				if (player[key2] !== null) { avg += player[key2]; count++; }
+				if (player[key3] !== null) { avg += player[key3]; count++; }
+				if (player[key4] !== null) { avg += player[key4]; count++; }
+				if (count > 0) {
+					avg /= count;
+					player.betAvg = avg;
+					player.betDisplayAvg = betDisplayRounded(avg);
+				}
+			}
+		}
 	}
+
+	if (!statsCacheTracker || updateDeVig) {
+		statsCacheTracker = precalculateLogStats();
+		applyAllStatsHighlights(statsCacheTracker);
+	}
+	return statsCacheTracker;
 }
 function App() {
-	const [showPopup, setShowPopup] = useState({ visible: false, title: 'Stats', key: 'betAvg' });
-	const [popupStats, setPopupStats] = useState<LogStat[]>(() => cloneLogStats(statsCache.betAvg.stats));
-	const [popupView, setPopupView] = useState<'info' | 'stats' | 'settings'>('stats');
 	const [showPercentage, setShowPercentage] = useState(true);
 	const [deVigEnabled, setDeVigEnabled] = useState(true);
 	const [minSportsbooks, setMinSportsbooks] = useState(2);
-	const [avgDisplayMode, setAvgDisplayMode] = useState<AvgDisplayMode>('avg');
 
-	updateDisplayState({ showPercentage, deVigEnabled });
+	const statsCache = updateDisplayState({ showPercentage, deVigEnabled });
+
+	const [showPopup, setShowPopup] = useState({ visible: false, title: 'Stats', key: 'betAvg' });
+	const [popupStats, setPopupStats] = useState<LogStat[]>(() => cloneLogStats(statsCache.betAvg.stats));
+	const [popupView, setPopupView] = useState<'info' | 'stats' | 'settings'>('stats');
 
 	const closePopup = () => {
 		setShowPopup({ ...showPopup, visible: false });
@@ -922,21 +925,21 @@ function App() {
 					<button className="button"
 						onClick={
 							() => {
-								if (showPopup.visible && popupView === 'stats') closePopup();
-								else openStatsPopup('betAvg', 'Stats');
-							}
-						}>
-						<img src={iconStats} alt="?" />
-					</button>
-					<button className="button"
-						onClick={
-							() => {
 								if (showPopup.visible && popupView === 'settings') closePopup();
 								else openSettingsPopup();
 							}
 						}
 						aria-label="Settings">
 						<img src={iconSettings} alt="⚙" />
+					</button>
+					<button className="button"
+						onClick={
+							() => {
+								if (showPopup.visible && popupView === 'stats') closePopup();
+								else openStatsPopup('betAvg', 'Stats');
+							}
+						}>
+						<img src={iconStats} alt="?" />
 					</button>
 				</div>
 				<span className="header-title">
