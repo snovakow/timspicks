@@ -796,6 +796,7 @@ const updateDisplayState = (state: DisplayState): Record<LogStatsKey, LogStatsCa
 
 	for (const player of playerList) {
 		const values = [player[key1], player[key2], player[key3], player[key4]];
+		const rawValues = [player.betRaw1, player.betRaw2, player.betRaw3, player.betRaw4];
 		const displays = ['betDisplay1', 'betDisplay2', 'betDisplay3', 'betDisplay4'] as const;
 
 		for (let i = 0; i < values.length; i++) {
@@ -803,7 +804,7 @@ const updateDisplayState = (state: DisplayState): Record<LogStatsKey, LogStatsCa
 			if (value === null) continue;
 			player[displays[i]] = state.showPercentage
 				? roundToPercent(value, precision)
-				: probabilityToAmerican(value);
+				: probabilityToAmerican(rawValues[i]);
 		}
 
 		let count = 0;
