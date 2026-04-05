@@ -304,62 +304,75 @@ const compilePlayerList = () => {
 		player.bet4 = player.betRaw4;
 	}
 
-	// De-vig: remove each sportsbook's systematic margin (vig) so implied
-	// probabilities are comparable across books.
+	// De-vig: correct each sportsbook's bias AND compression toward the
+	// peer average (leave-one-out mean).
 	//
-	// With only the "yes" side of anytime-goal-scorer props we can't compute
-	// per-player overround, but with multiple books pricing the same players
-	// we can estimate and remove each book's systematic bias:
+	// Model: book_prob = c × peer_prob^α  (power-law in probability space)
+	//   - c captures uniform multiplicative bias (vig level)
+	//   - α captures compression (α<1: highs too low, lows too high)
+	//     or expansion (α>1: highs too high, lows too low)
 	//
-	// 1. Leave-one-out consensus: for book X, the fair value per player is the
-	//    median of the *other* books — avoids the book influencing its own
-	//    vig estimate.
-	// 2. Vig factor: geometric mean of (book / peer median) across all eligible
-	//    players — correct estimator for multiplicative pricing.
-	// 3. Normalize: divide each book's probabilities by its vig factor.
+	// Estimated via linear regression in log-log space:
+	//   log(book) = log(c) + α·log(peer)
+	//
+	// Correction: fair = (book / c) ^ (1/α)
 	{
 		const minProb = 0.0001;
 		const maxProb = 0.9999;
-		const minBookPlayers = 5;
+		const minBookPlayers = 10;
 		const betKeys = ["bet1", "bet2", "bet3", "bet4"] as const;
 
-		const median = (values: number[]): number => {
-			values.sort((a, b) => a - b);
-			const mid = Math.floor(values.length / 2);
-			return values.length % 2 === 0
-				? (values[mid - 1] + values[mid]) / 2
-				: values[mid];
-		};
-
-		// Compute all vig factors first (from unmodified values)
-		const vigFactors: Partial<Record<typeof betKeys[number], number>> = {};
+		// Compute all corrections first (from unmodified values)
+		const corrections: Partial<Record<typeof betKeys[number], { c: number; alpha: number }>> = {};
 		for (const key of betKeys) {
-			let logRatioSum = 0;
-			let count = 0;
+			// Collect log-log pairs: y = log(book), x = log(peerMean)
+			const xs: number[] = [];
+			const ys: number[] = [];
 			for (const player of playerList) {
 				const bookProb = player[key];
 				if (bookProb === null) continue;
-				const peers: number[] = [];
+				let peerSum = 0, peerCount = 0;
 				for (const other of betKeys) {
 					if (other === key) continue;
-					if (player[other] !== null) peers.push(player[other]!);
+					if (player[other] !== null) { peerSum += player[other]!; peerCount++; }
 				}
-				if (peers.length === 0) continue;
-				logRatioSum += Math.log(bookProb / median(peers));
-				count++;
+				if (peerCount === 0) continue;
+				xs.push(Math.log(peerSum / peerCount));
+				ys.push(Math.log(bookProb));
 			}
-			if (count < minBookPlayers) continue;
-			vigFactors[key] = Math.exp(logRatioSum / count);
-			console.log(`De-vig [${key}]: vig=${vigFactors[key]!.toFixed(4)} (${count} players)`);
+			if (xs.length < minBookPlayers) continue;
+
+			// OLS: y = a + b*x
+			const n = xs.length;
+			let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0;
+			for (let i = 0; i < n; i++) {
+				sumX += xs[i];
+				sumY += ys[i];
+				sumXX += xs[i] * xs[i];
+				sumXY += xs[i] * ys[i];
+			}
+			const denom = n * sumXX - sumX * sumX;
+			if (Math.abs(denom) < 1e-12) continue;
+			const alpha = (n * sumXY - sumX * sumY) / denom;
+			const logC = (sumY - alpha * sumX) / n;
+			const c = Math.exp(logC);
+
+			// Guard: alpha must be positive and reasonable
+			if (alpha <= 0.5 || alpha > 2) continue;
+
+			corrections[key] = { c, alpha };
+			console.log(`De-vig [${key}]: c=${c.toFixed(4)}, α=${alpha.toFixed(4)} (${n} players)`);
 		}
 
-		// Then apply all at once
+		// Apply all at once: fair = (book / c) ^ (1/α)
 		for (const key of betKeys) {
-			const vig = vigFactors[key];
-			if (vig === undefined) continue;
+			const corr = corrections[key];
+			if (corr === undefined) continue;
+			const invAlpha = 1 / corr.alpha;
 			for (const player of playerList) {
 				if (player[key] === null) continue;
-				player[key] = Math.min(maxProb, Math.max(minProb, player[key]! / vig));
+				const fair = Math.pow(player[key]! / corr.c, invAlpha);
+				player[key] = Math.min(maxProb, Math.max(minProb, fair));
 			}
 		}
 	}
