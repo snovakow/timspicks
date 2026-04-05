@@ -34,7 +34,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					<div className="settings-description">
 						Show values as probability percentages.
 						Sportsbook odds are displayed as implied probabilities,
-						otherwise shown as American odds.
+						otherwise are displayed as American odds.
 					</div>
 				</label>
 			</div>
