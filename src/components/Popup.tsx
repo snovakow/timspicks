@@ -13,26 +13,31 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
 
     useEffect(() => {
         if (!showPopUp) {
-            // Restore body scrolling and remove scrollbar gutter
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
+            document.documentElement.style.overflow = '';
             return;
         }
 
         // Calculate scrollbar width to prevent layout shift
         const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
 
-        // Prevent background scrolling by disabling body overflow
+        // Prevent background scrolling — position:fixed on body is required
+        // for iOS Safari which ignores overflow:hidden on touch gestures
+        const scrollY = window.scrollY;
+        document.documentElement.style.overflow = 'hidden';
         document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${scrollY}px`;
+        document.body.style.left = '0';
+        document.body.style.right = '0';
         // Reserve space for scrollbar gutter
         if (scrollbarWidth > 0) {
             document.body.style.paddingRight = `${scrollbarWidth}px`;
         }
 
-        // Block scroll events on the overlay to prevent background scrolling on touch devices
+        // Block scroll events on the overlay backdrop itself
         const preventDefault = (e: Event) => {
-            // Only block scroll gestures on the backdrop itself.
-            // Allow wheel/touch scrolling inside popup content.
             if (e.target === overlay) {
                 e.preventDefault();
             }
@@ -45,9 +50,14 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
         }
 
         return () => {
-            // Cleanup: restore body overflow on unmount
+            document.documentElement.style.overflow = '';
             document.body.style.overflow = '';
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.left = '';
+            document.body.style.right = '';
             document.body.style.paddingRight = '';
+            window.scrollTo(0, scrollY);
             if (overlay) {
                 overlay.removeEventListener('touchmove', preventDefault);
                 overlay.removeEventListener('wheel', preventDefault);
