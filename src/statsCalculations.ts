@@ -262,7 +262,7 @@ export const calculateStats = (
 		addLog(`3: ${roundToPercent(avgResult.avg3, precision)} - ${names(avgResult.players3)}`);
 	}
 
-	const logReduced = (avgResult: Result, topResult: Result) => {
+	const logReduced = (avgResult: Result, topResult: Result, totalMax: number) => {
 		let line1 = `1: ${names(avgResult.players1, true)}`;
 		let reducedCount = 0;
 		if (avgResult.avg1 !== topResult.avg1) {
@@ -286,7 +286,7 @@ export const calculateStats = (
 
 		if (reducedCount > 1) {
 			const total = avgResult.avg1 + avgResult.avg2 + avgResult.avg3;
-			addLog(`Total: ${roundToPercent(total - (topResult.avg1 + topResult.avg2 + topResult.avg3), comboPrecision)}`, 'center');
+			addLog(`Total: ${roundToPercent(total - totalMax, comboPrecision)}`, 'center');
 		}
 	}
 
@@ -330,7 +330,7 @@ export const calculateStats = (
 		if (comboTeam.total > 0) {
 			addLogTitle("Independent Games");
 			for (const avgResult of teamResult) {
-				logReduced(avgResult, topResult);
+				logReduced(avgResult, topResult, totalMax);
 				logCalcStats(avgResult);
 				logHighlights(avgResult, 'any');
 			}
@@ -347,7 +347,7 @@ export const calculateStats = (
 	if (comboAny.total > comboTeam.total) {
 		addLogTitle("Any Game");
 		for (const avgResult of anyResult) {
-			logReduced(avgResult, topResult);
+			logReduced(avgResult, topResult, totalMax);
 			logCalcStats(avgResult);
 			logHighlights(avgResult, 'opp');
 		}
@@ -356,7 +356,7 @@ export const calculateStats = (
 	if (comboTeam.total > 0) {
 		addLogTitle("Independent Games");
 		for (const avgResult of teamResult) {
-			logReduced(avgResult, topResult);
+			logReduced(avgResult, topResult, totalMax);
 			logCalcStats(avgResult);
 			logHighlights(avgResult, 'any');
 		}
@@ -377,7 +377,7 @@ export const calculateStats = (
 				if (oppCombo.total > 0) {
 					addLogTitle("Any Game");
 					for (const avgResult of oppCombo.merge()) {
-						logReduced(avgResult, topResult);
+						logReduced(avgResult, topResult, totalMax);
 						logCalcStats(avgResult);
 						logHighlights(avgResult, 'opp');
 					}
