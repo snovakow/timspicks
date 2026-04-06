@@ -63,10 +63,12 @@ export default function InfoPopupContent() {
 
 			<section className="info-popup-section info-popup-section-break">
 				<h3>Highlight Legend</h3>
-				<p><span className="info-chip info-chip-blue">Blue</span> 
-				Highest probability picks.</p>
-				<p><span className="info-chip info-chip-green">Green</span> 
-				Highest probability picks from different games.</p>
+				<p><span className="info-chip info-chip-blue">Blue</span>
+					Highest probability picks.</p>
+				<p><span className="info-chip info-chip-green">Green</span>
+					Highest probability picks from different games.</p>
+				<p><span className="info-chip info-chip-yellow">Yellow</span>
+					Highest probability picks including opposing teams.</p>
 			</section>
 
 			<section className="info-popup-section info-popup-section-break info-popup-contact">

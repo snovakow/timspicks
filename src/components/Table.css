@@ -101,9 +101,14 @@ td {
   background-color: rgb(204, 238, 255);
 }
 
-.highlight-stats {
+.highlight-unique {
   color: #000;
   background-color: rgb(170, 235, 170);
+}
+
+.highlight-opp {
+  color: #000;
+  background-color: rgb(255, 248, 200);
 }
 
 .cell-container {

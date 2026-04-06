@@ -419,7 +419,8 @@ const addLog = (line: string, align: LogStatAlign = "left", isTitle: boolean = f
 }
 type LogStatsKey = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg';
 type PickIndex = 1 | 2 | 3;
-type HighlightByPick = Record<PickIndex, Set<number>>;
+type StatsHighlightMode = 'opp' | 'any';
+type HighlightByPick = Record<PickIndex, Map<number, StatsHighlightMode>>;
 interface LogStatsCacheItem {
 	stats: LogStat[];
 	highlightByPick: HighlightByPick;
@@ -427,12 +428,16 @@ interface LogStatsCacheItem {
 
 const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick => {
 	const highlightByPick: HighlightByPick = {
-		1: new Set<number>(),
-		2: new Set<number>(),
-		3: new Set<number>(),
+		1: new Map<number, StatsHighlightMode>(),
+		2: new Map<number, StatsHighlightMode>(),
+		3: new Map<number, StatsHighlightMode>(),
 	};
-	const addPlayersToHighlight = (pick: PickIndex, players: Set<Picks.Player>) => {
-		for (const player of players) highlightByPick[pick].add(player.playerId);
+	const addPlayersToHighlight = (pick: PickIndex, players: Set<Picks.Player>, mode: StatsHighlightMode) => {
+		for (const player of players) {
+			const current = highlightByPick[pick].get(player.playerId);
+			if (current === 'opp') continue;
+			highlightByPick[pick].set(player.playerId, mode);
+		}
 	};
 
 	const printName = (player: Picks.Player) => `${player.fullName} (${player.team.code})`;
@@ -599,10 +604,10 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 
 		logSection++;
 	}
-	const logHighlights = (avgResult: Result) => {
-		addPlayersToHighlight(1, avgResult.players1);
-		addPlayersToHighlight(2, avgResult.players2);
-		addPlayersToHighlight(3, avgResult.players3);
+	const logHighlights = (avgResult: Result, mode: StatsHighlightMode) => {
+		addPlayersToHighlight(1, avgResult.players1, mode);
+		addPlayersToHighlight(2, avgResult.players2, mode);
+		addPlayersToHighlight(3, avgResult.players3, mode);
 	}
 	const logTopPicks = (avgResult: Result) => {
 		addLog(`1: ${roundToPercent(avgResult.avg1, precision)} - ${names(avgResult.players1)}`);
@@ -670,7 +675,7 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 		for (const avgResult of teamResult) {
 			logTopPicks(avgResult);
 			logCalcStats(avgResult);
-			logHighlights(avgResult);
+			logHighlights(avgResult, 'any');
 		}
 		return logFooter();
 	}
@@ -685,6 +690,7 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 		for (const avgResult of anyResult) {
 			logTopPicks(avgResult);
 			logCalcStats(avgResult);
+			logHighlights(avgResult, 'opp');
 		}
 
 		if (comboTeam.total > 0) {
@@ -692,7 +698,7 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 			for (const avgResult of teamResult) {
 				logReduced(avgResult);
 				logCalcStats(avgResult);
-				logHighlights(avgResult);
+				logHighlights(avgResult, 'any');
 			}
 		}
 		return logFooter();
@@ -709,7 +715,7 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 		for (const avgResult of anyResult) {
 			logReduced(avgResult);
 			logCalcStats(avgResult);
-			// logHighlights(avgResult);
+			logHighlights(avgResult, 'opp');
 		}
 	}
 
@@ -718,7 +724,7 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 		for (const avgResult of teamResult) {
 			logReduced(avgResult);
 			logCalcStats(avgResult);
-			logHighlights(avgResult);
+			logHighlights(avgResult, 'any');
 		}
 	}
 
@@ -739,7 +745,7 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 					for (const avgResult of oppCombo.merge()) {
 						logReduced(avgResult);
 						logCalcStats(avgResult);
-						logHighlights(avgResult, 'any');
+						logHighlights(avgResult, 'opp');
 					}
 				}
 			}
@@ -819,50 +825,40 @@ const processMaxArray = (array: Picks.PickOdds[], minSportsbooks: number) => {
 	const max4: Picks.PickOdds[] = [];
 	const maxAvg: Picks.PickOdds[] = [];
 	for (const row of array) {
-		row.highlight1 = false;
-		row.highlight2 = false;
-		row.highlight3 = false;
-		row.highlight4 = false;
-		row.highlightAvg = false;
+		row.highlight1 = 'none';
+		row.highlight2 = 'none';
+		row.highlight3 = 'none';
+		row.highlight4 = 'none';
+		row.highlightAvg = 'none';
 		processMax(row, max1, 'bet1');
 		processMax(row, max2, 'bet2');
 		processMax(row, max3, 'bet3');
 		processMax(row, max4, 'bet4');
 		if (row.player.betCount >= minSportsbooks) processMax(row, maxAvg, 'betAvg');
 	}
-	for (const row of max1) row.highlight1 = true;
-	for (const row of max2) row.highlight2 = true;
-	for (const row of max3) row.highlight3 = true;
-	for (const row of max4) row.highlight4 = true;
-	for (const row of maxAvg) row.highlightAvg = true;
+	for (const row of max1) row.highlight1 = 'top';
+	for (const row of max2) row.highlight2 = 'top';
+	for (const row of max3) row.highlight3 = 'top';
+	for (const row of max4) row.highlight4 = 'top';
+	for (const row of maxAvg) row.highlightAvg = 'top';
 }
 
 const applyAllStatsHighlights = (statsCache: Record<LogStatsKey, LogStatsCacheItem>, minSportsbooks: number) => {
-	const rows = [table1Rows, table2Rows, table3Rows];
-	for (const tableRows of rows) {
-		for (const row of tableRows) {
-			row.statsHighlight1 = false;
-			row.statsHighlight2 = false;
-			row.statsHighlight3 = false;
-			row.statsHighlight4 = false;
-			row.statsHighlightAvg = false;
-		}
-	}
-
 	const applyToRows = (
 		rows: Picks.PickOdds[],
 		pick: PickIndex,
 		highlightByPick: HighlightByPick,
 		key: LogStatsKey,
 	) => {
-		const playerIds = highlightByPick[pick];
+		const playerModes = highlightByPick[pick];
 		for (const row of rows) {
-			if (!playerIds.has(row.player.playerId)) continue;
-			if (key === 'bet1') row.statsHighlight1 = true;
-			else if (key === 'bet2') row.statsHighlight2 = true;
-			else if (key === 'bet3') row.statsHighlight3 = true;
-			else if (key === 'bet4') row.statsHighlight4 = true;
-			else if (row.player.betCount >= minSportsbooks) row.statsHighlightAvg = true;
+			const mode = playerModes.get(row.player.playerId);
+			if (mode === undefined) continue;
+			if (key === 'bet1') row.highlight1 = mode;
+			else if (key === 'bet2') row.highlight2 = mode;
+			else if (key === 'bet3') row.highlight3 = mode;
+			else if (key === 'bet4') row.highlight4 = mode;
+			else if (row.player.betCount >= minSportsbooks) row.highlightAvg = mode;
 		}
 	};
 

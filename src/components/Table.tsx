@@ -173,21 +173,17 @@ export interface OddsItem {
 	goals: number;
 }
 
+export type HighlightMode = "none" | "top" | "opp" | "any";
 export class PickOdds {
 	player: Player;
 
 	ggRaw: number;
 	ggDisplay: string;
-	highlight1 = false;
-	highlight2 = false;
-	highlight3 = false;
-	highlight4 = false;
-	highlightAvg = false;
-	statsHighlight1 = false;
-	statsHighlight2 = false;
-	statsHighlight3 = false;
-	statsHighlight4 = false;
-	statsHighlightAvg = false;
+	highlight1: HighlightMode = "none";
+	highlight2: HighlightMode = "none";
+	highlight3: HighlightMode = "none";
+	highlight4: HighlightMode = "none";
+	highlightAvg: HighlightMode = "none";
 	constructor(player: Player, item: OddsItem) {
 		this.player = player;
 		this.ggRaw = item.gamesPlayed > 0 ? item.goals / item.gamesPlayed : 0;
@@ -209,9 +205,10 @@ export function Table(props: {
 	darkTheme: boolean
 }) {
 	const { columns, sortedRows, requestSort, sortConfig, darkTheme } = props;
-	const cellClass = (primary: boolean, stats: boolean): string | undefined => {
-		if (stats) return "highlight-stats";
-		if (primary) return "highlight";
+	const cellClass = (highlight: HighlightMode): string | undefined => {
+		if (highlight === "top") return "highlight";
+		if (highlight === "opp") return "highlight-opp";
+		if (highlight === "any") return "highlight-unique";
 		return undefined;
 	};
 	return (
@@ -263,19 +260,19 @@ export function Table(props: {
 							)}
 
 							{picks && (<td>{row.ggDisplay}</td>)}
-							<td className={picks ? cellClass(row.highlight1, row.statsHighlight1) : undefined}>
+							<td className={picks ? cellClass(row.highlight1) : undefined}>
 								{player.betDisplay1}
 							</td>
-							<td className={picks ? cellClass(row.highlight2, row.statsHighlight2) : undefined}>
+							<td className={picks ? cellClass(row.highlight2) : undefined}>
 								{player.betDisplay2}
 							</td>
-							<td className={picks ? cellClass(row.highlight3, row.statsHighlight3) : undefined}>
+							<td className={picks ? cellClass(row.highlight3) : undefined}>
 								{player.betDisplay3}
 							</td>
-							<td className={picks ? cellClass(row.highlight4, row.statsHighlight4) : undefined}>
+							<td className={picks ? cellClass(row.highlight4) : undefined}>
 								{player.betDisplay4}
 							</td>
-							<td className={picks ? cellClass(row.highlightAvg, row.statsHighlightAvg) : undefined}>
+							<td className={picks ? cellClass(row.highlightAvg) : undefined}>
 								{player.betDisplayAvg}
 							</td>
 							{!picks && (<td>{(row.pick === 0 ? "-" : row.pick)}</td>)}

@@ -52,6 +52,10 @@
     background: rgb(170, 235, 170);
 }
 
+.info-chip-yellow {
+    background: rgb(255, 248, 200);
+}
+
 .info-popup-contact {
     text-align: center;
 }
