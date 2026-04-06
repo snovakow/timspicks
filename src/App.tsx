@@ -873,10 +873,10 @@ type DisplayState = {
 	showPercentage: boolean;
 	deVigEnabled: boolean;
 	minSportsbooks: number;
-	needsSort1: Picks.ColumnKeys | null;
-	needsSort2: Picks.ColumnKeys | null;
-	needsSort3: Picks.ColumnKeys | null;
-	needsSortPlayer: Picks.ColumnKeys | null;
+	needsSort1: Picks.ColumnKeys;
+	needsSort2: Picks.ColumnKeys;
+	needsSort3: Picks.ColumnKeys;
+	needsSortPlayer: Picks.ColumnKeys;
 };
 
 const sortConfig1: Picks.SortConfig = { keyOrder: [] };
@@ -906,20 +906,6 @@ type DisplayStateResult = {
 };
 
 const updateDisplayState = (state: DisplayState): DisplayStateResult => {
-	if (state.needsSort1) {
-		applpySort1(state.needsSort1);
-		console.log("1 applied");
-	}
-	if (state.needsSort2) {
-		applpySort2(state.needsSort2);
-	}
-	if (state.needsSort3) {
-		applpySort3(state.needsSort3);
-	}
-	if (state.needsSortPlayer) {
-		applpySortPlayer(state.needsSortPlayer);
-	}
-
 	type keyType = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betRaw1' | 'betRaw2' | 'betRaw3' | 'betRaw4';
 	const [key1, key2, key3, key4]: keyType[] = state.deVigEnabled
 		? ['bet1', 'bet2', 'bet3', 'bet4']
@@ -965,6 +951,11 @@ const updateDisplayState = (state: DisplayState): DisplayStateResult => {
 		}
 	}
 
+	applpySort1(state.needsSort1);
+	applpySort2(state.needsSort2);
+	applpySort3(state.needsSort3);
+	applpySortPlayer(state.needsSortPlayer);
+
 	processMaxArray(table1Rows, state.minSportsbooks);
 	processMaxArray(table2Rows, state.minSportsbooks);
 	processMaxArray(table3Rows, state.minSportsbooks);
@@ -984,10 +975,10 @@ function App() {
 	const [deVigEnabled, setDeVigEnabled] = useState(true);
 	const [minSportsbooks, setMinSportsbooks] = useState(3);
 
-	const [needsSort1, setNeedsSort1] = useState<Picks.ColumnKeys | null>('ggRaw');
-	const [needsSort2, setNeedsSort2] = useState<Picks.ColumnKeys | null>('ggRaw');
-	const [needsSort3, setNeedsSort3] = useState<Picks.ColumnKeys | null>('ggRaw');
-	const [needsSortPlayer, setNeedsSortPlayer] = useState<Picks.ColumnKeys | null>('betAvg');
+	const [needsSort1, setNeedsSort1] = useState<Picks.ColumnKeys>('ggRaw');
+	const [needsSort2, setNeedsSort2] = useState<Picks.ColumnKeys>('ggRaw');
+	const [needsSort3, setNeedsSort3] = useState<Picks.ColumnKeys>('ggRaw');
+	const [needsSortPlayer, setNeedsSortPlayer] = useState<Picks.ColumnKeys>('betAvg');
 
 	const requestSort1: Picks.RequestSort = (key) => setNeedsSort1(key);
 	const requestSort2: Picks.RequestSort = (key) => setNeedsSort2(key);
