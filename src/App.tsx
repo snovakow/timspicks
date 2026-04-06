@@ -102,6 +102,7 @@ interface InitializedData {
 
 function App() {
 	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 	const [data, setData] = useState<InitializedData | null>(null);
 	
 	const [showPercentage, setShowPercentage] = useState(true);
@@ -137,8 +138,10 @@ function App() {
 				);
 				
 				setData({ gamesList, playerList, table1Rows, table2Rows, table3Rows });
+				setError(null);
 			} catch (error) {
 				console.error('Failed to load initial data:', error);
+				setError('Failed to load game data. Please refresh the page.');
 				setData({ gamesList: [], playerList: [], table1Rows: [], table2Rows: [], table3Rows: [] });
 			} finally {
 				setIsLoading(false);
@@ -349,6 +352,15 @@ function App() {
 		darkModeMql.addEventListener('change', handleChange);
 		return () => darkModeMql.removeEventListener('change', handleChange);
 	}, []);
+
+	if (error) {
+		return (
+			<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '1rem' }}>
+				<p style={{ color: '#d32f2f', fontSize: '1.1rem' }}>{error}</p>
+				<button onClick={() => window.location.reload()}>Refresh Page</button>
+			</div>
+		);
+	}
 
 	if (isLoading || !memoizedDisplayData) {
 		return (
