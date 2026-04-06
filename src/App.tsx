@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import './App.css';
 import './Stats.css';
 import * as Picks from './components/Table';
@@ -6,6 +6,8 @@ import Popup from './components/Popup';
 import InfoPopupContent from './InfoPopupContent';
 import SettingsPanel from './components/Settings';
 import { poissonChance, roundToPercent, probabilityToAmerican } from './utility';
+import { loadInitialData, buildGamesList, buildPlayerList, buildNormalizedNameMap, mapPlayers, compilePlayerList, oddsNameMap } from './dataProcessor';
+import { precalculateLogStats, cloneLogStats, type LogStatsKey, type LogStat, type LogStatsCacheItem } from './statsCalculations';
 import logo1 from './images/sb-logo-16-draftkings.svg';
 import logo2 from './images/sb-logo-16-fanduel.svg';
 import logo3 from './images/sb-logo-16-mgm.svg';
@@ -32,95 +34,9 @@ const sportsbooks: Sportsbook[] = [
 	{ key: "bet4", title: "BetRivers", logo: logo4 },
 ];
 
-const fetchData = async (src: string) => {
-	const response = await fetch(src + "?t=" + new Date().getTime());
-	if (!response.ok) throw new Error(`Failed to load ${src}: ${response.status} ${response.statusText}`);
-	return response;
+const removeAccentsNormalize = (name: string): string => {
+	return name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase();
 }
-const loadData = async (src: string) => {
-	try {
-		const response = await fetchData(src);
-		const json = await response.json();
-		return json;
-	} catch (error) {
-		console.log(error);
-		return [];
-	}
-}
-const playerData = await loadData('./data/helper.json');
-const gamesListing = await loadData('./data/games.json');
-const playerOddsDraftKings = await loadData('./data/bet1.json');
-const playerOddsFanDuel = await loadData('./data/bet2.json');
-const playerOddsBetMGM = await loadData('./data/bet3.json');
-const playerOddsBetRivers = await loadData('./data/bet4.json');
-
-const oddsNameMap = new Map<string, string>();
-oddsNameMap.set("Aatu Räty", "Aatu Raty");
-oddsNameMap.set("Alex DeBrincat", "Alex Debrincat"); // BetMGM
-oddsNameMap.set("Alexander Wennberg", "Alex Wennberg"); // FanDuel
-oddsNameMap.set("Alexis Lafrenière", "Alexis Lafreniere"); // DraftKings FanDuel
-oddsNameMap.set("Aliaksei Protas", "Alexei Protas"); // BetRivers (lang)
-oddsNameMap.set("Arseny Gritsyuk", "Arseni Gritsyuk"); // BetRivers
-oddsNameMap.set("Artem Zub", "Artyom Zub"); // BetRivers
-oddsNameMap.set("Axel Sandin-Pellikka", "Axel Sandin Pellikka"); // DraftKings
-oddsNameMap.set("Ben Kindel", "Benjamin Kindel"); // BetRivers
-oddsNameMap.set("Bo Groulx", "Benoit-Olivier Groulx"); // BetMGM
-oddsNameMap.set("Carl Grundstrom", "Carl Grundström"); // BetRivers (lang)
-oddsNameMap.set("Charle-Edouard D'Astous", "Charles-Edouard D'Astous"); // BetRivers
-oddsNameMap.set("Dmitry Orlov", "Dimitri Orlov"); // BetRivers
-oddsNameMap.set("Egor Chinakhov", "Yegor Chinakhov"); // DraftKings BetRivers
-oddsNameMap.set("Ethan Del Mastro", "Ethan del Mastro"); // FanDuel
-oddsNameMap.set("Gabe Perreault", "Gabriel Perreault"); // BetMGM
-oddsNameMap.set("J.J. Moser", "Janis Jérôme Moser"); // BetRivers
-oddsNameMap.set("J.T. Compher", "JT Compher"); // BetRivers
-oddsNameMap.set("Jake Middleton", "Jacob Middleton"); // BetRivers (lang)
-oddsNameMap.set("James van Riemsdyk", "James Van Riemsdyk"); // BetMGM
-oddsNameMap.set("JJ Peterka", "John-Jason Peterka"); // BetRivers
-oddsNameMap.set("Josh Morrissey", "Joshua Morrissey"); // BetRivers
-oddsNameMap.set("Lenni Hameenaho", "Lenni Hämeenaho"); // BetRivers
-oddsNameMap.set("Liam Ohgren", "Liam Öhgren"); // BetRivers (lang)
-oddsNameMap.set("Martin Fehérváry", "Martin Fehervary");
-oddsNameMap.set("Martin Pospisil", "Martin Pospíšil"); // BetRivers (lang)
-oddsNameMap.set("Matt Boldy", "Matthew Boldy"); // BetRivers
-oddsNameMap.set("Matt Coronato", "Matthew Coronato"); // BetRivers
-oddsNameMap.set("Matt Savoie", "Matthew Savoie"); // BetRivers
-oddsNameMap.set("Mike Matheson", "Michael Matheson"); // BetRivers
-oddsNameMap.set("Mitch Marner", "Mitchell Marner"); // FanDuel BetRivers (lang)
-oddsNameMap.set("Nick Paul", "Nicholas Paul"); // FanDuel
-oddsNameMap.set("Oliver Bjorkstrand", "Oliver Björkstrand"); // BetRivers
-oddsNameMap.set("Olli Määttä", "Olli Maatta"); // DraftKings FanDuel (lang)
-oddsNameMap.set("Ondrej Palat", "Ondrej Palát"); // BetRivers (lang mix and match)
-oddsNameMap.set("Oskar Bäck", "Oskar Back"); // DraftKings FanDuel
-oddsNameMap.set("Sebastian Aho", "Sebastian Aho (CAR)"); // FanDuel, BetRivers
-oddsNameMap.set("Shea Theodore", "Shea Théodore"); // BetRivers
-oddsNameMap.set("Simon Holmstrom", "Simon Holmström"); // BetRivers (lang)
-oddsNameMap.set("Teuvo Teravainen", "Teuvo Teräväinen"); // BetRivers (lang)
-oddsNameMap.set("Tim Stützle", "Tim Stuetzle"); // DraftKings
-oddsNameMap.set("Tommy Novak", "Thomas Novak"); // BetRivers (lang)
-oddsNameMap.set("Trevor van Riemsdyk", "Trevor Van Riemsdyk"); // BetRivers
-oddsNameMap.set("Vasily Podkolzin", "Vasili Podkolzin"); // BetRivers (lang)
-oddsNameMap.set("Zachary Bolduc", "Zack Bolduc"); // DraftKings
-
-const gamesList: Picks.GameData[] = [];
-const playerList: Picks.Player[] = [];
-
-for (const data of gamesListing) {
-	const game = new Picks.GameData(data);
-	for (const item of data.homeTeam.players) {
-		const player = new Picks.Player(item, game.home, game.time);
-		playerList.push(player);
-	}
-	for (const item of data.awayTeam.players) {
-		const player = new Picks.Player(item, game.away, game.time);
-		playerList.push(player);
-	}
-	gamesList.push(game);
-}
-gamesList.sort((a: Picks.GameData, b: Picks.GameData): number => {
-	const time = a.time.getTime() - b.time.getTime();
-	if (time !== 0) return time;
-	return a.away.name.localeCompare(b.away.name);
-});
 
 const betDisplayRounded = (chance: number | null): string => {
 	if (chance === null) return "-";
@@ -179,798 +95,23 @@ const makeSort = (sortConfig: Picks.SortConfig) => {
 	};
 }
 
-const removeAccentsNormalize = (name: string): string => {
-	return name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase();
-}
-
-const mapPlayers = () => {
-	const playerMap = new Map<number, Picks.Player>();
-	for (const player of playerList) {
-		playerMap.set(player.playerId, player);
-	}
-
-	const makeRows = (data: Picks.OddsItem[], pick: 1 | 2 | 3): Picks.PickOdds[] => {
-		const row: Picks.PickOdds[] = [];
-		for (const item of data) {
-			const playerId = item.playerId < 0 ? -item.playerId : item.playerId;
-			let player = playerMap.get(playerId);
-			if (!player) {
-				console.warn(`Player not found for odds data:`, item);
-				const fullName = item.firstName + " " + item.lastName;
-				const fullNameNormalized = removeAccentsNormalize(fullName);
-				for (const playerItem of playerList) {
-					const playerItemNormalized = removeAccentsNormalize(playerItem.fullName);
-					if (playerItemNormalized === fullNameNormalized) {
-						console.log(`Found player with matching ID:`, playerItem);
-						item.playerId = playerItem.playerId;
-						player = playerItem;
-						break;
-					}
-				}
-			}
-			if (player) {
-				player.pick = pick;
-				row.push(new Picks.PickOdds(player, item));
-			}
-		}
-		return row;
-	}
-
-	const table1Rows = makeRows(playerData["1"], 1);
-	const table2Rows = makeRows(playerData["2"], 2);
-	const table3Rows = makeRows(playerData["3"], 3);
-	return { table1Rows, table2Rows, table3Rows };
-}
-const { table1Rows, table2Rows, table3Rows } = mapPlayers();
-
-const compilePlayerList = () => {
-	type betKey = "betRaw1" | "betRaw2" | "betRaw3" | "betRaw4";
-	const nameFind = (player: Picks.Player, oddsMap: Map<string, number>, betKey: betKey) => {
-		const process = (name: string | undefined): boolean => {
-			if (name === undefined) return false;
-			const decimal = oddsMap.get(removeAccentsNormalize(name));
-			if (decimal === undefined) return false;
-
-			const chance = 1 / decimal;
-			player[betKey] = chance;
-			return true;
-		};
-
-		if (player.fullName === "Elias Pettersson") {
-			if (player.playerId === 8480012) {
-				if (betKey === 'betRaw1' && process("Elias Pettersson")) return; // DraftKings
-				if (betKey === 'betRaw2' && process("Elias Pettersson #40")) return; // FanDuel
-				if (betKey === 'betRaw4' && process("Elias Pettersson (1998)")) return; // BetRivers
-			}
-			if (player.playerId === 8483678) {
-				if (betKey === 'betRaw1' && process("Elias-Nils Pettersson")) return; // DraftKings
-				if (betKey === 'betRaw2' && process("Elias Pettersson #25")) return; // FanDuel
-				if (betKey === 'betRaw4' && process("Elias Pettersson (2004)")) return; // BetRivers
-			}
-			return;
-		}
-
-		const baseName = player.fullName;
-		if (process(baseName)) return;
-
-		const mapped = oddsNameMap.get(player.fullName);
-		if (mapped && process(mapped)) return;
-
-		const firstLang: Set<string> = new Set();
-		for (const lang of Object.keys(player.firstName)) {
-			if (lang === "default") continue;
-
-			const first = player.firstName[lang];
-			const last = player.lastName[lang] ?? player.lastName.default;
-			const name = `${first} ${last}`;
-
-			if (process(name)) return;
-
-			firstLang.add(lang);
-		}
-		for (const lang of Object.keys(player.lastName)) {
-			if (lang === "default") continue;
-			if (firstLang.has(lang)) continue;
-
-			const first = player.firstName.default;
-			const last = player.lastName[lang];
-			const name = `${first} ${last}`;
-			if (process(name)) return;
-		}
-	};
-
-	const bet1 = new Map<string, number>();
-	const bet2 = new Map<string, number>();
-	const bet3 = new Map<string, number>();
-	const bet4 = new Map<string, number>();
-	const mapNames = (
-		item: { name: string; odds: number },
-		betMap: Map<string, number>
-	): void => {
-		betMap.set(removeAccentsNormalize(item.name), item.odds);
-	}
-	for (const item of playerOddsDraftKings) mapNames(item, bet1);
-	for (const item of playerOddsFanDuel) mapNames(item, bet2);
-	for (const item of playerOddsBetMGM) mapNames(item, bet3);
-	for (const item of playerOddsBetRivers) mapNames(item, bet4);
-	for (const player of playerList) {
-		nameFind(player, bet1, 'betRaw1');
-		nameFind(player, bet2, 'betRaw2');
-		nameFind(player, bet3, 'betRaw3');
-		nameFind(player, bet4, 'betRaw4');
-		player.bet1 = player.betRaw1;
-		player.bet2 = player.betRaw2;
-		player.bet3 = player.betRaw3;
-		player.bet4 = player.betRaw4;
-	}
-
-	// De-vig: correct each sportsbook's bias AND compression toward the
-	// peer average (leave-one-out mean).
-	//
-	// Model: book_prob = c × peer_prob^α  (power-law in probability space)
-	//   - c captures uniform multiplicative bias (vig level)
-	//   - α captures compression (α<1: highs too low, lows too high)
-	//     or expansion (α>1: highs too high, lows too low)
-	//
-	// Estimated via linear regression in log-log space:
-	//   log(book) = log(c) + α·log(peer)
-	//
-	// Correction: fair = (book / c) ^ (1/α)
-	{
-		const minProb = 0.0001;
-		const maxProb = 0.9999;
-		const minBookPlayers = 10;
-		const betKeys = ["bet1", "bet2", "bet3", "bet4"] as const;
-
-		// Compute all corrections first (from unmodified values)
-		const corrections: Partial<Record<typeof betKeys[number], { c: number; alpha: number }>> = {};
-		for (const key of betKeys) {
-			// Collect log-log pairs: y = log(book), x = log(peerMean)
-			const xs: number[] = [];
-			const ys: number[] = [];
-			for (const player of playerList) {
-				const bookProb = player[key];
-				if (bookProb === null) continue;
-				let peerSum = 0, peerCount = 0;
-				for (const other of betKeys) {
-					if (other === key) continue;
-					if (player[other] !== null) { peerSum += player[other]!; peerCount++; }
-				}
-				if (peerCount === 0) continue;
-				xs.push(Math.log(peerSum / peerCount));
-				ys.push(Math.log(bookProb));
-			}
-			if (xs.length < minBookPlayers) continue;
-
-			// OLS: y = a + b*x
-			const n = xs.length;
-			let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0;
-			for (let i = 0; i < n; i++) {
-				sumX += xs[i];
-				sumY += ys[i];
-				sumXX += xs[i] * xs[i];
-				sumXY += xs[i] * ys[i];
-			}
-			const denom = n * sumXX - sumX * sumX;
-			if (Math.abs(denom) < 1e-12) continue;
-			const alpha = (n * sumXY - sumX * sumY) / denom;
-			const logC = (sumY - alpha * sumX) / n;
-			const c = Math.exp(logC);
-
-			// Guard: alpha must be positive and reasonable
-			if (alpha <= 0.5 || alpha > 2) continue;
-
-			corrections[key] = { c, alpha };
-			console.log(`De-vig [${key}]: c=${c.toFixed(4)}, α=${alpha.toFixed(4)} (${n} players)`);
-		}
-
-		// Apply all at once: fair = (book / c) ^ (1/α)
-		for (const key of betKeys) {
-			const corr = corrections[key];
-			if (corr === undefined) continue;
-			const invAlpha = 1 / corr.alpha;
-			for (const player of playerList) {
-				if (player[key] === null) continue;
-				const fair = Math.pow(player[key]! / corr.c, invAlpha);
-				player[key] = Math.min(maxProb, Math.max(minProb, fair));
-			}
-		}
-	}
-}
-compilePlayerList();
-
 type LogStatAlign = 'left' | 'center';
-interface LogStat {
-	isTitle: boolean;
-	align: LogStatAlign;
-	lines: string[];
-	break: boolean;
-}
-const dataStats: LogStat[] = [];
-
-let logSection = 0;
-let dataStatsPrev: LogStat | null = null;
-const resetLogStats = () => {
-	dataStats.length = 0;
-	logSection = 0;
-	dataStatsPrev = null;
-}
-const addLog = (line: string, align: LogStatAlign = "left", isTitle: boolean = false) => {
-	// console.log(line);
-	if (dataStatsPrev) {
-		const current = dataStats[logSection];
-		if (current) {
-			if (current.align === align && current.isTitle === isTitle) {
-				current.lines.push(line);
-			} else {
-				dataStatsPrev = { align, lines: [line], break: false, isTitle };
-				logSection++;
-				dataStats[logSection] = dataStatsPrev;
-			}
-		} else {
-			dataStatsPrev.break = true;
-			dataStatsPrev = { align, lines: [line], break: false, isTitle };
-			dataStats[logSection] = dataStatsPrev;
-		}
-	} else {
-		dataStatsPrev = { align, lines: [line], break: false, isTitle };
-		dataStats[logSection] = dataStatsPrev;
-	}
-}
-type LogStatsKey = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg';
 type PickIndex = 1 | 2 | 3;
 type StatsHighlightMode = 'opp' | 'any';
 type HighlightByPick = Record<PickIndex, Map<number, StatsHighlightMode>>;
-interface LogStatsCacheItem {
-	stats: LogStat[];
-	highlightByPick: HighlightByPick;
-}
 
-const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick => {
-	const highlightByPick: HighlightByPick = {
-		1: new Map<number, StatsHighlightMode>(),
-		2: new Map<number, StatsHighlightMode>(),
-		3: new Map<number, StatsHighlightMode>(),
-	};
-	const addPlayersToHighlight = (pick: PickIndex, players: Set<Picks.Player>, mode: StatsHighlightMode) => {
-		for (const player of players) {
-			highlightByPick[pick].set(player.playerId, mode);
-		}
-	};
-
-	const printName = (player: Picks.Player) => `${player.fullName} (${player.team.code})`;
-	const names = (players: Set<Picks.Player>, shortTab: boolean = false) => {
-		const names: string[] = [];
-		for (const player of players) names.push(printName(player));
-		return names.join(shortTab ? "\n   " : "\n           ");
-	}
-
-	const calcAny = (max1: number, max2: number, max3: number): number => {
-		return 1 - (1 - max1) * (1 - max2) * (1 - max3);
-	}
-	const calcAvg = (max1: number, max2: number, max3: number): number => {
-		return (max1 + max2 + max3) / 3;
-	}
-	const calcAll = (max1: number, max2: number, max3: number): number => {
-		return max1 * max2 * max3;
-	}
-
-	const gamesMap = new Map<Team, Team>();
-	for (const game of gamesList) {
-		gamesMap.set(game.home.code, game.away.code);
-		gamesMap.set(game.away.code, game.home.code);
-	}
-
-	type Collide = "on" | "opp" | "team" | "none";
-	class Choice {
-		avg: number;
-		player: Picks.Player;
-		on: Team;
-		opp: Team;
-		constructor(player: Picks.Player, avg: number, opp: Team) {
-			this.avg = avg;
-			this.player = player;
-			this.on = player.team.code;
-			this.opp = opp;
-		}
-		collides(player: Picks.Player, mode: Collide): boolean {
-			switch (mode) {
-				case "on":
-					return this.on === player.team.code;
-				case "opp":
-					return this.opp === player.team.code;
-				case "team":
-					return this.on === player.team.code || this.opp === player.team.code;
-				case "none":
-					return false;
-			}
-		}
-	}
-
-	const makeChoices = (list: Picks.PickOdds[]): Choice[] => {
-		const choices: Choice[] = [];
-		for (const row of list) {
-			const avg = row.player[betKey];
-			if (avg === null) continue;
-			if (betKey === 'betAvg' && row.player.betCount < minSportsbooks) continue;
-			const opp = gamesMap.get(row.player.team.code);
-			if (opp === undefined) continue;
-			choices.push(new Choice(row.player, avg, opp));
-		}
-
-		return choices;
-	};
-	const choices1: Choice[] = makeChoices(table1Rows);
-	const choices2: Choice[] = makeChoices(table2Rows);
-	const choices3: Choice[] = makeChoices(table3Rows);
-
-	interface BestCombo {
-		pick1: Choice;
-		pick2: Choice;
-		pick3: Choice;
-	}
-
-	class Result {
-		players1: Set<Picks.Player>;
-		players2: Set<Picks.Player>;
-		players3: Set<Picks.Player>;
-		avg1: number;
-		avg2: number;
-		avg3: number;
-		constructor(combo: BestCombo) {
-			this.players1 = new Set([combo.pick1.player]);
-			this.players2 = new Set([combo.pick2.player]);
-			this.players3 = new Set([combo.pick3.player]);
-			this.avg1 = combo.pick1.avg;
-			this.avg2 = combo.pick2.avg;
-			this.avg3 = combo.pick3.avg;
-		}
-		merge(combo: BestCombo): boolean {
-			if (this.avg1 !== combo.pick1.avg || this.avg2 !== combo.pick2.avg || this.avg3 !== combo.pick3.avg) return false;
-
-			this.players1.add(combo.pick1.player);
-			this.players2.add(combo.pick2.player);
-			this.players3.add(combo.pick3.player);
-			return true;
-		}
-	}
-	class ComboGroup {
-		combos: BestCombo[] = [];
-		total: number = 0;
-		type: Collide;
-		constructor(type: Collide) {
-			this.type = type;
-		}
-		add(pick1: Choice, pick2: Choice, pick3: Choice) {
-			const total = pick1.avg + pick2.avg + pick3.avg;
-			if (total > this.total) {
-				this.combos.splice(0, this.combos.length, { pick1, pick2, pick3 });
-				this.total = total;
-			} else if (total === this.total) {
-				this.combos.push({ pick1, pick2, pick3 });
-			}
-		}
-		merge(): Result[] {
-			const avgResults: Result[] = [];
-			if (this.combos.length === 0) return avgResults;
-			let prev: Result | null = null;
-			for (const combo of this.combos) {
-				if (prev && prev.merge(combo)) continue;
-				prev = new Result(combo);
-				avgResults.push(prev);
-			}
-			return avgResults;
-		}
-	}
-
-	const calcCombo = (type: Collide): ComboGroup => {
-		const group = new ComboGroup(type);
-		for (const pick1 of choices1) {
-			for (const pick2 of choices2) {
-				if (pick2.collides(pick1.player, type)) continue;
-				for (const pick3 of choices3) {
-					if (pick3.collides(pick1.player, type) || pick3.collides(pick2.player, type)) continue;
-					group.add(pick1, pick2, pick3);
-				}
-			}
-		}
-		return group;
-	}
-	const calcComboWithOpposing = (oppTeam: Team): ComboGroup => {
-		const group = new ComboGroup('none');
-		for (const pick1 of choices1) {
-			for (const pick2 of choices2) {
-				for (const pick3 of choices3) {
-					if (
-						pick1.player.team.code !== oppTeam
-						&& pick2.player.team.code !== oppTeam
-						&& pick3.player.team.code !== oppTeam
-					) continue;
-					group.add(pick1, pick2, pick3);
-				}
-			}
-		}
-		return group;
-	}
-
-	const comboPrecision = 2;
-	const logCalcStats = (avgResult: Result) => {
-		const any = roundToPercent(calcAny(avgResult.avg1, avgResult.avg2, avgResult.avg3), precision);
-		const avg = roundToPercent(calcAvg(avgResult.avg1, avgResult.avg2, avgResult.avg3), precision);
-		const all = roundToPercent(calcAll(avgResult.avg1, avgResult.avg2, avgResult.avg3), precision);
-		addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, 'center');
-
-		logSection++;
-	}
-	const logHighlights = (avgResult: Result, mode: StatsHighlightMode) => {
-		addPlayersToHighlight(1, avgResult.players1, mode);
-		addPlayersToHighlight(2, avgResult.players2, mode);
-		addPlayersToHighlight(3, avgResult.players3, mode);
-	}
-	const logTopPicks = (avgResult: Result) => {
-		addLog(`1: ${roundToPercent(avgResult.avg1, precision)} - ${names(avgResult.players1)}`);
-		addLog(`2: ${roundToPercent(avgResult.avg2, precision)} - ${names(avgResult.players2)}`);
-		addLog(`3: ${roundToPercent(avgResult.avg3, precision)} - ${names(avgResult.players3)}`);
-	}
-	const logReduced = (avgResult: Result) => {
-		let line1 = `1: ${names(avgResult.players1, true)}`;
-		let reducedCount = 0;
-		if (avgResult.avg1 !== topResult.avg1) {
-			reducedCount++;
-			line1 += " " + roundToPercent(avgResult.avg1 - topResult.avg1, comboPrecision);
-		}
-		let line2 = `2: ${names(avgResult.players2, true)}`;
-		if (avgResult.avg2 !== topResult.avg2) {
-			reducedCount++;
-			line2 += " " + roundToPercent(avgResult.avg2 - topResult.avg2, comboPrecision);
-		}
-		let line3 = `3: ${names(avgResult.players3, true)}`;
-		if (avgResult.avg3 !== topResult.avg3) {
-			reducedCount++;
-			line3 += " " + roundToPercent(avgResult.avg3 - topResult.avg3, comboPrecision);
-		}
-
-		addLog(line1);
-		addLog(line2);
-		addLog(line3);
-
-		if (reducedCount > 1) {
-			const total = avgResult.avg1 + avgResult.avg2 + avgResult.avg3;
-			addLog(`Total: ${roundToPercent(total - totalMax, comboPrecision)}`, 'center');
-		}
-	}
-	const logFooter = () => {
-		addLogTitle("Good Ranges");
-		addLog("Any: 67.1-70-74% - Avg: 30.8-33-36% - All: 2.9-3-4%", 'center');
-
-		return highlightByPick;
-	}
-
-	/*
-		Calculate total top picks (none). This reveals the max total.
-	
-		Top Picks (team) have max total
-		1 - Independent Games
-
-		Top Picks (opp) have max total
-		1 - Any Game
-		2 - Independent Games
-
-		Top Picks
-		1 - None
-		2 - Any Game if greater than Independent Games	
-		4 - Independent Games
-	*/
-
-	const comboNone = calcCombo('none');
-	if (comboNone.combos.length === 0) return highlightByPick;
-
-	const comboTeam = calcCombo('team');
-	const teamResult: Result[] = comboTeam.merge();
-	const totalMax = comboNone.total;
-	if (comboTeam.total === totalMax) {
-		addLogTitle("Top Picks");
-		for (const avgResult of teamResult) {
-			logTopPicks(avgResult);
-			logCalcStats(avgResult);
-			logHighlights(avgResult, 'any');
-		}
-		return logFooter();
-	}
-
-	const noneResult: Result[] = comboNone.merge();
-	const topResult: Result = noneResult[0];
-
-	const comboAny = calcCombo('on');
-	const anyResult = comboAny.merge();
-	if (comboAny.total === totalMax) {
-		addLogTitle("Top Picks (Any Game)");
-		for (const avgResult of anyResult) {
-			logTopPicks(avgResult);
-			logCalcStats(avgResult);
-			logHighlights(avgResult, 'opp');
-		}
-
-		if (comboTeam.total > 0) {
-			addLogTitle("Independent Games");
-			for (const avgResult of teamResult) {
-				logReduced(avgResult);
-				logCalcStats(avgResult);
-				logHighlights(avgResult, 'any');
-			}
-		}
-		return logFooter();
-	}
-
-	addLogTitle("Top Picks");
-	for (const avgResult of noneResult) {
-		logTopPicks(avgResult);
-		logCalcStats(avgResult);
-	}
-
-	if (comboAny.total > comboTeam.total) {
-		addLogTitle("Any Game");
-		for (const avgResult of anyResult) {
-			logReduced(avgResult);
-			logCalcStats(avgResult);
-			logHighlights(avgResult, 'opp');
-		}
-	}
-
-	if (comboTeam.total > 0) {
-		addLogTitle("Independent Games");
-		for (const avgResult of teamResult) {
-			logReduced(avgResult);
-			logCalcStats(avgResult);
-			logHighlights(avgResult, 'any');
-		}
-	}
-
-	if (gamesList.length === 1) {
-		const topTeams = new Set<Team>();
-		for (const avgResult of noneResult) {
-			for (const player of avgResult.players1) topTeams.add(player.team.code);
-			for (const player of avgResult.players2) topTeams.add(player.team.code);
-			for (const player of avgResult.players3) topTeams.add(player.team.code);
-		}
-		if (topTeams.size === 1) {
-			const [topTeam] = topTeams;
-			const oppTeam = gamesMap.get(topTeam);
-			if (oppTeam !== undefined) {
-				const oppCombo = calcComboWithOpposing(oppTeam);
-				if (oppCombo.total > 0) {
-					addLogTitle("Any Game");
-					for (const avgResult of oppCombo.merge()) {
-						logReduced(avgResult);
-						logCalcStats(avgResult);
-						logHighlights(avgResult, 'opp');
-					}
-				}
-			}
-		}
-	}
-	return logFooter();
-}
-const addLogTitle = (title: string) => {
-	addLog(title, 'center', true);
-}
-
-const cloneLogStats = (stats: LogStat[]): LogStat[] => {
-	return stats.map((stat) => ({
-		...stat,
-		lines: [...stat.lines],
-	}));
-};
-
-const precalculateLogStats = (minSportsbooks: number): Record<LogStatsKey, LogStatsCacheItem> => {
-	const keys: LogStatsKey[] = ['bet1', 'bet2', 'bet3', 'bet4', 'betAvg'];
-	const cache = {} as Record<LogStatsKey, LogStatsCacheItem>;
-	for (const key of keys) {
-		resetLogStats();
-		const highlightByPick = logStats(key, minSportsbooks);
-		cache[key] = {
-			stats: cloneLogStats(dataStats),
-			highlightByPick,
-		};
-	}
-	resetLogStats();
-	return cache;
-};
-
-const oddsColumns: Picks.ColumnData[] = sportsbooks.map((book) => ({
-	key: book.key,
-	title: book.title,
-	sort: true,
-	logo: book.logo,
-}));
-
-const columns: Picks.ColumnData[] = [
-	{ key: "fullName", title: "Player", sort: true },
-	{ key: "ggRaw", title: "G/GP", sort: true },
-	...oddsColumns,
-	{ key: "betAvg", title: "Avg", sort: true },
-];
-
-const columnsPlayer: Picks.ColumnData[] = [
-	{ key: "fullName", title: "Player", sort: true },
-	...oddsColumns,
-	{ key: "betAvg", title: "Avg", sort: true },
-	{ key: "pick", title: "Pick", sort: false },
-	{ key: "gameTime", title: "Start", sort: true },
-];
-
-type processKeys = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg';
-const processMax = (row: Picks.PickOdds, max: Picks.PickOdds[], key: processKeys) => {
-	const rowVal = row.player[key];
-	if (rowVal === null) return;
-
-	if (max.length === 0) {
-		max.push(row);
-		return;
-	}
-
-	const topBet = max[0].player[key]!;
-	if (rowVal === topBet) {
-		max.push(row);
-	} else {
-		if (rowVal > topBet) max.splice(0, max.length, row);
-	}
-}
-const processMaxArray = (array: Picks.PickOdds[], minSportsbooks: number) => {
-	const max1: Picks.PickOdds[] = [];
-	const max2: Picks.PickOdds[] = [];
-	const max3: Picks.PickOdds[] = [];
-	const max4: Picks.PickOdds[] = [];
-	const maxAvg: Picks.PickOdds[] = [];
-	for (const row of array) {
-		row.highlight1 = 'none';
-		row.highlight2 = 'none';
-		row.highlight3 = 'none';
-		row.highlight4 = 'none';
-		row.highlightAvg = 'none';
-		processMax(row, max1, 'bet1');
-		processMax(row, max2, 'bet2');
-		processMax(row, max3, 'bet3');
-		processMax(row, max4, 'bet4');
-		if (row.player.betCount >= minSportsbooks) processMax(row, maxAvg, 'betAvg');
-	}
-	for (const row of max1) row.highlight1 = 'top';
-	for (const row of max2) row.highlight2 = 'top';
-	for (const row of max3) row.highlight3 = 'top';
-	for (const row of max4) row.highlight4 = 'top';
-	for (const row of maxAvg) row.highlightAvg = 'top';
-}
-
-const applyAllStatsHighlights = (statsCache: Record<LogStatsKey, LogStatsCacheItem>, minSportsbooks: number) => {
-	const applyToRows = (
-		rows: Picks.PickOdds[],
-		pick: PickIndex,
-		highlightByPick: HighlightByPick,
-		key: LogStatsKey,
-	) => {
-		const playerModes = highlightByPick[pick];
-		for (const row of rows) {
-			const mode = playerModes.get(row.player.playerId);
-			if (mode === undefined) continue;
-			if (key === 'bet1') row.highlight1 = mode;
-			else if (key === 'bet2') row.highlight2 = mode;
-			else if (key === 'bet3') row.highlight3 = mode;
-			else if (key === 'bet4') row.highlight4 = mode;
-			else if (row.player.betCount >= minSportsbooks) row.highlightAvg = mode;
-		}
-	};
-
-	const keys: LogStatsKey[] = ['bet1', 'bet2', 'bet3', 'bet4', 'betAvg'];
-	for (const key of keys) {
-		const highlightByPick = statsCache[key].highlightByPick;
-		applyToRows(table1Rows, 1, highlightByPick, key);
-		applyToRows(table2Rows, 2, highlightByPick, key);
-		applyToRows(table3Rows, 3, highlightByPick, key);
-	}
-};
-
-type DisplayState = {
-	showPercentage: boolean;
-	deVigEnabled: boolean;
-	minSportsbooks: number;
-	needsSort1: Picks.ColumnKeys;
-	needsSort2: Picks.ColumnKeys;
-	needsSort3: Picks.ColumnKeys;
-	needsSortPlayer: Picks.ColumnKeys;
-};
-
-const sortConfig1: Picks.SortConfig = { keyOrder: [] };
-const sortConfig2: Picks.SortConfig = { keyOrder: [] };
-const sortConfig3: Picks.SortConfig = { keyOrder: [] };
-const sortConfigPlayer: Picks.SortConfig = { keyOrder: [] };
-const buildSort = (rows: Picks.PickOdds[] | Picks.Player[], primaryKey: Picks.ColumnKeys, sortConfig: Picks.SortConfig) => {
-	sortConfig.keyOrder.push(primaryKey);
-	const applyConfig = makeSort(sortConfig);
-	const sorter = sortFunction(sortConfig);
-	return (key: Picks.ColumnKeys) => {
-		applyConfig(key);
-		rows.sort(sorter);
-	}
-}
-const applpySort1 = buildSort(table1Rows, 'ggRaw', sortConfig1);
-const applpySort2 = buildSort(table2Rows, 'ggRaw', sortConfig2);
-const applpySort3 = buildSort(table3Rows, 'ggRaw', sortConfig3);
-const applpySortPlayer = buildSort(playerList, 'betAvg', sortConfigPlayer);
-
-type DisplayStateResult = {
-	statsCache: Record<LogStatsKey, LogStatsCacheItem>;
+interface InitializedData {
+	gamesList: Picks.GameData[];
+	playerList: Picks.Player[];
 	table1Rows: Picks.PickOdds[];
 	table2Rows: Picks.PickOdds[];
 	table3Rows: Picks.PickOdds[];
-	playerList: Picks.Player[];
-};
-
-const updateDisplayState = (state: DisplayState): DisplayStateResult => {
-	type keyType = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betRaw1' | 'betRaw2' | 'betRaw3' | 'betRaw4';
-	const [key1, key2, key3, key4]: keyType[] = state.deVigEnabled
-		? ['bet1', 'bet2', 'bet3', 'bet4']
-		: ['betRaw1', 'betRaw2', 'betRaw3', 'betRaw4'];
-
-	const allRows = [table1Rows, table2Rows, table3Rows];
-	for (const rows of allRows) {
-		for (const row of rows) {
-			row.ggDisplay = state.showPercentage
-				? poissonChance(row.ggRaw, precision)
-				: row.ggRaw.toFixed(2);
-		}
-	}
-
-	for (const player of playerList) {
-		const values = [player[key1], player[key2], player[key3], player[key4]];
-		const rawValues = [player.betRaw1, player.betRaw2, player.betRaw3, player.betRaw4];
-		const displays = ['betDisplay1', 'betDisplay2', 'betDisplay3', 'betDisplay4'] as const;
-
-		for (let i = 0; i < values.length; i++) {
-			const value = values[i];
-			if (value === null) continue;
-			player[displays[i]] = state.showPercentage
-				? roundToPercent(value, precision)
-				: probabilityToAmerican(rawValues[i]);
-		}
-
-		let count = 0;
-		let avg = 0;
-		for (const value of values) {
-			if (value === null) continue;
-			avg += value;
-			count++;
-		}
-
-		player.betCount = count;
-		if (count > 0) {
-			player.betAvg = avg / count;
-			player.betDisplayAvg = betDisplayRounded(player.betAvg);
-		} else {
-			player.betAvg = null;
-			player.betDisplayAvg = '-';
-		}
-	}
-
-	applpySort1(state.needsSort1);
-	applpySort2(state.needsSort2);
-	applpySort3(state.needsSort3);
-	applpySortPlayer(state.needsSortPlayer);
-
-	processMaxArray(table1Rows, state.minSportsbooks);
-	processMaxArray(table2Rows, state.minSportsbooks);
-	processMaxArray(table3Rows, state.minSportsbooks);
-
-	const statsCache = precalculateLogStats(state.minSportsbooks);
-	applyAllStatsHighlights(statsCache, state.minSportsbooks);
-	return {
-		statsCache,
-		table1Rows: [...table1Rows],
-		table2Rows: [...table2Rows],
-		table3Rows: [...table3Rows],
-		playerList: [...playerList]
-	};
 }
+
 function App() {
+	const [isLoading, setIsLoading] = useState(true);
+	const [data, setData] = useState<InitializedData | null>(null);
+	
 	const [showPercentage, setShowPercentage] = useState(true);
 	const [deVigEnabled, setDeVigEnabled] = useState(true);
 	const [minSportsbooks, setMinSportsbooks] = useState(3);
@@ -980,21 +121,205 @@ function App() {
 	const [needsSort3, setNeedsSort3] = useState<Picks.ColumnKeys>('ggRaw');
 	const [needsSortPlayer, setNeedsSortPlayer] = useState<Picks.ColumnKeys>('betAvg');
 
-	const requestSort1: Picks.RequestSort = (key) => setNeedsSort1(key);
-	const requestSort2: Picks.RequestSort = (key) => setNeedsSort2(key);
-	const requestSort3: Picks.RequestSort = (key) => setNeedsSort3(key);
-	const requestSortPlayer: Picks.RequestSort = (key) => setNeedsSortPlayer(key);
+	// Load data on mount
+	useEffect(() => {
+		const initializeData = async () => {
+			try {
+				const initialData = await loadInitialData();
+				const gamesList = buildGamesList(initialData.gamesListing);
+				const playerList = buildPlayerList(initialData.gamesListing);
+				const normalizedNameMap = buildNormalizedNameMap(playerList);
+				
+				const { table1Rows, table2Rows, table3Rows } = mapPlayers(
+					playerList,
+					initialData.playerData,
+					normalizedNameMap
+				);
+				
+				compilePlayerList(
+					playerList,
+					initialData.playerOddsDraftKings,
+					initialData.playerOddsFanDuel,
+					initialData.playerOddsBetMGM,
+					initialData.playerOddsBetRivers
+				);
+				
+				setData({ gamesList, playerList, table1Rows, table2Rows, table3Rows });
+			} catch (error) {
+				console.error('Failed to load initial data:', error);
+				setData({ gamesList: [], playerList: [], table1Rows: [], table2Rows: [], table3Rows: [] });
+			} finally {
+				setIsLoading(false);
+			}
+		};
 
-	const { statsCache, table1Rows, table2Rows, table3Rows, playerList: displayPlayerList } = useMemo(
-		() => updateDisplayState({
-			showPercentage, deVigEnabled, minSportsbooks,
-			needsSort1, needsSort2, needsSort3, needsSortPlayer
-		}),
-		[showPercentage, deVigEnabled, minSportsbooks, needsSort1, needsSort2, needsSort3, needsSortPlayer]
-	);
+		initializeData();
+	}, []);
+
+	// Initialize sort configs - use ref to avoid recreating
+	const sortConfig1Ref = useRef<Picks.SortConfig>({ keyOrder: [] });
+	const sortConfig2Ref = useRef<Picks.SortConfig>({ keyOrder: [] });
+	const sortConfig3Ref = useRef<Picks.SortConfig>({ keyOrder: [] });
+	const sortConfigPlayerRef = useRef<Picks.SortConfig>({ keyOrder: [] });
+
+	const requestSort1: Picks.RequestSort = useCallback((key) => setNeedsSort1(key), []);
+	const requestSort2: Picks.RequestSort = useCallback((key) => setNeedsSort2(key), []);
+	const requestSort3: Picks.RequestSort = useCallback((key) => setNeedsSort3(key), []);
+	const requestSortPlayer: Picks.RequestSort = useCallback((key) => setNeedsSortPlayer(key), []);
+
+	const memoizedDisplayData = useMemo(() => {
+		if (!data) return null;
+		
+		const { gamesList, playerList: origPlayerList, table1Rows: origTable1, table2Rows: origTable2, table3Rows: origTable3 } = data;
+
+		// Create fresh arrays to avoid mutating state
+		const table1Rows = [...origTable1];
+		const table2Rows = [...origTable2];
+		const table3Rows = [...origTable3];
+		const playerList = origPlayerList; // Players themselves need to be mutated for display values, but we keep the list same
+
+		// Update pick odds display values
+		const updatePickOddsDisplay = (rows: Picks.PickOdds[]) => {
+			for (const row of rows) {
+				row.ggDisplay = showPercentage
+					? poissonChance(row.ggRaw, precision)
+					: row.ggRaw.toFixed(2);
+			}
+		};
+
+		updatePickOddsDisplay(table1Rows);
+		updatePickOddsDisplay(table2Rows);
+		updatePickOddsDisplay(table3Rows);
+
+		// Update player betting display values
+		const key1 = deVigEnabled ? 'bet1' : 'betRaw1';
+		const key2 = deVigEnabled ? 'bet2' : 'betRaw2';
+		const key3 = deVigEnabled ? 'bet3' : 'betRaw3';
+		const key4 = deVigEnabled ? 'bet4' : 'betRaw4';
+
+		for (const player of playerList) {
+			const values = [player[key1 as keyof typeof player], player[key2 as keyof typeof player], player[key3 as keyof typeof player], player[key4 as keyof typeof player]];
+			const rawValues = [player.betRaw1, player.betRaw2, player.betRaw3, player.betRaw4];
+			const displays = ['betDisplay1', 'betDisplay2', 'betDisplay3', 'betDisplay4'] as const;
+
+			for (let i = 0; i < values.length; i++) {
+				const value = values[i] as number | null;
+				if (value === null) continue;
+				player[displays[i]] = showPercentage
+					? roundToPercent(value, precision)
+					: probabilityToAmerican(rawValues[i]);
+			}
+
+			let count = 0;
+			let avg = 0;
+			for (const value of values as (number | null)[]) {
+				if (value === null) continue;
+				avg += value;
+				count++;
+			}
+
+			player.betCount = count;
+			if (count > 0) {
+				player.betAvg = avg / count;
+				player.betDisplayAvg = betDisplayRounded(player.betAvg);
+			} else {
+				player.betAvg = null;
+				player.betDisplayAvg = '-';
+			}
+		}
+
+		// Apply top-value highlights per column
+		type processKeys = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg';
+		const processMax = (row: Picks.PickOdds, max: Picks.PickOdds[], key: processKeys) => {
+			const rowVal = row.player[key];
+			if (rowVal === null) return;
+			if (max.length === 0) { max.push(row); return; }
+			const topBet = max[0].player[key]!;
+			if (rowVal === topBet) max.push(row);
+			else if (rowVal > topBet) max.splice(0, max.length, row);
+		};
+		const processMaxArray = (array: Picks.PickOdds[]) => {
+			const max1: Picks.PickOdds[] = [], max2: Picks.PickOdds[] = [], max3: Picks.PickOdds[] = [],
+				max4: Picks.PickOdds[] = [], maxAvg: Picks.PickOdds[] = [];
+			for (const row of array) {
+				row.highlight1 = 'none'; row.highlight2 = 'none'; row.highlight3 = 'none';
+				row.highlight4 = 'none'; row.highlightAvg = 'none';
+				processMax(row, max1, 'bet1'); processMax(row, max2, 'bet2');
+				processMax(row, max3, 'bet3'); processMax(row, max4, 'bet4');
+				if (row.player.betCount >= minSportsbooks) processMax(row, maxAvg, 'betAvg');
+			}
+			for (const row of max1) row.highlight1 = 'top';
+			for (const row of max2) row.highlight2 = 'top';
+			for (const row of max3) row.highlight3 = 'top';
+			for (const row of max4) row.highlight4 = 'top';
+			for (const row of maxAvg) row.highlightAvg = 'top';
+		};
+		processMaxArray(table1Rows);
+		processMaxArray(table2Rows);
+		processMaxArray(table3Rows);
+
+		// Build sort functions and apply sorting
+		const sortFunction1 = sortFunction(sortConfig1Ref.current);
+		const makeSort1 = makeSort(sortConfig1Ref.current);
+		makeSort1(needsSort1);
+		table1Rows.sort(sortFunction1);
+
+		const sortFunction2 = sortFunction(sortConfig2Ref.current);
+		const makeSort2 = makeSort(sortConfig2Ref.current);
+		makeSort2(needsSort2);
+		table2Rows.sort(sortFunction2);
+
+		const sortFunction3 = sortFunction(sortConfig3Ref.current);
+		const makeSort3 = makeSort(sortConfig3Ref.current);
+		makeSort3(needsSort3);
+		table3Rows.sort(sortFunction3);
+
+		const sortFunctionPlayer = sortFunction(sortConfigPlayerRef.current);
+		const makeSortPlayer = makeSort(sortConfigPlayerRef.current);
+		makeSortPlayer(needsSortPlayer);
+		playerList.sort(sortFunctionPlayer);
+
+		return { gamesList, playerList, table1Rows, table2Rows, table3Rows };
+	}, [data, showPercentage, deVigEnabled, needsSort1, needsSort2, needsSort3, needsSortPlayer]);
+
+	// Memoize stats calculations - expensive O(n³) combo calculations
+	// Also applies stats-based highlights (opp/any) to rows after 'top' highlights are set
+	const statsCache = useMemo(() => {
+		if (!memoizedDisplayData) return null;
+		const cache = precalculateLogStats(
+			minSportsbooks,
+			memoizedDisplayData.gamesList,
+			memoizedDisplayData.table1Rows,
+			memoizedDisplayData.table2Rows,
+			memoizedDisplayData.table3Rows
+		);
+		// Apply opp/any highlights from stats onto the rows
+		const allPickRows: [Picks.PickOdds[], PickIndex][] = [
+			[memoizedDisplayData.table1Rows, 1],
+			[memoizedDisplayData.table2Rows, 2],
+			[memoizedDisplayData.table3Rows, 3],
+		];
+		const keys: LogStatsKey[] = ['bet1', 'bet2', 'bet3', 'bet4', 'betAvg'];
+		for (const key of keys) {
+			const highlightByPick = cache[key].highlightByPick;
+			for (const [rows, pick] of allPickRows) {
+				const playerModes = highlightByPick[pick];
+				for (const row of rows) {
+					const mode = playerModes.get(row.player.playerId);
+					if (mode === undefined) continue;
+					if (key === 'bet1') row.highlight1 = mode;
+					else if (key === 'bet2') row.highlight2 = mode;
+					else if (key === 'bet3') row.highlight3 = mode;
+					else if (key === 'bet4') row.highlight4 = mode;
+					else if (row.player.betCount >= minSportsbooks) row.highlightAvg = mode;
+				}
+			}
+		}
+		return cache;
+	}, [memoizedDisplayData, minSportsbooks]);
 
 	const [showPopup, setShowPopup] = useState({ visible: false, title: 'Stats', key: 'betAvg' });
-	const [popupStats, setPopupStats] = useState<LogStat[]>(() => cloneLogStats(statsCache.betAvg.stats));
+	const [popupStats, setPopupStats] = useState<LogStat[]>([]);
 	const [popupView, setPopupView] = useState<'info' | 'stats' | 'settings'>('stats');
 
 	const closePopup = () => {
@@ -1002,8 +327,10 @@ function App() {
 	};
 
 	const openStatsPopup = (key: LogStatsKey, title: string) => {
-		const cached = statsCache[key];
-		setPopupStats(cloneLogStats(cached.stats));
+		if (statsCache) {
+			const cached = statsCache[key];
+			setPopupStats(cloneLogStats(cached.stats));
+		}
 		setPopupView('stats');
 		setShowPopup({ visible: true, title, key });
 	};
@@ -1018,11 +345,10 @@ function App() {
 		setShowPopup({ visible: true, title: 'Settings', key: showPopup.key });
 	};
 
-	// Theme state
 	const [darkTheme, setDarkTheme] = useState(() => {
 		return window.matchMedia('(prefers-color-scheme: dark)').matches;
 	});
-	// Update theme when system preference changes
+
 	useEffect(() => {
 		const handleChange = (event: MediaQueryListEvent) => {
 			setDarkTheme(event.matches);
@@ -1031,6 +357,38 @@ function App() {
 		darkModeMql.addEventListener('change', handleChange);
 		return () => darkModeMql.removeEventListener('change', handleChange);
 	}, []);
+
+	if (isLoading || !memoizedDisplayData) {
+		return (
+			<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+				<p>Loading...</p>
+			</div>
+		);
+	}
+
+	const { gamesList, table1Rows, table2Rows, table3Rows, playerList: displayPlayerList } = memoizedDisplayData;
+
+	const oddsColumns: Picks.ColumnData[] = sportsbooks.map((book) => ({
+		key: book.key,
+		title: book.title,
+		sort: true,
+		logo: book.logo,
+	}));
+
+	const columns: Picks.ColumnData[] = [
+		{ key: "fullName", title: "Player", sort: true },
+		{ key: "ggRaw", title: "G/GP", sort: true },
+		...oddsColumns,
+		{ key: "betAvg", title: "Avg", sort: true },
+	];
+
+	const columnsPlayer: Picks.ColumnData[] = [
+		{ key: "fullName", title: "Player", sort: true },
+		...oddsColumns,
+		{ key: "betAvg", title: "Avg", sort: true },
+		{ key: "pick", title: "Pick", sort: false },
+		{ key: "gameTime", title: "Start", sort: true },
+	];
 
 	return (
 		<>
@@ -1127,19 +485,19 @@ function App() {
 				</div>
 				<div className="table-container">
 					<h2>Pick #1</h2>
-					<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1} darkTheme={darkTheme} />
+					<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} />
 				</div>
 				<div className="table-container">
 					<h2>Pick #2</h2>
-					<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2} darkTheme={darkTheme} />
+					<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} />
 				</div>
 				<div className="table-container">
 					<h2>Pick #3</h2>
-					<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3} darkTheme={darkTheme} />
+					<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} />
 				</div>
 				<div className="table-container">
 					<h2>Players</h2>
-					<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayer} darkTheme={darkTheme} />
+					<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} />
 				</div>
 			</main>
 		</>
