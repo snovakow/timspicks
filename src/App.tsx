@@ -434,8 +434,6 @@ const logStats = (betKey: LogStatsKey, minSportsbooks: number): HighlightByPick 
 	};
 	const addPlayersToHighlight = (pick: PickIndex, players: Set<Picks.Player>, mode: StatsHighlightMode) => {
 		for (const player of players) {
-			const current = highlightByPick[pick].get(player.playerId);
-			if (current === 'opp') continue;
 			highlightByPick[pick].set(player.playerId, mode);
 		}
 	};
