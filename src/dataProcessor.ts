@@ -310,9 +310,10 @@ export const compilePlayerList = (
 			if (alpha <= 0.5 || alpha > 2) continue;
 
 			corrections[key] = { c, alpha };
-			console.log(`De-vig [${key}]: c=${c.toFixed(4)}, α=${alpha.toFixed(4)} (${n} players)`);
+			// console.log(`De-vig [${key}]: c=${c.toFixed(4)}, α=${alpha.toFixed(4)} (${n} players)`);
 		}
 
+		// Apply all at once: fair = (book / c) ^ (1/α)
 		for (const key of betKeys) {
 			const corr = corrections[key];
 			if (corr === undefined) continue;
