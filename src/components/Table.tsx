@@ -69,7 +69,7 @@ export function Basic(props: {
 		<table>
 			<tbody>
 				{games.map((game, idx) => (
-					<tr key={idx} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
+					<tr key={game.link} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
 						<td>
 							<span className='cell-container right-align'>
 								{game.away.name}
@@ -247,8 +247,9 @@ export function Table(props: {
 				{sortedRows.map((row, idx) => {
 					const picks = row instanceof PickOdds;
 					const player = picks ? row.player : row;
-					return (
-						<tr key={idx} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
+				const rowKey = picks ? row.player.playerId : row.playerId;
+				return (
+					<tr key={rowKey} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
 							<td>
 								<span className='cell-container'>
 									<img className='td-name-logo' src={darkTheme ? player.logoDark : player.logoLight} alt="" />
