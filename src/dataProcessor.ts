@@ -48,50 +48,50 @@ export const loadInitialData = async (): Promise<InitialData> => {
 
 export const oddsNameMap = new Map<string, string>();
 oddsNameMap.set("Aatu Räty", "Aatu Raty");
-oddsNameMap.set("Alex DeBrincat", "Alex Debrincat");
-oddsNameMap.set("Alexander Wennberg", "Alex Wennberg");
-oddsNameMap.set("Alexis Lafrenière", "Alexis Lafreniere");
-oddsNameMap.set("Aliaksei Protas", "Alexei Protas");
-oddsNameMap.set("Arseny Gritsyuk", "Arseni Gritsyuk");
-oddsNameMap.set("Artem Zub", "Artyom Zub");
-oddsNameMap.set("Axel Sandin-Pellikka", "Axel Sandin Pellikka");
-oddsNameMap.set("Ben Kindel", "Benjamin Kindel");
-oddsNameMap.set("Bo Groulx", "Benoit-Olivier Groulx");
-oddsNameMap.set("Carl Grundstrom", "Carl Grundström");
-oddsNameMap.set("Charle-Edouard D'Astous", "Charles-Edouard D'Astous");
-oddsNameMap.set("Dmitry Orlov", "Dimitri Orlov");
-oddsNameMap.set("Egor Chinakhov", "Yegor Chinakhov");
-oddsNameMap.set("Ethan Del Mastro", "Ethan del Mastro");
-oddsNameMap.set("Gabe Perreault", "Gabriel Perreault");
-oddsNameMap.set("J.J. Moser", "Janis Jérôme Moser");
-oddsNameMap.set("J.T. Compher", "JT Compher");
-oddsNameMap.set("Jake Middleton", "Jacob Middleton");
-oddsNameMap.set("James van Riemsdyk", "James Van Riemsdyk");
-oddsNameMap.set("JJ Peterka", "John-Jason Peterka");
-oddsNameMap.set("Josh Morrissey", "Joshua Morrissey");
-oddsNameMap.set("Lenni Hameenaho", "Lenni Hämeenaho");
-oddsNameMap.set("Liam Ohgren", "Liam Öhgren");
+oddsNameMap.set("Alex DeBrincat", "Alex Debrincat"); // BetMGM
+oddsNameMap.set("Alexander Wennberg", "Alex Wennberg"); // FanDuel
+oddsNameMap.set("Alexis Lafrenière", "Alexis Lafreniere"); // DraftKings FanDuel
+oddsNameMap.set("Aliaksei Protas", "Alexei Protas"); // BetRivers (lang)
+oddsNameMap.set("Arseny Gritsyuk", "Arseni Gritsyuk"); // BetRivers
+oddsNameMap.set("Artem Zub", "Artyom Zub"); // BetRivers
+oddsNameMap.set("Axel Sandin-Pellikka", "Axel Sandin Pellikka"); // DraftKings
+oddsNameMap.set("Ben Kindel", "Benjamin Kindel"); // BetRivers
+oddsNameMap.set("Bo Groulx", "Benoit-Olivier Groulx"); // BetMGM
+oddsNameMap.set("Carl Grundstrom", "Carl Grundström"); // BetRivers (lang)
+oddsNameMap.set("Charle-Edouard D'Astous", "Charles-Edouard D'Astous"); // BetRivers
+oddsNameMap.set("Dmitry Orlov", "Dimitri Orlov"); // BetRivers
+oddsNameMap.set("Egor Chinakhov", "Yegor Chinakhov"); // DraftKings BetRivers
+oddsNameMap.set("Ethan Del Mastro", "Ethan del Mastro"); // FanDuel
+oddsNameMap.set("Gabe Perreault", "Gabriel Perreault"); // BetMGM
+oddsNameMap.set("J.J. Moser", "Janis Jérôme Moser"); // BetRivers
+oddsNameMap.set("J.T. Compher", "JT Compher"); // BetRivers
+oddsNameMap.set("Jake Middleton", "Jacob Middleton"); // BetRivers (lang)
+oddsNameMap.set("James van Riemsdyk", "James Van Riemsdyk"); // BetMGM
+oddsNameMap.set("JJ Peterka", "John-Jason Peterka"); // BetRivers
+oddsNameMap.set("Josh Morrissey", "Joshua Morrissey"); // BetRivers
+oddsNameMap.set("Lenni Hameenaho", "Lenni Hämeenaho"); // BetRivers
+oddsNameMap.set("Liam Ohgren", "Liam Öhgren"); // BetRivers (lang)
 oddsNameMap.set("Martin Fehérváry", "Martin Fehervary");
-oddsNameMap.set("Martin Pospisil", "Martin Pospíšil");
-oddsNameMap.set("Matt Boldy", "Matthew Boldy");
-oddsNameMap.set("Matt Coronato", "Matthew Coronato");
-oddsNameMap.set("Matt Savoie", "Matthew Savoie");
-oddsNameMap.set("Mike Matheson", "Michael Matheson");
-oddsNameMap.set("Mitch Marner", "Mitchell Marner");
-oddsNameMap.set("Nick Paul", "Nicholas Paul");
-oddsNameMap.set("Oliver Bjorkstrand", "Oliver Björkstrand");
-oddsNameMap.set("Olli Määttä", "Olli Maatta");
-oddsNameMap.set("Ondrej Palat", "Ondrej Palát");
-oddsNameMap.set("Oskar Bäck", "Oskar Back");
-oddsNameMap.set("Sebastian Aho", "Sebastian Aho (CAR)");
-oddsNameMap.set("Shea Theodore", "Shea Théodore");
-oddsNameMap.set("Simon Holmstrom", "Simon Holmström");
-oddsNameMap.set("Teuvo Teravainen", "Teuvo Teräväinen");
-oddsNameMap.set("Tim Stützle", "Tim Stuetzle");
-oddsNameMap.set("Tommy Novak", "Thomas Novak");
-oddsNameMap.set("Trevor van Riemsdyk", "Trevor Van Riemsdyk");
-oddsNameMap.set("Vasily Podkolzin", "Vasili Podkolzin");
-oddsNameMap.set("Zachary Bolduc", "Zack Bolduc");
+oddsNameMap.set("Martin Pospisil", "Martin Pospíšil"); // BetRivers (lang)
+oddsNameMap.set("Matt Boldy", "Matthew Boldy"); // BetRivers
+oddsNameMap.set("Matt Coronato", "Matthew Coronato"); // BetRivers
+oddsNameMap.set("Matt Savoie", "Matthew Savoie"); // BetRivers
+oddsNameMap.set("Mike Matheson", "Michael Matheson"); // BetRivers
+oddsNameMap.set("Mitch Marner", "Mitchell Marner"); // FanDuel BetRivers (lang)
+oddsNameMap.set("Nick Paul", "Nicholas Paul"); // FanDuel
+oddsNameMap.set("Oliver Bjorkstrand", "Oliver Björkstrand"); // BetRivers
+oddsNameMap.set("Olli Määttä", "Olli Maatta"); // DraftKings FanDuel (lang)
+oddsNameMap.set("Ondrej Palat", "Ondrej Palát"); // BetRivers (lang mix and match)
+oddsNameMap.set("Oskar Bäck", "Oskar Back"); // DraftKings FanDuel
+oddsNameMap.set("Sebastian Aho", "Sebastian Aho (CAR)"); // FanDuel, BetRivers
+oddsNameMap.set("Shea Theodore", "Shea Théodore"); // BetRivers
+oddsNameMap.set("Simon Holmstrom", "Simon Holmström"); // BetRivers (lang)
+oddsNameMap.set("Teuvo Teravainen", "Teuvo Teräväinen"); // BetRivers (lang)
+oddsNameMap.set("Tim Stützle", "Tim Stuetzle"); // DraftKings
+oddsNameMap.set("Tommy Novak", "Thomas Novak"); // BetRivers (lang)
+oddsNameMap.set("Trevor van Riemsdyk", "Trevor Van Riemsdyk"); // BetRivers
+oddsNameMap.set("Vasily Podkolzin", "Vasili Podkolzin"); // BetRivers (lang)
+oddsNameMap.set("Zachary Bolduc", "Zack Bolduc"); // DraftKings
 
 const removeAccentsNormalize = (name: string): string => {
 	return name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase();
