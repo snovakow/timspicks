@@ -22,42 +22,6 @@ export interface LogStatsCacheItem {
 	highlightByPick: HighlightByPick;
 }
 
-const dataStats: LogStat[] = [];
-let logSection = 0;
-let dataStatsPrev: LogStat | null = null;
-
-const resetLogStats = () => {
-	dataStats.length = 0;
-	logSection = 0;
-	dataStatsPrev = null;
-}
-
-const addLog = (line: string, align: LogStatAlign = "left", isTitle: boolean = false) => {
-	if (dataStatsPrev) {
-		const current = dataStats[logSection];
-		if (current) {
-			if (current.align === align && current.isTitle === isTitle) {
-				current.lines.push(line);
-			} else {
-				dataStatsPrev = { align, lines: [line], break: false, isTitle };
-				logSection++;
-				dataStats[logSection] = dataStatsPrev;
-			}
-		} else {
-			dataStatsPrev.break = true;
-			dataStatsPrev = { align, lines: [line], break: false, isTitle };
-			dataStats[logSection] = dataStatsPrev;
-		}
-	} else {
-		dataStatsPrev = { align, lines: [line], break: false, isTitle };
-		dataStats[logSection] = dataStatsPrev;
-	}
-}
-
-const addLogTitle = (title: string) => {
-	addLog(title, 'center', true);
-}
-
 export const cloneLogStats = (stats: LogStat[]): LogStat[] => {
 	return stats.map((stat) => ({
 		...stat,
@@ -71,8 +35,38 @@ export const calculateStats = (
 	gamesList: Picks.GameData[],
 	table1Rows: Picks.PickOdds[],
 	table2Rows: Picks.PickOdds[],
-	table3Rows: Picks.PickOdds[]
+	table3Rows: Picks.PickOdds[],
+	stats: LogStat[]
 ): HighlightByPick => {
+	let logSection = 0;
+	let dataStatsPrev: LogStat | null = null;
+
+	const addLog = (line: string, align: LogStatAlign = "left", isTitle: boolean = false) => {
+		if (dataStatsPrev) {
+			const current = stats[logSection];
+			if (current) {
+				if (current.align === align && current.isTitle === isTitle) {
+					current.lines.push(line);
+				} else {
+					dataStatsPrev = { align, lines: [line], break: false, isTitle };
+					logSection++;
+					stats[logSection] = dataStatsPrev;
+				}
+			} else {
+				dataStatsPrev.break = true;
+				dataStatsPrev = { align, lines: [line], break: false, isTitle };
+				stats[logSection] = dataStatsPrev;
+			}
+		} else {
+			dataStatsPrev = { align, lines: [line], break: false, isTitle };
+			stats[logSection] = dataStatsPrev;
+		}
+	}
+
+	const addLogTitle = (title: string) => {
+		addLog(title, 'center', true);
+	}
+
 	const highlightByPick: HighlightByPick = {
 		1: new Map<number, StatsHighlightMode>(),
 		2: new Map<number, StatsHighlightMode>(),
@@ -396,14 +390,13 @@ export const precalculateLogStats = (
 	const cache = {} as Record<LogStatsKey, LogStatsCacheItem>;
 
 	for (const key of keys) {
-		resetLogStats();
-		const highlightByPick = calculateStats(key, minSportsbooks, gamesList, table1Rows, table2Rows, table3Rows);
+		const stats: LogStat[] = [];
+		const highlightByPick = calculateStats(key, minSportsbooks, gamesList, table1Rows, table2Rows, table3Rows, stats);
 		cache[key] = {
-			stats: cloneLogStats(dataStats),
+			stats: cloneLogStats(stats),
 			highlightByPick,
 		};
 	}
 
-	resetLogStats();
 	return cache;
 };

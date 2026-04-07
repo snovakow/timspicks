@@ -14,22 +14,107 @@ interface SportsbookOddsItem {
 	odds: number;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+	return typeof value === 'object' && value !== null;
+};
+
+const isStringMap = (value: unknown): value is Record<string, string> => {
+	if (!isRecord(value)) return false;
+	for (const val of Object.values(value)) {
+		if (typeof val !== 'string') return false;
+	}
+	return true;
+};
+
+const isOddsItem = (value: unknown): value is Picks.OddsItem => {
+	if (!isRecord(value)) return false;
+	return (
+		typeof value.playerId === 'number'
+		&& typeof value.gamesPlayed === 'number'
+		&& typeof value.firstName === 'string'
+		&& typeof value.lastName === 'string'
+		&& typeof value.goals === 'number'
+	);
+};
+
+const isPlayerDataByPick = (value: unknown): value is PlayerDataByPick => {
+	if (!isRecord(value)) return false;
+	const buckets: PickBucket[] = ["1", "2", "3"];
+	for (const bucket of buckets) {
+		const items = value[bucket];
+		if (!Array.isArray(items)) return false;
+		if (!items.every(isOddsItem)) return false;
+	}
+	return true;
+};
+
+const isPlayerInput = (value: unknown): value is PlayerInput => {
+	if (!isRecord(value)) return false;
+	return (
+		typeof value.playerId === 'number'
+		&& isStringMap(value.firstName)
+		&& typeof value.firstName.default === 'string'
+		&& isStringMap(value.lastName)
+		&& typeof value.lastName.default === 'string'
+	);
+};
+
+const isTeamInput = (value: unknown): boolean => {
+	if (!isRecord(value)) return false;
+	return (
+		isStringMap(value.placeName)
+		&& typeof value.placeName.default === 'string'
+		&& isStringMap(value.commonName)
+		&& typeof value.commonName.default === 'string'
+		&& typeof value.abbrev === 'string'
+		&& typeof value.logo === 'string'
+		&& typeof value.darkLogo === 'string'
+	);
+};
+
+const isGamesListingItem = (value: unknown): value is GamesListingItem => {
+	if (!isRecord(value)) return false;
+	if (typeof value.gameCenterLink !== 'string') return false;
+	if (typeof value.startTimeUTC !== 'string') return false;
+	if (!isRecord(value.homeTeam) || !isRecord(value.awayTeam)) return false;
+	if (!isTeamInput(value.homeTeam) || !isTeamInput(value.awayTeam)) return false;
+	if (!Array.isArray(value.homeTeam.players) || !value.homeTeam.players.every(isPlayerInput)) return false;
+	if (!Array.isArray(value.awayTeam.players) || !value.awayTeam.players.every(isPlayerInput)) return false;
+	return true;
+};
+
+const isSportsbookOddsItem = (value: unknown): value is SportsbookOddsItem => {
+	if (!isRecord(value)) return false;
+	return typeof value.name === 'string' && typeof value.odds === 'number';
+};
+
 const fetchData = async (src: string) => {
 	const response = await fetch(src + "?t=" + new Date().getTime());
 	if (!response.ok) throw new Error(`Failed to load ${src}: ${response.status} ${response.statusText}`);
 	return response;
 }
 
-const loadData = async <T>(src: string, fallback: T): Promise<T> => {
+const loadData = async (src: string): Promise<unknown> => {
 	try {
 		const response = await fetchData(src);
-		const json: unknown = await response.json();
-		return json as T;
+		return await response.json();
 	} catch (error) {
-		console.log(error);
-		return fallback;
+		console.error(`Error loading ${src}:`, error);
+		throw error;
 	}
 }
+
+const loadAndValidate = async <T>(
+	src: string,
+	validator: (value: unknown) => value is T,
+	label: string
+): Promise<T> => {
+	const value = await loadData(src);
+	if (!validator(value)) {
+		throw new Error(`Invalid ${label} format in ${src}`);
+	}
+	return value;
+};
 
 export interface InitialData {
 	playerData: PlayerDataByPick;
@@ -42,12 +127,12 @@ export interface InitialData {
 
 export const loadInitialData = async (): Promise<InitialData> => {
 	const [playerData, gamesListing, playerOddsDraftKings, playerOddsFanDuel, playerOddsBetMGM, playerOddsBetRivers] = await Promise.all([
-		loadData<PlayerDataByPick>('./data/helper.json', { "1": [], "2": [], "3": [] }),
-		loadData<GamesListingItem[]>('./data/games.json', []),
-		loadData<SportsbookOddsItem[]>('./data/bet1.json', []),
-		loadData<SportsbookOddsItem[]>('./data/bet2.json', []),
-		loadData<SportsbookOddsItem[]>('./data/bet3.json', []),
-		loadData<SportsbookOddsItem[]>('./data/bet4.json', []),
+		loadAndValidate('./data/helper.json', isPlayerDataByPick, 'helper odds data'),
+		loadAndValidate('./data/games.json', (value): value is GamesListingItem[] => Array.isArray(value) && value.every(isGamesListingItem), 'games listing data'),
+		loadAndValidate('./data/bet1.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'DraftKings odds data'),
+		loadAndValidate('./data/bet2.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'FanDuel odds data'),
+		loadAndValidate('./data/bet3.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'BetMGM odds data'),
+		loadAndValidate('./data/bet4.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'BetRivers odds data'),
 	]);
 
 	return {

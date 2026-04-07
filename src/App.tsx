@@ -167,11 +167,32 @@ function App() {
 		
 		const { gamesList, playerList: origPlayerList, table1Rows: origTable1, table2Rows: origTable2, table3Rows: origTable3 } = data;
 
-		// Create fresh arrays to avoid mutating state
-		const table1Rows = [...origTable1];
-		const table2Rows = [...origTable2];
-		const table3Rows = [...origTable3];
-		const playerList = [...origPlayerList];
+		const clonePlayer = (player: Picks.Player): Picks.Player => {
+			return Object.assign(Object.create(Picks.Player.prototype), player) as Picks.Player;
+		};
+
+		const clonePickRow = (row: Picks.PickOdds, player: Picks.Player): Picks.PickOdds => {
+			return Object.assign(Object.create(Picks.PickOdds.prototype), row, { player }) as Picks.PickOdds;
+		};
+
+		const playerById = new Map<number, Picks.Player>();
+		const playerList = origPlayerList.map((player) => {
+			const clone = clonePlayer(player);
+			playerById.set(clone.playerId, clone);
+			return clone;
+		});
+
+		const cloneRows = (rows: Picks.PickOdds[]): Picks.PickOdds[] => {
+			return rows.map((row) => {
+				const player = playerById.get(row.player.playerId) ?? clonePlayer(row.player);
+				return clonePickRow(row, player);
+			});
+		};
+
+		// Create fresh object graphs so all display mutations stay local to this memoized result.
+		const table1Rows = cloneRows(origTable1);
+		const table2Rows = cloneRows(origTable2);
+		const table3Rows = cloneRows(origTable3);
 
 		// Update pick odds display values
 		const updatePickOddsDisplay = (rows: Picks.PickOdds[]) => {
@@ -414,8 +435,9 @@ function App() {
 								if (showPopup.visible && popupView === 'stats') closePopup();
 								else openStatsPopup('betAvg', 'Stats');
 							}
-						}>
-						<img src={iconStats} alt="?" />
+						}
+						aria-label="Stats">
+						<img src={iconStats} alt="" aria-hidden="true" />
 					</button>
 				</div>
 				<span className="header-title">
@@ -429,8 +451,9 @@ function App() {
 								if (showPopup.visible && popupView === 'info') closePopup();
 								else openInfoPopup();
 							}
-						}>
-						<img src={iconInfo} alt="i" />
+						}
+						aria-label="Info">
+						<img src={iconInfo} alt="" aria-hidden="true" />
 					</button>
 				</div>
 			</header>
