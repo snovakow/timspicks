@@ -81,7 +81,7 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             >
                 <div className="popup-header">
                     {title}
-                    <button className="close-button" onClick={closePopUp}>
+                    <button className="close-button" onClick={closePopUp} aria-label="Close">
                         &times;
                     </button>
                 </div>
