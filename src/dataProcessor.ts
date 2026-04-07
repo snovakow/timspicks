@@ -1,39 +1,53 @@
 import * as Picks from './components/Table';
 
+type PickBucket = "1" | "2" | "3";
+type PlayerDataByPick = Record<PickBucket, Picks.OddsItem[]>;
+type GameDataInput = ConstructorParameters<typeof Picks.GameData>[0];
+type PlayerInput = ConstructorParameters<typeof Picks.Player>[0];
+type GamesListingItem = GameDataInput & {
+	homeTeam: GameDataInput["homeTeam"] & { players: PlayerInput[] };
+	awayTeam: GameDataInput["awayTeam"] & { players: PlayerInput[] };
+};
+
+interface SportsbookOddsItem {
+	name: string;
+	odds: number;
+}
+
 const fetchData = async (src: string) => {
 	const response = await fetch(src + "?t=" + new Date().getTime());
 	if (!response.ok) throw new Error(`Failed to load ${src}: ${response.status} ${response.statusText}`);
 	return response;
 }
 
-const loadData = async (src: string) => {
+const loadData = async <T>(src: string, fallback: T): Promise<T> => {
 	try {
 		const response = await fetchData(src);
-		const json = await response.json();
-		return json;
+		const json: unknown = await response.json();
+		return json as T;
 	} catch (error) {
 		console.log(error);
-		return [];
+		return fallback;
 	}
 }
 
 export interface InitialData {
-	playerData: Picks.OddsItem[][];
-	gamesListing: any[];
-	playerOddsDraftKings: any[];
-	playerOddsFanDuel: any[];
-	playerOddsBetMGM: any[];
-	playerOddsBetRivers: any[];
+	playerData: PlayerDataByPick;
+	gamesListing: GamesListingItem[];
+	playerOddsDraftKings: SportsbookOddsItem[];
+	playerOddsFanDuel: SportsbookOddsItem[];
+	playerOddsBetMGM: SportsbookOddsItem[];
+	playerOddsBetRivers: SportsbookOddsItem[];
 }
 
 export const loadInitialData = async (): Promise<InitialData> => {
 	const [playerData, gamesListing, playerOddsDraftKings, playerOddsFanDuel, playerOddsBetMGM, playerOddsBetRivers] = await Promise.all([
-		loadData('./data/helper.json'),
-		loadData('./data/games.json'),
-		loadData('./data/bet1.json'),
-		loadData('./data/bet2.json'),
-		loadData('./data/bet3.json'),
-		loadData('./data/bet4.json'),
+		loadData<PlayerDataByPick>('./data/helper.json', { "1": [], "2": [], "3": [] }),
+		loadData<GamesListingItem[]>('./data/games.json', []),
+		loadData<SportsbookOddsItem[]>('./data/bet1.json', []),
+		loadData<SportsbookOddsItem[]>('./data/bet2.json', []),
+		loadData<SportsbookOddsItem[]>('./data/bet3.json', []),
+		loadData<SportsbookOddsItem[]>('./data/bet4.json', []),
 	]);
 
 	return {
@@ -97,7 +111,7 @@ const removeAccentsNormalize = (name: string): string => {
 	return name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase();
 }
 
-export const buildGamesList = (gamesListing: any[]): Picks.GameData[] => {
+export const buildGamesList = (gamesListing: GamesListingItem[]): Picks.GameData[] => {
 	const gamesList: Picks.GameData[] = [];
 	for (const data of gamesListing) {
 		const game = new Picks.GameData(data);
@@ -111,7 +125,7 @@ export const buildGamesList = (gamesListing: any[]): Picks.GameData[] => {
 	return gamesList;
 };
 
-export const buildPlayerList = (gamesListing: any[]): Picks.Player[] => {
+export const buildPlayerList = (gamesListing: GamesListingItem[]): Picks.Player[] => {
 	const playerList: Picks.Player[] = [];
 	for (const data of gamesListing) {
 		const game = new Picks.GameData(data);
@@ -139,7 +153,7 @@ export const buildNormalizedNameMap = (playerList: Picks.Player[]): Map<string, 
 
 export const mapPlayers = (
 	playerList: Picks.Player[],
-	playerData: any[],
+	playerData: PlayerDataByPick,
 	normalizedNameMap: Map<string, Picks.Player>
 ) => {
 	const playerMap = new Map<number, Picks.Player>();
@@ -178,10 +192,10 @@ export const mapPlayers = (
 
 export const compilePlayerList = (
 	playerList: Picks.Player[],
-	playerOddsDraftKings: any[],
-	playerOddsFanDuel: any[],
-	playerOddsBetMGM: any[],
-	playerOddsBetRivers: any[]
+	playerOddsDraftKings: SportsbookOddsItem[],
+	playerOddsFanDuel: SportsbookOddsItem[],
+	playerOddsBetMGM: SportsbookOddsItem[],
+	playerOddsBetRivers: SportsbookOddsItem[]
 ) => {
 	type betKey = "betRaw1" | "betRaw2" | "betRaw3" | "betRaw4";
 
