@@ -292,7 +292,7 @@ export const calculateStats = (
 
 	const logFooter = () => {
 		addLogTitle("Good Ranges");
-		addLog("Any: 67.1-70-74% - Avg: 30.8-33-36% - All: 2.9-3-4%", 'center');
+		addLog("Any: 66-67% - Avg: 30-31% - All: 2-3%", 'center');
 		return highlightByPick;
 	}
 
