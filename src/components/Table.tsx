@@ -207,8 +207,8 @@ export function Table(props: {
 	const { columns, sortedRows, requestSort, sortConfig, darkTheme } = props;
 	const cellClass = (highlight: HighlightMode): string | undefined => {
 		if (highlight === "top") return "highlight-top";
-		if (highlight === "opp") return "highlight-opp";
-		if (highlight === "independent") return "highlight-independent";
+		if (highlight === "opp") return "highlight-hybrid";
+		if (highlight === "independent") return "highlight-streak";
 		return undefined;
 	};
 	return (

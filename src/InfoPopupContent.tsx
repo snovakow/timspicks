@@ -63,12 +63,15 @@ export default function InfoPopupContent() {
 
 			<section className="info-popup-section info-popup-section-break">
 				<h3>Highlight Legend</h3>
-				<p><span className="info-chip info-chip-blue">Blue</span>
+				<p><span className="info-chip highlight-top">Blue</span>
 					Highest probability picks.</p>
-				<p><span className="info-chip info-chip-green">Green</span>
-					Highest probability picks from different games.</p>
-				<p><span className="info-chip info-chip-yellow">Yellow</span>
-					Highest probability picks including opposing teams.</p>
+				<p><span className="info-chip highlight-streak">Green</span>
+					Best picks for streaks. Getting at least one picks correct 7 days consecutively gets free coffee for a week.</p>
+				<p><span className="info-chip highlight-hybrid">Magenta</span>
+					Best picks for maximum points. 1 correct = 25 points, 2 correct = 50 points, 3 correct = 100 points. Also good for streaks
+					and the best overall strategy.</p>
+				<p><span className="info-chip highlight-leaderboard">Yellow</span>
+					Best picks for competing on the leaderboard. High risk, high reward strategy.</p>
 			</section>
 
 			<section className="info-popup-section info-popup-section-break info-popup-contact">

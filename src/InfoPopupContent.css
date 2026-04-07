@@ -44,18 +44,6 @@
     font-weight: 600;
 }
 
-.info-chip-blue {
-    background: rgb(204, 238, 255);
-}
-
-.info-chip-green {
-    background: rgb(170, 235, 170);
-}
-
-.info-chip-yellow {
-    background: rgb(255, 248, 200);
-}
-
 .info-popup-contact {
     text-align: center;
 }

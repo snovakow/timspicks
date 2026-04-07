@@ -105,12 +105,17 @@ td {
   background-color: rgb(204, 238, 255);
 }
 
-.highlight-independent {
+.highlight-streak {
   color: #000;
   background-color: rgb(170, 235, 170);
 }
 
-.highlight-opp {
+.highlight-hybrid {
+  color: #000;
+  background-color: rgb(245, 210, 240);
+}
+
+.highlight-leaderboard {
   color: #000;
   background-color: rgb(255, 248, 200);
 }
