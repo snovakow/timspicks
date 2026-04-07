@@ -22,7 +22,7 @@ export interface LogStatsCacheItem {
 	highlightByPick: HighlightByPick;
 }
 
-let dataStats: LogStat[] = [];
+const dataStats: LogStat[] = [];
 let logSection = 0;
 let dataStatsPrev: LogStat | null = null;
 
@@ -184,10 +184,6 @@ export const calculateStats = (
 	class ComboGroup {
 		combos: BestCombo[] = [];
 		total: number = 0;
-		type: Collide;
-		constructor(type: Collide) {
-			this.type = type;
-		}
 		add(pick1: Choice, pick2: Choice, pick3: Choice) {
 			const total = pick1.avg + pick2.avg + pick3.avg;
 			if (total > this.total) {
@@ -211,7 +207,7 @@ export const calculateStats = (
 	}
 
 	const calcCombo = (type: Collide): ComboGroup => {
-		const group = new ComboGroup(type);
+		const group = new ComboGroup();
 		for (const pick1 of choices1) {
 			for (const pick2 of choices2) {
 				if (pick2.collides(pick1.player, type)) continue;
@@ -225,7 +221,7 @@ export const calculateStats = (
 	}
 
 	const calcComboWithOpposing = (oppTeam: Team): ComboGroup => {
-		const group = new ComboGroup('none');
+		const group = new ComboGroup();
 		for (const pick1 of choices1) {
 			for (const pick2 of choices2) {
 				for (const pick3 of choices3) {
