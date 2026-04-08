@@ -258,8 +258,11 @@ function App() {
 			const max1: Picks.PickOdds[] = [], max2: Picks.PickOdds[] = [], max3: Picks.PickOdds[] = [],
 				max4: Picks.PickOdds[] = [], maxAvg: Picks.PickOdds[] = [];
 			for (const row of array) {
-				row.highlight1 = 'none'; row.highlight2 = 'none'; row.highlight3 = 'none';
-				row.highlight4 = 'none'; row.highlightAvg = 'none';
+				row.highlight1 = 'none'; 
+				row.highlight2 = 'none'; 
+				row.highlight3 = 'none';
+				row.highlight4 = 'none'; 
+				row.highlightAvg = 'none';
 				processMax(row, max1, 'bet1'); processMax(row, max2, 'bet2');
 				processMax(row, max3, 'bet3'); processMax(row, max4, 'bet4');
 				if (row.player.betCount >= minSportsbooks) processMax(row, maxAvg, 'betAvg');

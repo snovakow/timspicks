@@ -100,24 +100,50 @@ td {
   padding: 0.5em;
 }
 
-.highlight-top {
-  color: #000;
-  background-color: rgb(204, 238, 255);
+:root {
+  --highlight-top-bg: rgb(253, 226, 226);
+  --highlight-top-optimum-bg: rgb(170, 235, 170);
+  --highlight-optimum-bg: rgb(220, 238, 255);
+
+  --highlight-streak-dot: rgb(31, 157, 85);
+  --highlight-point-dot: rgb(196, 58, 138);
+  --highlight-leaderboard-dot: rgb(200, 138, 0);
+  --highlight-hybrid-dot: rgb(74, 123, 192);
 }
 
-.highlight-streak {
+.highlight-top-bg {
   color: #000;
-  background-color: rgb(170, 235, 170);
+  background-color: var(--highlight-top-bg);
 }
 
-.highlight-hybrid {
+.highlight-top-optimum-bg {
   color: #000;
-  background-color: rgb(245, 210, 240);
+  background-color: var(--highlight-top-optimum-bg);
 }
 
-.highlight-leaderboard {
+.highlight-optimum-bg {
   color: #000;
-  background-color: rgb(255, 248, 200);
+  background-color: var(--highlight-optimum-bg);
+}
+
+.highlight-streak-dot {
+  color: #000;
+  background-color: var(--highlight-streak-dot);
+}
+
+.highlight-point-dot {
+  color: #000;
+  background-color: var(--highlight-point-dot);
+}
+
+.highlight-leaderboard-dot {
+  color: #000;
+  background-color: var(--highlight-leaderboard-dot);
+}
+
+.highlight-hybrid-dot {
+  color: #000;
+  background-color: var(--highlight-hybrid-dot);
 }
 
 .cell-container {

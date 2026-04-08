@@ -173,7 +173,8 @@ export interface OddsItem {
 	goals: number;
 }
 
-export type HighlightMode = "none" | "top" | "opp" | "independent";
+export type HighlightMode = "none" | "top" | "top-optimum" | "optimum";
+export type StrategyMode = "streak" | "point" | "leaderboard" | "hybrid";
 export class PickOdds {
 	player: Player;
 
@@ -184,6 +185,7 @@ export class PickOdds {
 	highlight3: HighlightMode = "none";
 	highlight4: HighlightMode = "none";
 	highlightAvg: HighlightMode = "none";
+	strategy: Set<StrategyMode> = new Set();
 	constructor(player: Player, item: OddsItem) {
 		this.player = player;
 		this.ggRaw = item.gamesPlayed > 0 ? item.goals / item.gamesPlayed : 0;
@@ -206,9 +208,9 @@ export function Table(props: {
 }) {
 	const { columns, sortedRows, requestSort, sortConfig, darkTheme } = props;
 	const cellClass = (highlight: HighlightMode): string | undefined => {
-		if (highlight === "top") return "highlight-top";
-		if (highlight === "opp") return "highlight-hybrid";
-		if (highlight === "independent") return "highlight-streak";
+		if (highlight === 'top') return "highlight-top-bg";
+		if (highlight === "top-optimum") return "highlight-top-optimum-bg";
+		if (highlight === "optimum") return "highlight-optimum-bg";
 		return undefined;
 	};
 	return (
@@ -247,9 +249,9 @@ export function Table(props: {
 				{sortedRows.map((row, idx) => {
 					const picks = row instanceof PickOdds;
 					const player = picks ? row.player : row;
-				const rowKey = picks ? row.player.playerId : row.playerId;
-				return (
-					<tr key={rowKey} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
+					const rowKey = picks ? row.player.playerId : row.playerId;
+					return (
+						<tr key={rowKey} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
 							<td>
 								<span className='cell-container'>
 									<img className='td-name-logo' src={darkTheme ? player.logoDark : player.logoLight} alt="" />
