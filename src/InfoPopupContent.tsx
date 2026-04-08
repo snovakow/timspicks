@@ -6,7 +6,7 @@ export default function InfoPopupContent() {
 			<section className="info-popup-section">
 				<h3>Tim Hortons Hockey Challenge</h3>
 				<p>
-					This app helps with Tim Hortons Hockey Challenge picks in the Tims app.
+					This app helps you make Tim Hortons Hockey Challenge picks in the Tims app.
 					It ranks candidates for Pick #1, Pick #2, and Pick #3 using implied probabilities
 					from sportsbook odds, with normalization to improve book-to-book comparability.
 				</p>
@@ -66,7 +66,7 @@ export default function InfoPopupContent() {
 				<p><span className="info-chip info-chip-four-dot info-chip-four-dot-top">Top</span>
 					Highest-probability pick.</p>
 				<p><span className="info-chip info-chip-four-dot info-chip-four-dot-optimum">Optimal</span>
-					Not the highest-probability pick, but still optimal regarding strategies.</p>
+					Not the highest-probability pick, but still optimal for the strategy.</p>
 				<p><span className="info-chip info-chip-left-dot info-chip-streak-left-dot">Green</span>
 					Best picks for streaks. Getting at least one pick correct for 7 straight days earns free coffee for a week.</p>
 				<p><span className="info-chip info-chip-left-dot info-chip-point-left-dot">Magenta</span>
@@ -75,7 +75,7 @@ export default function InfoPopupContent() {
 				<p><span className="info-chip info-chip-left-dot info-chip-leaderboard-left-dot">Amber</span>
 					Best picks for competing on the leaderboard. High-risk, high-reward strategy.</p>
 				<p><span className="info-chip info-chip-left-dot info-chip-hybrid-left-dot">Blue</span>
-					Hybrid strategy balanced between strategies, with good streak odds and point upside.</p>
+					Hybrid strategy balanced between streak safety and point upside.</p>
 			</section>
 
 			<section className="info-popup-section info-popup-contact">
