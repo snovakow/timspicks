@@ -15,7 +15,7 @@ export interface LogStat {
 
 export type LogStatsKey = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg';
 export type PickIndex = 1 | 2 | 3;
-export type StatsHighlightMode = 'opp' | 'independent';
+export type StatsHighlightMode = 'top' | 'top-optimum' | 'optimum';
 export type HighlightByPick = Record<PickIndex, Map<number, StatsHighlightMode>>;
 
 export interface LogStatsCacheItem {
@@ -63,9 +63,9 @@ export const calculateStats = (
 				}
 			)
 		};
-		const p1: Pick[] = mod(table1Rows);
-		const p2: Pick[] = mod(table2Rows);
-		const p3: Pick[] = mod(table3Rows);
+		const p1 = mod(table1Rows);
+		const p2 = mod(table2Rows);
+		const p3 = mod(table3Rows);
 		console.log(optimizePicks(p1, p2, p3));
 	}
 
@@ -259,6 +259,20 @@ export const calculateStats = (
 		return group;
 	}
 
+	const calcComboSameTeam = (): ComboGroup => {
+		const group = new ComboGroup();
+		for (const pick1 of choices1) {
+			for (const pick2 of choices2) {
+				if (pick2.player.team.code !== pick1.player.team.code) continue;
+				for (const pick3 of choices3) {
+					if (pick3.player.team.code !== pick1.player.team.code) continue;
+					group.add(pick1, pick2, pick3);
+				}
+			}
+		}
+		return group;
+	}
+
 	const comboPrecision = 2;
 	const logCalcStats = (avgResult: Result) => {
 		const any = roundToPercent(calcAny(avgResult.avg1, avgResult.avg2, avgResult.avg3), precision);
@@ -322,24 +336,34 @@ export const calculateStats = (
 	for (const avgResult of noneResult) {
 		logTopPicks(avgResult);
 		logCalcStats(avgResult);
+		logHighlights(avgResult, 'top');
 	}
 
 	const comboIndependent = calcCombo('game');
 	const independentResult: Result[] = comboIndependent.merge();
+	const comboSameTeam = calcComboSameTeam();
+	const sameTeamResult: Result[] = comboSameTeam.merge();
 	const totalMax = comboNone.total;
-
-	if (comboIndependent.total === totalMax) {
-		addLogTitle("Top Picks");
-		for (const avgResult of independentResult) {
-			logTopPicks(avgResult);
-			logCalcStats(avgResult);
-			logHighlights(avgResult, 'independent');
-		}
-		return logFooter();
-	}
-
 	const topResult: Result = noneResult[0];
 
+	if (comboIndependent.total > 0) {
+		addLogTitle("Independent Picks");
+		for (const avgResult of independentResult) {
+			logReduced(avgResult, topResult, totalMax);
+			logCalcStats(avgResult);
+			logHighlights(avgResult, 'top-optimum');
+		}
+	}
+	if (sameTeamResult.length > 0) {
+		addLogTitle("Same Game");
+		for (const avgResult of sameTeamResult) {
+			logReduced(avgResult, topResult, totalMax);
+			logCalcStats(avgResult);
+			logHighlights(avgResult, 'optimum');
+		}
+	}
+
+/*
 	const comboAny = calcCombo('on');
 	const anyResult = comboAny.merge();
 
@@ -348,7 +372,7 @@ export const calculateStats = (
 		for (const avgResult of anyResult) {
 			logTopPicks(avgResult);
 			logCalcStats(avgResult);
-			logHighlights(avgResult, 'opp');
+			logHighlights(avgResult, 'top-optimum');
 		}
 
 		if (comboIndependent.total > 0) {
@@ -356,7 +380,7 @@ export const calculateStats = (
 			for (const avgResult of independentResult) {
 				logReduced(avgResult, topResult, totalMax);
 				logCalcStats(avgResult);
-				logHighlights(avgResult, 'independent');
+				logHighlights(avgResult, 'optimum');
 			}
 		}
 		return logFooter();
@@ -366,6 +390,7 @@ export const calculateStats = (
 	for (const avgResult of noneResult) {
 		logTopPicks(avgResult);
 		logCalcStats(avgResult);
+		logHighlights(avgResult, 'top-optimum');
 	}
 
 	if (comboAny.total > comboIndependent.total) {
@@ -373,7 +398,7 @@ export const calculateStats = (
 		for (const avgResult of anyResult) {
 			logReduced(avgResult, topResult, totalMax);
 			logCalcStats(avgResult);
-			logHighlights(avgResult, 'opp');
+			logHighlights(avgResult, 'optimum');
 		}
 	}
 
@@ -382,7 +407,7 @@ export const calculateStats = (
 		for (const avgResult of independentResult) {
 			logReduced(avgResult, topResult, totalMax);
 			logCalcStats(avgResult);
-			logHighlights(avgResult, 'independent');
+			logHighlights(avgResult, 'optimum');
 		}
 	}
 
@@ -394,22 +419,23 @@ export const calculateStats = (
 			for (const player of avgResult.players3) topTeams.add(player.team.code);
 		}
 		if (topTeams.size === 1) {
-			const [topTeam] = topTeams;
+			const topTeam = Array.from(topTeams)[0];
+			if (topTeam === undefined) return logFooter();
 			const oppTeam = gamesMap.get(topTeam);
-			if (oppTeam !== undefined) {
-				const oppCombo = calcComboWithOpposing(oppTeam);
+			if (oppTeam) {
+				const oppCombo = calcComboWithOpposing(oppTeam as Team);
 				if (oppCombo.total > 0) {
 					addLogTitle("Any Game");
 					for (const avgResult of oppCombo.merge()) {
 						logReduced(avgResult, topResult, totalMax);
 						logCalcStats(avgResult);
-						logHighlights(avgResult, 'opp');
+						logHighlights(avgResult, 'optimum');
 					}
 				}
 			}
 		}
 	}
-
+*/
 	return logFooter();
 };
 
