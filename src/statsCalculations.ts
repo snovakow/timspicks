@@ -505,6 +505,13 @@ export const calculateStats = (
 	const comboNone = calcCombo('none');
 	if (comboNone.combos.length === 0) return highlightByPick;
 
+	const noneResult: Result[] = comboNone.merge();
+	addLogTitle("Max Picks");
+	for (const avgResult of noneResult) {
+		logTopPicks(avgResult);
+		logCalcStats(avgResult);
+	}
+
 	const comboIndependent = calcCombo('game');
 	const independentResult: Result[] = comboIndependent.merge();
 	const totalMax = comboNone.total;
@@ -519,7 +526,6 @@ export const calculateStats = (
 		return logFooter();
 	}
 
-	const noneResult: Result[] = comboNone.merge();
 	const topResult: Result = noneResult[0];
 
 	const comboAny = calcCombo('on');
