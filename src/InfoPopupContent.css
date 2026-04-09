@@ -37,6 +37,27 @@
     font-weight: 600;
 }
 
+.info-chip-table-badge {
+    display: inline-block;
+    position: relative;
+    min-width: 4.4em;
+    text-align: center;
+    border-radius: 4px;
+    padding: 0.05em 0.55em 0.78em;
+    margin-right: 0.35rem;
+    box-sizing: border-box;
+}
+
+.info-chip-table-badge-value {
+    display: inline-block;
+    font-weight: 600;
+    line-height: 1.05;
+}
+
+.info-chip-table-badge .cell-strategy-dots {
+    bottom: 0.08rem;
+}
+
 .info-chip-four-dot {
     position: relative;
     background-color: var(--highlight-bg);

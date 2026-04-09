@@ -211,6 +211,50 @@ export function Table(props: {
 	darkTheme: boolean
 }) {
 	const { columns, sortedRows, requestSort, sortConfig, darkTheme } = props;
+	const strategyLabel = (mode: StrategyMode): string => {
+		if (mode === 'streak') return 'Streak';
+		if (mode === 'point') return 'Points';
+		if (mode === 'leaderboard') return 'Leaderboard';
+		return 'Hybrid';
+	};
+	const strategyTitle = (strategy: Set<StrategyMode>): string => {
+		const modes: StrategyMode[] = ['streak', 'point', 'leaderboard', 'hybrid'];
+		const active = modes.filter((mode) => strategy.has(mode));
+		if (active.length === 0) return 'No strategy tags';
+		return `Strategies: ${active.map(strategyLabel).join(', ')}`;
+	};
+	const renderStrategyDots = (strategy: Set<StrategyMode>) => {
+		return (
+			<span className='cell-strategy-dots' aria-hidden='true'>
+				<span className={`cell-strategy-dot cell-strategy-dot-streak${strategy.has('streak') ? ' cell-strategy-dot-active' : ''}`} />
+				<span className={`cell-strategy-dot cell-strategy-dot-point${strategy.has('point') ? ' cell-strategy-dot-active' : ''}`} />
+				<span className={`cell-strategy-dot cell-strategy-dot-leaderboard${strategy.has('leaderboard') ? ' cell-strategy-dot-active' : ''}`} />
+				<span className={`cell-strategy-dot cell-strategy-dot-hybrid${strategy.has('hybrid') ? ' cell-strategy-dot-active' : ''}`} />
+			</span>
+		);
+	};
+	const strategyFor = (row: PickOdds, key: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg'): Set<StrategyMode> => {
+		if (key === 'bet1') return row.strategy1;
+		if (key === 'bet2') return row.strategy2;
+		if (key === 'bet3') return row.strategy3;
+		if (key === 'bet4') return row.strategy4;
+		return row.strategyAvg;
+	};
+	const visibleStrategyFor = (row: PickOdds, key: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg'): Set<StrategyMode> | undefined => {
+		const strategy = strategyFor(row, key);
+		return strategy.size > 0 ? strategy : undefined;
+	};
+	const renderBetCell = (value: string, highlight?: HighlightMode, strategy?: Set<StrategyMode>) => {
+		const classes = [highlight ? cellClass(highlight) : undefined, strategy ? 'cell-bet-with-dots' : undefined]
+			.filter(Boolean)
+			.join(' ');
+		return (
+			<td className={classes || undefined} title={strategy ? strategyTitle(strategy) : undefined}>
+				<span className='cell-bet-value'>{value}</span>
+				{strategy && renderStrategyDots(strategy)}
+			</td>
+		);
+	};
 	const cellClass = (highlight: HighlightMode): string | undefined => {
 		if (highlight === 'top') return "highlight-top-bg";
 		if (highlight === "top-optimum") return "highlight-top-optimum-bg";
@@ -267,21 +311,11 @@ export function Table(props: {
 							)}
 
 							{picks && (<td>{row.ggDisplay}</td>)}
-							<td className={picks ? cellClass(row.highlight1) : undefined}>
-								{player.betDisplay1}
-							</td>
-							<td className={picks ? cellClass(row.highlight2) : undefined}>
-								{player.betDisplay2}
-							</td>
-							<td className={picks ? cellClass(row.highlight3) : undefined}>
-								{player.betDisplay3}
-							</td>
-							<td className={picks ? cellClass(row.highlight4) : undefined}>
-								{player.betDisplay4}
-							</td>
-							<td className={picks ? cellClass(row.highlightAvg) : undefined}>
-								{player.betDisplayAvg}
-							</td>
+							{renderBetCell(player.betDisplay1, picks ? row.highlight1 : undefined, picks ? visibleStrategyFor(row, 'bet1') : undefined)}
+							{renderBetCell(player.betDisplay2, picks ? row.highlight2 : undefined, picks ? visibleStrategyFor(row, 'bet2') : undefined)}
+							{renderBetCell(player.betDisplay3, picks ? row.highlight3 : undefined, picks ? visibleStrategyFor(row, 'bet3') : undefined)}
+							{renderBetCell(player.betDisplay4, picks ? row.highlight4 : undefined, picks ? visibleStrategyFor(row, 'bet4') : undefined)}
+							{renderBetCell(player.betDisplayAvg, picks ? row.highlightAvg : undefined, picks ? visibleStrategyFor(row, 'betAvg') : undefined)}
 							{!picks && (<td>{(row.pick === 0 ? "-" : row.pick)}</td>)}
 							{!picks && (<td className="cell-container">{row.gameTime?.toLocaleTimeString([], timeFormat)}</td>)}
 						</tr>

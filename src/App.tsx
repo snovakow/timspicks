@@ -3,7 +3,7 @@ import './App.css';
 import './Stats.css';
 import * as Picks from './components/Table';
 import Popup from './components/Popup';
-import InfoPopupContent from './InfoPopupContent';
+import InfoPopupContent, { LegendPopupContent } from './InfoPopupContent';
 import SettingsPanel from './components/Settings';
 import { poissonChance, roundToPercent, probabilityToAmerican } from './utility';
 import { loadInitialData, buildGamesList, buildPlayerList, buildNormalizedNameMap, mapPlayers, compilePlayerList } from './dataProcessor';
@@ -15,6 +15,7 @@ import logo4 from './images/sb-logo-16-betrivers.svg';
 import iconSettings from './images/settings_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconStats from './images/leaderboard_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconInfo from './images/info_i_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
+import iconLegend from './images/legend_toggle_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyDark from './images/sports_hockey_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyLight from './images/sports_hockey_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
 
@@ -300,7 +301,7 @@ function App() {
 
 	const [showPopup, setShowPopup] = useState({ visible: false, title: 'Stats', key: 'betAvg' });
 	const [popupStats, setPopupStats] = useState<LogStat[]>([]);
-	const [popupView, setPopupView] = useState<'info' | 'stats' | 'settings'>('stats');
+	const [popupView, setPopupView] = useState<'info' | 'legend' | 'stats' | 'settings'>('stats');
 
 	const closePopup = () => {
 		setShowPopup({ ...showPopup, visible: false });
@@ -318,6 +319,11 @@ function App() {
 	const openInfoPopup = () => {
 		setPopupView('info');
 		setShowPopup({ visible: true, title: 'Info', key: showPopup.key });
+	};
+
+	const openLegendPopup = () => {
+		setPopupView('legend');
+		setShowPopup({ visible: true, title: 'Legend', key: showPopup.key });
 	};
 
 	const openSettingsPopup = () => {
@@ -383,25 +389,23 @@ function App() {
 		<>
 			<header>
 				<div className='toolBar' style={{ justifySelf: 'start' }}>
-					<button className="button"
+					<button className="button" title="Settings" aria-label="Settings"
 						onClick={
 							() => {
 								if (showPopup.visible && popupView === 'settings') closePopup();
 								else openSettingsPopup();
 							}
-						}
-						aria-label="Settings">
+						}>
 						<img src={iconSettings} alt="⚙" />
 					</button>
-					<button className="button"
+					<button className="button" title="Stats" aria-label="Stats"
 						onClick={
 							() => {
 								if (showPopup.visible && popupView === 'stats') closePopup();
 								else openStatsPopup('betAvg', 'Stats');
 							}
-						}
-						aria-label="Stats">
-						<img src={iconStats} alt="" aria-hidden="true" />
+						}>
+						<img src={iconStats} alt="📊" aria-hidden="true" />
 					</button>
 				</div>
 				<span className="header-title">
@@ -409,15 +413,23 @@ function App() {
 					Tims Hockey Picks
 				</span>
 				<div className='toolBar' style={{ justifySelf: 'end' }}>
-					<button className="button"
+					<button className="button" title="Legend" aria-label="Legend"
+						onClick={
+							() => {
+								if (showPopup.visible && popupView === 'legend') closePopup();
+								else openLegendPopup();
+							}
+						}>
+						<img src={iconLegend} alt="ℹ️" aria-hidden="true" />
+					</button>
+					<button className="button" title="Info" aria-label="Info"
 						onClick={
 							() => {
 								if (showPopup.visible && popupView === 'info') closePopup();
 								else openInfoPopup();
 							}
-						}
-						aria-label="Info">
-						<img src={iconInfo} alt="" aria-hidden="true" />
+						}>
+						<img src={iconInfo} alt="?" aria-hidden="true" />
 					</button>
 				</div>
 			</header>
@@ -425,6 +437,8 @@ function App() {
 				<Popup title={showPopup.title} showPopUp={showPopup.visible} closePopUp={closePopup}>
 					{popupView === 'info' ? (
 						<InfoPopupContent />
+					) : popupView === 'legend' ? (
+						<LegendPopupContent />
 					) : popupView === 'settings' ? (
 						<SettingsPanel
 							showPercentage={showPercentage}

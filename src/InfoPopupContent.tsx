@@ -61,18 +61,53 @@ export default function InfoPopupContent() {
 				</p>
 			</section>
 
+			<section className="info-popup-section info-popup-contact">
+				<h3>Contact</h3>
+				<p><a href="mailto:snovakow@gmail.com">snovakow@gmail.com</a></p>
+			</section>
+		</div>
+	);
+}
+
+export function LegendPopupContent() {
+	return (
+		<div className="info-popup-layout">
 			<section className="info-popup-section">
-				<h3>Highlight Legend</h3>
-				<p><span className="info-chip info-chip-four-dot info-chip-four-dot-top">Top</span>
+				<h3>Highlight</h3>
+				<p><span className="info-chip-table-badge highlight-top-bg">
+					<span className="info-chip-table-badge-value">Top</span>
+					<span className="cell-strategy-dots" aria-hidden="true">
+						<span className="cell-strategy-dot cell-strategy-dot-streak cell-strategy-dot-active" />
+						<span className="cell-strategy-dot cell-strategy-dot-point cell-strategy-dot-active" />
+						<span className="cell-strategy-dot cell-strategy-dot-leaderboard cell-strategy-dot-active" />
+						<span className="cell-strategy-dot cell-strategy-dot-hybrid cell-strategy-dot-active" />
+					</span>
+				</span>
 					Highest-probability pick, but not optimal for any strategy.</p>
-				<p><span className="info-chip info-chip-four-dot info-chip-four-dot-top-optimum">Best</span>
+				<p><span className="info-chip-table-badge highlight-top-optimum-bg">
+					<span className="info-chip-table-badge-value">Best</span>
+					<span className="cell-strategy-dots" aria-hidden="true">
+						<span className="cell-strategy-dot cell-strategy-dot-streak cell-strategy-dot-active" />
+						<span className="cell-strategy-dot cell-strategy-dot-point cell-strategy-dot-active" />
+						<span className="cell-strategy-dot cell-strategy-dot-leaderboard cell-strategy-dot-active" />
+						<span className="cell-strategy-dot cell-strategy-dot-hybrid cell-strategy-dot-active" />
+					</span>
+				</span>
 					Highest-probability pick and optimal for a strategy.</p>
-				<p><span className="info-chip info-chip-four-dot info-chip-four-dot-optimum">Optimal</span>
+				<p><span className="info-chip-table-badge highlight-optimum-bg">
+					<span className="info-chip-table-badge-value">Optimal</span>
+					<span className="cell-strategy-dots" aria-hidden="true">
+						<span className="cell-strategy-dot cell-strategy-dot-streak cell-strategy-dot-active" />
+						<span className="cell-strategy-dot cell-strategy-dot-point cell-strategy-dot-active" />
+						<span className="cell-strategy-dot cell-strategy-dot-leaderboard cell-strategy-dot-active" />
+						<span className="cell-strategy-dot cell-strategy-dot-hybrid cell-strategy-dot-active" />
+					</span>
+				</span>
 					Not the highest-probability pick, but optimal for a strategy.</p>
 			</section>
 
 			<section className="info-popup-section">
-				<h3>Strategy Legend</h3>
+				<h3>Strategy</h3>
 				<p><span className="info-chip info-chip-left-dot info-chip-streak-left-dot">Green</span>
 					Best picks for streaks. Getting at least one pick correct for 7 straight days earns free coffee for a week.</p>
 				<p><span className="info-chip info-chip-left-dot info-chip-point-left-dot">Magenta</span>
@@ -82,11 +117,6 @@ export default function InfoPopupContent() {
 					Best picks for competing on the leaderboard. High-risk, high-reward strategy.</p>
 				<p><span className="info-chip info-chip-left-dot info-chip-hybrid-left-dot">Blue</span>
 					Hybrid strategy balanced between streak safety and point upside.</p>
-			</section>
-
-			<section className="info-popup-section info-popup-contact">
-				<h3>Contact</h3>
-				<p><a href="mailto:snovakow@gmail.com">snovakow@gmail.com</a></p>
 			</section>
 		</div>
 	);

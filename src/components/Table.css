@@ -100,6 +100,56 @@ td {
   padding: 0.5em;
 }
 
+.cell-bet-with-dots {
+  position: relative;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.cell-bet-value {
+  display: inline-block;
+}
+
+.cell-strategy-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 0.14rem;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.cell-strategy-dot {
+  width: 0.56rem;
+  height: 0.56rem;
+  border-radius: 50%;
+  opacity: 0.14;
+}
+
+.cell-strategy-dot-active {
+  opacity: 1;
+}
+
+.cell-strategy-dot-streak {
+  background-color: var(--highlight-streak-dot);
+}
+
+.cell-strategy-dot-point {
+  background-color: var(--highlight-point-dot);
+}
+
+.cell-strategy-dot-leaderboard {
+  background-color: var(--highlight-leaderboard-dot);
+}
+
+.cell-strategy-dot-hybrid {
+  background-color: var(--highlight-hybrid-dot);
+}
+
 :root {
   --highlight-top-bg: rgb(253, 226, 226);
   --highlight-top-optimum-bg: rgb(170, 235, 170);
