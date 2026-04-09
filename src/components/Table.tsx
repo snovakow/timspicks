@@ -157,7 +157,7 @@ export class Player {
 	}
 }
 
-export type ColumnKeys = "fullName" | "bet1" | "bet2" | "bet3" | "bet4" | "betAvg" | "ggRaw" | "pick" | "gameTime";
+export type ColumnKeys = 'fullName' | 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg' | 'ggRaw' | 'pick' | 'gameTime';
 export interface ColumnData {
 	key: ColumnKeys;
 	title: string;
@@ -173,19 +173,23 @@ export interface OddsItem {
 	goals: number;
 }
 
-export type HighlightMode = "none" | "top" | "top-optimum" | "optimum";
-export type StrategyMode = "streak" | "point" | "leaderboard" | "hybrid";
+export type HighlightMode = 'none' | 'top' | 'top-optimum' | 'optimum';
+export type StrategyMode = 'streak' | 'point' | 'leaderboard' | 'hybrid';
 export class PickOdds {
 	player: Player;
 
 	ggRaw: number;
 	ggDisplay: string;
-	highlight1: HighlightMode = "none";
-	highlight2: HighlightMode = "none";
-	highlight3: HighlightMode = "none";
-	highlight4: HighlightMode = "none";
-	highlightAvg: HighlightMode = "none";
-	strategy: Set<StrategyMode> = new Set();
+	highlight1: HighlightMode = 'none';
+	highlight2: HighlightMode = 'none';
+	highlight3: HighlightMode = 'none';
+	highlight4: HighlightMode = 'none';
+	highlightAvg: HighlightMode = 'none';
+	strategy1: Set<StrategyMode> = new Set();
+	strategy2: Set<StrategyMode> = new Set();
+	strategy3: Set<StrategyMode> = new Set();
+	strategy4: Set<StrategyMode> = new Set();
+	strategyAvg: Set<StrategyMode> = new Set();
 	constructor(player: Player, item: OddsItem) {
 		this.player = player;
 		this.ggRaw = item.gamesPlayed > 0 ? item.goals / item.gamesPlayed : 0;

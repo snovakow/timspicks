@@ -16,11 +16,9 @@ export interface LogStat {
 export type LogStatsKey = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg';
 export type PickIndex = 1 | 2 | 3;
 export type StatsHighlightMode = 'top' | 'top-optimum' | 'optimum';
-export type HighlightByPick = Record<PickIndex, Map<number, StatsHighlightMode>>;
 
 export interface LogStatsCacheItem {
 	stats: LogStat[];
-	highlightByPick: HighlightByPick;
 }
 
 export const cloneLogStats = (stats: LogStat[]): LogStat[] => {
@@ -38,7 +36,7 @@ export const calculateStats = (
 	table2Rows: Picks.PickOdds[],
 	table3Rows: Picks.PickOdds[],
 	stats: LogStat[]
-): HighlightByPick => {
+): void => {
 	let logSection = 0;
 	let dataStatsPrev: LogStat | null = null;
 
@@ -95,29 +93,35 @@ export const calculateStats = (
 		addLog(title, 'center', true);
 	}
 
-	const highlightByPick: HighlightByPick = {
-		1: new Map<number, StatsHighlightMode>(),
-		2: new Map<number, StatsHighlightMode>(),
-		3: new Map<number, StatsHighlightMode>(),
+	const getHighlight = (item: Picks.PickOdds): Picks.HighlightMode => {
+		if (betKey === 'bet1') return item.highlight1;
+		if (betKey === 'bet2') return item.highlight2;
+		if (betKey === 'bet3') return item.highlight3;
+		if (betKey === 'bet4') return item.highlight4;
+		return item.highlightAvg;
 	};
 
-	const addPlayersToHighlight = (pick: PickIndex, players: Set<Picks.Player>, mode: StatsHighlightMode) => {
-		for (const player of players) {
-			const has = highlightByPick[pick].get(player.playerId);
-			if (has) {
-				if (has === 'top-optimum') continue;
-				if (has === 'top' && mode === 'optimum') highlightByPick[pick].set(player.playerId, 'top-optimum');
-				else highlightByPick[pick].set(player.playerId, mode);
-			} else {
-				highlightByPick[pick].set(player.playerId, mode);
-			}
+	const setHighlight = (item: Picks.PickOdds, mode: StatsHighlightMode) => {
+		if (betKey === 'bet1') item.highlight1 = mode;
+		else if (betKey === 'bet2') item.highlight2 = mode;
+		else if (betKey === 'bet3') item.highlight3 = mode;
+		else if (betKey === 'bet4') item.highlight4 = mode;
+		else item.highlightAvg = mode;
+	};
+
+	const addPlayersToHighlight = (players: Set<Picks.PickOdds>, mode: StatsHighlightMode) => {
+		for (const item of players) {
+			const has = getHighlight(item);
+			if (has === 'top-optimum') continue;
+			if (has === 'top' && mode === 'optimum') setHighlight(item, 'top-optimum');
+			else setHighlight(item, mode);
 		}
 	};
 
 	const printName = (player: Picks.Player) => `${player.fullName} (${player.team.code})`;
-	const names = (players: Set<Picks.Player>, shortTab: boolean = false) => {
+	const names = (players: Set<Picks.PickOdds>, shortTab: boolean = false) => {
 		const names: string[] = [];
-		for (const player of players) names.push(printName(player));
+		for (const pick of players) names.push(printName(pick.player));
 		return names.join(shortTab ? "\n   " : "\n           ");
 	}
 
@@ -140,13 +144,13 @@ export const calculateStats = (
 	type Collide = 'on' | 'opp' | 'game' | 'none';
 	class Choice {
 		avg: number;
-		player: Picks.Player;
+		pick: Picks.PickOdds;
 		on: Team;
 		opp: Team;
-		constructor(player: Picks.Player, avg: number, opp: Team) {
+		constructor(pick: Picks.PickOdds, avg: number, opp: Team) {
 			this.avg = avg;
-			this.player = player;
-			this.on = player.team.code;
+			this.pick = pick;
+			this.on = pick.player.team.code;
 			this.opp = opp;
 		}
 		collides(player: Picks.Player, mode: Collide): boolean {
@@ -171,7 +175,7 @@ export const calculateStats = (
 			if (betKey === 'betAvg' && row.player.betCount < minSportsbooks) continue;
 			const opp = gamesMap.get(row.player.team.code);
 			if (opp === undefined) continue;
-			choices.push(new Choice(row.player, avg, opp));
+			choices.push(new Choice(row, avg, opp));
 		}
 		return choices;
 	};
@@ -187,25 +191,25 @@ export const calculateStats = (
 	}
 
 	class Result {
-		players1: Set<Picks.Player>;
-		players2: Set<Picks.Player>;
-		players3: Set<Picks.Player>;
+		players1: Set<Picks.PickOdds>;
+		players2: Set<Picks.PickOdds>;
+		players3: Set<Picks.PickOdds>;
 		avg1: number;
 		avg2: number;
 		avg3: number;
 		constructor(combo: BestCombo) {
-			this.players1 = new Set([combo.pick1.player]);
-			this.players2 = new Set([combo.pick2.player]);
-			this.players3 = new Set([combo.pick3.player]);
+			this.players1 = new Set([combo.pick1.pick]);
+			this.players2 = new Set([combo.pick2.pick]);
+			this.players3 = new Set([combo.pick3.pick]);
 			this.avg1 = combo.pick1.avg;
 			this.avg2 = combo.pick2.avg;
 			this.avg3 = combo.pick3.avg;
 		}
 		merge(combo: BestCombo): boolean {
 			if (this.avg1 !== combo.pick1.avg || this.avg2 !== combo.pick2.avg || this.avg3 !== combo.pick3.avg) return false;
-			this.players1.add(combo.pick1.player);
-			this.players2.add(combo.pick2.player);
-			this.players3.add(combo.pick3.player);
+			this.players1.add(combo.pick1.pick);
+			this.players2.add(combo.pick2.pick);
+			this.players3.add(combo.pick3.pick);
 			return true;
 		}
 	}
@@ -262,45 +266,45 @@ export const calculateStats = (
 				for (const pick3 of choices3) {
 					top.add(pick1, pick2, pick3);
 					if (gamesList.length >= 3) {
-						if (!pick1.collides(pick2.player, 'game') &&
-							!pick2.collides(pick3.player, 'game') &&
-							!pick1.collides(pick3.player, 'game')) {
+						if (!pick1.collides(pick2.pick.player, 'game') &&
+							!pick2.collides(pick3.pick.player, 'game') &&
+							!pick1.collides(pick3.pick.player, 'game')) {
 							streak.add(pick1, pick2, pick3);
 						}
 					}
 
-					if (pick1.collides(pick2.player, 'on') &&
-						!pick3.collides(pick1.player, 'game')) {
+					if (pick1.collides(pick2.pick.player, 'on') &&
+						!pick3.collides(pick1.pick.player, 'game')) {
 						points.add(pick1, pick2, pick3);
 						if (gamesList.length === 2) streak.add(pick1, pick2, pick3);
 					}
-					if (pick1.collides(pick3.player, 'on') &&
-						!pick2.collides(pick1.player, 'game')) {
+					if (pick1.collides(pick3.pick.player, 'on') &&
+						!pick2.collides(pick1.pick.player, 'game')) {
 						points.add(pick1, pick2, pick3);
 						if (gamesList.length === 2) streak.add(pick1, pick2, pick3);
 					}
-					if (pick2.collides(pick3.player, 'on') &&
-						!pick1.collides(pick2.player, 'game')) {
+					if (pick2.collides(pick3.pick.player, 'on') &&
+						!pick1.collides(pick2.pick.player, 'game')) {
 						points.add(pick1, pick2, pick3);
 						if (gamesList.length === 2) streak.add(pick1, pick2, pick3);
 					}
 
-					if (pick1.collides(pick2.player, 'on') && pick2.collides(pick3.player, 'on')) {
+					if (pick1.collides(pick2.pick.player, 'on') && pick2.collides(pick3.pick.player, 'on')) {
 						leader.add(pick1, pick2, pick3);
 						if (gamesList.length === 1) points.add(pick1, pick2, pick3);
 					}
 
 					if (gamesList.length === 1) {
-						if (pick1.collides(pick2.player, 'on') &&
-							pick3.collides(pick1.player, 'opp')) {
+						if (pick1.collides(pick2.pick.player, 'on') &&
+							pick3.collides(pick1.pick.player, 'opp')) {
 							streak.add(pick1, pick2, pick3);
 						}
-						if (pick1.collides(pick3.player, 'on') &&
-							pick2.collides(pick1.player, 'opp')) {
+						if (pick1.collides(pick3.pick.player, 'on') &&
+							pick2.collides(pick1.pick.player, 'opp')) {
 							streak.add(pick1, pick2, pick3);
 						}
-						if (pick2.collides(pick3.player, 'on') &&
-							pick1.collides(pick2.player, 'opp')) {
+						if (pick2.collides(pick3.pick.player, 'on') &&
+							pick1.collides(pick2.pick.player, 'opp')) {
 							streak.add(pick1, pick2, pick3);
 						}
 					}
@@ -325,9 +329,9 @@ export const calculateStats = (
 	}
 
 	const logHighlights = (avgResult: Result, mode: StatsHighlightMode) => {
-		addPlayersToHighlight(1, avgResult.players1, mode);
-		addPlayersToHighlight(2, avgResult.players2, mode);
-		addPlayersToHighlight(3, avgResult.players3, mode);
+		addPlayersToHighlight(avgResult.players1, mode);
+		addPlayersToHighlight(avgResult.players2, mode);
+		addPlayersToHighlight(avgResult.players3, mode);
 	}
 
 	const logTopPicks = (avgResult: Result) => {
@@ -370,11 +374,10 @@ export const calculateStats = (
 	const logFooter = () => {
 		addLogTitle("Good Ranges");
 		addLog("Any: 66-67% - Avg: 30-31% - All: 2-3%", 'center');
-		return highlightByPick;
 	}
 
 	const { top, streak, points, leader } = calcCombos();
-	if (top.combos.length === 0) return highlightByPick;
+	if (top.combos.length === 0) return;
 
 	const topResult: Result[] = top.merge();
 	const streakResult: Result[] = streak.merge();
@@ -389,11 +392,24 @@ export const calculateStats = (
 
 	const maxResult: Result = topResult[0];
 
+	const setStrategy = (pick: Picks.PickOdds, mode: Picks.StrategyMode) => {
+		if (betKey === 'bet1') pick.strategy1.add(mode);
+		else if (betKey === 'bet2') pick.strategy2.add(mode);
+		else if (betKey === 'bet3') pick.strategy3.add(mode);
+		else if (betKey === 'bet4') pick.strategy4.add(mode);
+		else pick.strategyAvg.add(mode);
+	};
+	const addStrategyHighlights = (result: Result, strategy: Picks.StrategyMode) => {
+		for (const pick of result.players1) setStrategy(pick, strategy);
+		for (const pick of result.players2) setStrategy(pick, strategy);
+		for (const pick of result.players3) setStrategy(pick, strategy);
+	}
 	if (gamesList.length > 2 && streak.total > 0) {
 		addLogTitle("Streak");
 		for (const avgResult of streakResult) {
 			logReduced(avgResult, maxResult, top.total);
 			logHighlights(avgResult, 'optimum');
+			addStrategyHighlights(avgResult, 'streak');
 		}
 	}
 	if (gamesList.length > 1 && points.total > 0) {
@@ -402,6 +418,8 @@ export const calculateStats = (
 		for (const avgResult of pointsResult) {
 			logReduced(avgResult, maxResult, top.total);
 			logHighlights(avgResult, 'optimum');
+			if (gamesList.length === 2) addStrategyHighlights(avgResult, 'streak');
+			addStrategyHighlights(avgResult, 'point');
 		}
 	}
 	if (leader.total > 0) {
@@ -410,10 +428,12 @@ export const calculateStats = (
 		for (const avgResult of leaderResult) {
 			logReduced(avgResult, maxResult, top.total);
 			logHighlights(avgResult, 'optimum');
+			if (gamesList.length === 1) addStrategyHighlights(avgResult, 'point');
+			addStrategyHighlights(avgResult, 'leaderboard');
 		}
 	}
 
-	return logFooter();
+	logFooter();
 };
 
 // 2023-10-10 2024-04-19 2024-04-20 2024-06-24
@@ -433,10 +453,9 @@ export const precalculateLogStats = (
 
 	for (const key of keys) {
 		const stats: LogStat[] = [];
-		const highlightByPick = calculateStats(key, minSportsbooks, gamesList, table1Rows, table2Rows, table3Rows, stats);
+		calculateStats(key, minSportsbooks, gamesList, table1Rows, table2Rows, table3Rows, stats);
 		cache[key] = {
 			stats: cloneLogStats(stats),
-			highlightByPick,
 		};
 	}
 

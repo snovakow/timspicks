@@ -90,8 +90,6 @@ const makeSort = (sortConfig: Picks.SortConfig) => {
 	};
 }
 
-type PickIndex = 1 | 2 | 3;
-
 interface InitializedData {
 	gamesList: Picks.GameData[];
 	playerList: Picks.Player[];
@@ -297,28 +295,6 @@ function App() {
 			memoizedDisplayData.table2Rows,
 			memoizedDisplayData.table3Rows
 		);
-		// Apply opp/any highlights from stats onto the rows
-		const allPickRows: [Picks.PickOdds[], PickIndex][] = [
-			[memoizedDisplayData.table1Rows, 1],
-			[memoizedDisplayData.table2Rows, 2],
-			[memoizedDisplayData.table3Rows, 3],
-		];
-		const keys: LogStatsKey[] = ['bet1', 'bet2', 'bet3', 'bet4', 'betAvg'];
-		for (const key of keys) {
-			const highlightByPick = cache[key].highlightByPick;
-			for (const [rows, pick] of allPickRows) {
-				const playerModes = highlightByPick[pick];
-				for (const row of rows) {
-					const mode = playerModes.get(row.player.playerId);
-					if (mode === undefined) continue;
-					if (key === 'bet1') row.highlight1 = mode;
-					else if (key === 'bet2') row.highlight2 = mode;
-					else if (key === 'bet3') row.highlight3 = mode;
-					else if (key === 'bet4') row.highlight4 = mode;
-					else if (row.player.betCount >= minSportsbooks) row.highlightAvg = mode;
-				}
-			}
-		}
 		return cache;
 	}, [memoizedDisplayData, minSportsbooks]);
 
