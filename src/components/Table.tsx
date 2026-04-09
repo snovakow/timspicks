@@ -173,18 +173,17 @@ export interface OddsItem {
 	goals: number;
 }
 
-export type HighlightMode = 'none' | 'top' | 'top-optimum' | 'optimum';
-export type StrategyMode = 'streak' | 'point' | 'leaderboard' | 'hybrid';
+export type StrategyMode = 'streak' | 'point' | 'leaderboard' | 'hybrid' | 'top';
 export class PickOdds {
 	player: Player;
 
 	ggRaw: number;
 	ggDisplay: string;
-	highlight1: HighlightMode = 'none';
-	highlight2: HighlightMode = 'none';
-	highlight3: HighlightMode = 'none';
-	highlight4: HighlightMode = 'none';
-	highlightAvg: HighlightMode = 'none';
+	highlight1: boolean = false;
+	highlight2: boolean = false;
+	highlight3: boolean = false;
+	highlight4: boolean = false;
+	highlightAvg: boolean = false;
 	strategy1: Set<StrategyMode> = new Set();
 	strategy2: Set<StrategyMode> = new Set();
 	strategy3: Set<StrategyMode> = new Set();
@@ -230,6 +229,7 @@ export function Table(props: {
 				<span className={`cell-strategy-dot cell-strategy-dot-point${strategy.has('point') ? ' cell-strategy-dot-active' : ''}`} />
 				<span className={`cell-strategy-dot cell-strategy-dot-leaderboard${strategy.has('leaderboard') ? ' cell-strategy-dot-active' : ''}`} />
 				<span className={`cell-strategy-dot cell-strategy-dot-hybrid${strategy.has('hybrid') ? ' cell-strategy-dot-active' : ''}`} />
+				<span className={`cell-strategy-dot cell-strategy-dot-top${strategy.has('top') ? ' cell-strategy-dot-active' : ''}`} />
 			</span>
 		);
 	};
@@ -244,7 +244,7 @@ export function Table(props: {
 		const strategy = strategyFor(row, key);
 		return strategy.size > 0 ? strategy : undefined;
 	};
-	const renderBetCell = (value: string, highlight?: HighlightMode, strategy?: Set<StrategyMode>) => {
+	const renderBetCell = (value: string, highlight?: boolean, strategy?: Set<StrategyMode>) => {
 		const classes = [highlight ? cellClass(highlight) : undefined, strategy ? 'cell-bet-with-dots' : undefined]
 			.filter(Boolean)
 			.join(' ');
@@ -255,10 +255,8 @@ export function Table(props: {
 			</td>
 		);
 	};
-	const cellClass = (highlight: HighlightMode): string | undefined => {
-		if (highlight === 'top') return "highlight-top-bg";
-		if (highlight === "top-optimum") return "highlight-top-optimum-bg";
-		if (highlight === "optimum") return "highlight-optimum-bg";
+	const cellClass = (highlight: boolean): string | undefined => {
+		if (highlight) return "highlight-top-bg";
 		return undefined;
 	};
 	return (

@@ -245,11 +245,11 @@ function App() {
 
 		const clearArray = (array: Picks.PickOdds[]) => {
 			for (const row of array) {
-				row.highlight1 = 'none';
-				row.highlight2 = 'none';
-				row.highlight3 = 'none';
-				row.highlight4 = 'none';
-				row.highlightAvg = 'none';
+				row.highlight1 = false;
+				row.highlight2 = false;
+				row.highlight3 = false;
+				row.highlight4 = false;
+				row.highlightAvg = false;
 				row.strategy1.clear();
 				row.strategy2.clear();
 				row.strategy3.clear();

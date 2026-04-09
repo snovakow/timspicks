@@ -73,50 +73,31 @@ export function LegendPopupContent() {
 	return (
 		<div className="info-popup-layout">
 			<section className="info-popup-section">
-				<h3>Highlight</h3>
-				<p><span className="info-chip-table-badge highlight-top-bg">
-					<span className="info-chip-table-badge-value">Top</span>
+				<p className="legend-pick-row"><span className="cell-bet-with-dots legend-badge-cell highlight-top-bg">
+					<span className="cell-bet-value">Pick</span>
 					<span className="cell-strategy-dots" aria-hidden="true">
 						<span className="cell-strategy-dot cell-strategy-dot-streak cell-strategy-dot-active" />
 						<span className="cell-strategy-dot cell-strategy-dot-point cell-strategy-dot-active" />
 						<span className="cell-strategy-dot cell-strategy-dot-leaderboard cell-strategy-dot-active" />
 						<span className="cell-strategy-dot cell-strategy-dot-hybrid cell-strategy-dot-active" />
+						<span className="cell-strategy-dot cell-strategy-dot-top cell-strategy-dot-active" />
 					</span>
 				</span>
-					Highest-probability pick, but not optimal for any strategy.</p>
-				<p><span className="info-chip-table-badge highlight-top-optimum-bg">
-					<span className="info-chip-table-badge-value">Best</span>
-					<span className="cell-strategy-dots" aria-hidden="true">
-						<span className="cell-strategy-dot cell-strategy-dot-streak cell-strategy-dot-active" />
-						<span className="cell-strategy-dot cell-strategy-dot-point cell-strategy-dot-active" />
-						<span className="cell-strategy-dot cell-strategy-dot-leaderboard cell-strategy-dot-active" />
-						<span className="cell-strategy-dot cell-strategy-dot-hybrid cell-strategy-dot-active" />
-					</span>
-				</span>
-					Highest-probability pick and optimal for a strategy.</p>
-				<p><span className="info-chip-table-badge highlight-optimum-bg">
-					<span className="info-chip-table-badge-value">Optimal</span>
-					<span className="cell-strategy-dots" aria-hidden="true">
-						<span className="cell-strategy-dot cell-strategy-dot-streak cell-strategy-dot-active" />
-						<span className="cell-strategy-dot cell-strategy-dot-point cell-strategy-dot-active" />
-						<span className="cell-strategy-dot cell-strategy-dot-leaderboard cell-strategy-dot-active" />
-						<span className="cell-strategy-dot cell-strategy-dot-hybrid cell-strategy-dot-active" />
-					</span>
-				</span>
-					Not the highest-probability pick, but optimal for a strategy.</p>
+					<span className="legend-pick-text">Green background highlight indicates a highest-probability pick, with circular badges indicating which strategies correspond to the pick.</span></p>
 			</section>
 
 			<section className="info-popup-section">
 				<h3>Strategy</h3>
-				<p><span className="info-chip info-chip-left-dot info-chip-streak-left-dot">Green</span>
-					Best picks for streaks. Getting at least one pick correct for 7 straight days earns free coffee for a week.</p>
-				<p><span className="info-chip info-chip-left-dot info-chip-point-left-dot">Magenta</span>
-					Best picks for maximum points. 1 correct = 25 points, 2 correct = 50 points, 3 correct = 100 points. Also strong for streaks
-					and the best overall strategy.</p>
-				<p><span className="info-chip info-chip-left-dot info-chip-leaderboard-left-dot">Amber</span>
-					Best picks for competing on the leaderboard. High-risk, high-reward strategy.</p>
-				<p><span className="info-chip info-chip-left-dot info-chip-hybrid-left-dot">Blue</span>
-					Hybrid strategy balanced between streak safety and point upside.</p>
+				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-streak-left-dot" aria-hidden="true" />
+					<span className="legend-strategy-text"><strong>Streak (Green):</strong> Best picks for streaks. Getting at least one pick correct for 7 straight days earns free coffee for a week.</span></p>
+				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-point-left-dot" aria-hidden="true" />
+					<span className="legend-strategy-text"><strong>Points (Magenta):</strong> Best picks for maximum points. 1 correct = 25 points, 2 correct = 50 points, 3 correct = 100 points. Also strong for streaks and the best overall strategy.</span></p>
+				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-leaderboard-left-dot" aria-hidden="true" />
+					<span className="legend-strategy-text"><strong>Leaderboard (Amber):</strong> Best picks for competing on the leaderboard. High-risk, high-reward strategy.</span></p>
+				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-hybrid-left-dot" aria-hidden="true" />
+					<span className="legend-strategy-text"><strong>Hybrid (Blue):</strong> Hybrid strategy balanced between streak safety and point upside. Points strategy is the best hybrid solution.</span></p>
+				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-top-left-dot" aria-hidden="true" />
+					<span className="legend-strategy-text"><strong>Top (Navy):</strong> Highest-probability pick.</span></p>
 			</section>
 		</div>
 	);

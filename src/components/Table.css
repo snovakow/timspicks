@@ -150,15 +150,18 @@ td {
   background-color: var(--highlight-hybrid-dot);
 }
 
+.cell-strategy-dot-top {
+  background-color: var(--highlight-top-dot);
+}
+
 :root {
-  --highlight-top-bg: rgb(253, 226, 226);
-  --highlight-top-optimum-bg: rgb(170, 235, 170);
-  --highlight-optimum-bg: rgb(220, 238, 255);
+  --highlight-top-bg: rgb(170, 235, 170);
 
   --highlight-streak-dot: rgb(31, 157, 85);
   --highlight-point-dot: rgb(196, 58, 138);
   --highlight-leaderboard-dot: rgb(200, 138, 0);
   --highlight-hybrid-dot: rgb(74, 123, 192);
+  --highlight-top-dot: rgb(7, 76, 135);
 }
 
 .highlight-top-bg {
@@ -166,33 +169,23 @@ td {
   background-color: var(--highlight-top-bg);
 }
 
-.highlight-top-optimum-bg {
-  color: #000;
-  background-color: var(--highlight-top-optimum-bg);
-}
-
-.highlight-optimum-bg {
-  color: #000;
-  background-color: var(--highlight-optimum-bg);
-}
-
 .highlight-streak-dot {
-  color: #000;
+  color: #111;
   background-color: var(--highlight-streak-dot);
 }
 
 .highlight-point-dot {
-  color: #000;
+  color: #111;
   background-color: var(--highlight-point-dot);
 }
 
 .highlight-leaderboard-dot {
-  color: #000;
+  color: #111;
   background-color: var(--highlight-leaderboard-dot);
 }
 
 .highlight-hybrid-dot {
-  color: #000;
+  color: #111;
   background-color: var(--highlight-hybrid-dot);
 }
 

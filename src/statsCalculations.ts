@@ -15,7 +15,6 @@ export interface LogStat {
 
 export type LogStatsKey = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg';
 export type PickIndex = 1 | 2 | 3;
-export type StatsHighlightMode = 'top' | 'top-optimum' | 'optimum';
 
 export interface LogStatsCacheItem {
 	stats: LogStat[];
@@ -93,28 +92,13 @@ export const calculateStats = (
 		addLog(title, 'center', true);
 	}
 
-	const getHighlight = (item: Picks.PickOdds): Picks.HighlightMode => {
-		if (betKey === 'bet1') return item.highlight1;
-		if (betKey === 'bet2') return item.highlight2;
-		if (betKey === 'bet3') return item.highlight3;
-		if (betKey === 'bet4') return item.highlight4;
-		return item.highlightAvg;
-	};
-
-	const setHighlight = (item: Picks.PickOdds, mode: StatsHighlightMode) => {
-		if (betKey === 'bet1') item.highlight1 = mode;
-		else if (betKey === 'bet2') item.highlight2 = mode;
-		else if (betKey === 'bet3') item.highlight3 = mode;
-		else if (betKey === 'bet4') item.highlight4 = mode;
-		else item.highlightAvg = mode;
-	};
-
-	const addPlayersToHighlight = (players: Set<Picks.PickOdds>, mode: StatsHighlightMode) => {
-		for (const item of players) {
-			const has = getHighlight(item);
-			if (has === 'top-optimum') continue;
-			if (has === 'top' && mode === 'optimum') setHighlight(item, 'top-optimum');
-			else setHighlight(item, mode);
+	const addPlayersToHighlight = (players: Set<Picks.PickOdds>) => {
+		for (const pick of players) {
+			if (betKey === 'bet1') pick.highlight1 = true;
+			else if (betKey === 'bet2') pick.highlight2 = true;
+			else if (betKey === 'bet3') pick.highlight3 = true;
+			else if (betKey === 'bet4') pick.highlight4 = true;
+			else pick.highlightAvg = true;
 		}
 	};
 
@@ -328,10 +312,10 @@ export const calculateStats = (
 		logSection++;
 	}
 
-	const logHighlights = (avgResult: Result, mode: StatsHighlightMode) => {
-		addPlayersToHighlight(avgResult.players1, mode);
-		addPlayersToHighlight(avgResult.players2, mode);
-		addPlayersToHighlight(avgResult.players3, mode);
+	const logHighlights = (avgResult: Result) => {
+		addPlayersToHighlight(avgResult.players1);
+		addPlayersToHighlight(avgResult.players2);
+		addPlayersToHighlight(avgResult.players3);
 	}
 
 	const logTopPicks = (avgResult: Result) => {
@@ -376,22 +360,6 @@ export const calculateStats = (
 		addLog("Any: 66-67% - Avg: 30-31% - All: 2-3%", 'center');
 	}
 
-	const { top, streak, points, leader } = calcCombos();
-	if (top.combos.length === 0) return;
-
-	const topResult: Result[] = top.merge();
-	const streakResult: Result[] = streak.merge();
-	const pointsResult: Result[] = points.merge();
-	const leaderResult: Result[] = leader.merge();
-
-	addLogTitle("Top Picks");
-	for (const avgResult of topResult) {
-		logTopPicks(avgResult);
-		logHighlights(avgResult, 'top');
-	}
-
-	const maxResult: Result = topResult[0];
-
 	const setStrategy = (pick: Picks.PickOdds, mode: Picks.StrategyMode) => {
 		if (betKey === 'bet1') pick.strategy1.add(mode);
 		else if (betKey === 'bet2') pick.strategy2.add(mode);
@@ -404,11 +372,28 @@ export const calculateStats = (
 		for (const pick of result.players2) setStrategy(pick, strategy);
 		for (const pick of result.players3) setStrategy(pick, strategy);
 	}
+
+	const { top, streak, points, leader } = calcCombos();
+	if (top.combos.length === 0) return;
+
+	const topResult: Result[] = top.merge();
+	const streakResult: Result[] = streak.merge();
+	const pointsResult: Result[] = points.merge();
+	const leaderResult: Result[] = leader.merge();
+	const maxResult: Result = topResult[0];
+
+	addLogTitle("Top Picks");
+	for (const avgResult of topResult) {
+		logTopPicks(avgResult);
+		logHighlights(avgResult);
+		addStrategyHighlights(avgResult, 'top');
+	}
+
 	if (gamesList.length > 2 && streak.total > 0) {
 		addLogTitle("Streak");
 		for (const avgResult of streakResult) {
 			logReduced(avgResult, maxResult, top.total);
-			logHighlights(avgResult, 'optimum');
+			logHighlights(avgResult);
 			addStrategyHighlights(avgResult, 'streak');
 		}
 	}
@@ -417,9 +402,10 @@ export const calculateStats = (
 		else addLogTitle("Points");
 		for (const avgResult of pointsResult) {
 			logReduced(avgResult, maxResult, top.total);
-			logHighlights(avgResult, 'optimum');
+			logHighlights(avgResult);
 			if (gamesList.length === 2) addStrategyHighlights(avgResult, 'streak');
 			addStrategyHighlights(avgResult, 'point');
+			addStrategyHighlights(avgResult, 'hybrid');
 		}
 	}
 	if (leader.total > 0) {
@@ -427,8 +413,11 @@ export const calculateStats = (
 		else addLogTitle("Leaderboard");
 		for (const avgResult of leaderResult) {
 			logReduced(avgResult, maxResult, top.total);
-			logHighlights(avgResult, 'optimum');
-			if (gamesList.length === 1) addStrategyHighlights(avgResult, 'point');
+			logHighlights(avgResult);
+			if (gamesList.length === 1) {
+				addStrategyHighlights(avgResult, 'point');
+				addStrategyHighlights(avgResult, 'hybrid');
+			}
 			addStrategyHighlights(avgResult, 'leaderboard');
 		}
 	}
