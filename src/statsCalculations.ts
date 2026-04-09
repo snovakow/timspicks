@@ -315,23 +315,6 @@ export const calculateStats = (
 		};
 	}
 
-	const calcComboWithOpposing = (oppTeam: Team): ComboGroup => {
-		const group = new ComboGroup();
-		for (const pick1 of choices1) {
-			for (const pick2 of choices2) {
-				for (const pick3 of choices3) {
-					if (
-						pick1.player.team.code !== oppTeam
-						&& pick2.player.team.code !== oppTeam
-						&& pick3.player.team.code !== oppTeam
-					) continue;
-					group.add(pick1, pick2, pick3);
-				}
-			}
-		}
-		return group;
-	}
-
 	const comboPrecision = 2;
 	const logCalcStats = (avgResult: Result) => {
 		const any = roundToPercent(calcAny(avgResult.avg1, avgResult.avg2, avgResult.avg3), precision);
