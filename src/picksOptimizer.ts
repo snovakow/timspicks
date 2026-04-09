@@ -139,10 +139,10 @@ export function optimizePicks(picks1: Pick[], picks2: Pick[], picks3: Pick[]): O
     let bestLeaderboardVal = -Infinity;
     let bestHybridVal = -Infinity;
 
-    let top3Streak: ComboResult[] = [];
-    let top3Points: ComboResult[] = [];
-    let top3Leaderboard: ComboResult[] = [];
-    let top3Hybrid: ComboResult[] = [];
+    const top3Streak: ComboResult[] = [];
+    const top3Points: ComboResult[] = [];
+    const top3Leaderboard: ComboResult[] = [];
+    const top3Hybrid: ComboResult[] = [];
 
     const strategyScore = (strategy: StrategyKey, combo: EvalResult): number => {
         switch (strategy) {
