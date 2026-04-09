@@ -103,7 +103,14 @@ export const calculateStats = (
 
 	const addPlayersToHighlight = (pick: PickIndex, players: Set<Picks.Player>, mode: StatsHighlightMode) => {
 		for (const player of players) {
-			highlightByPick[pick].set(player.playerId, mode);
+			const has = highlightByPick[pick].get(player.playerId);
+			if (has) {
+				if (has === 'top-optimum') continue;
+				if (has === 'top' && mode === 'optimum') highlightByPick[pick].set(player.playerId, 'top-optimum');
+				else highlightByPick[pick].set(player.playerId, mode);
+			} else {
+				highlightByPick[pick].set(player.playerId, mode);
+			}
 		}
 	};
 
@@ -130,7 +137,7 @@ export const calculateStats = (
 		gamesMap.set(game.away.code, game.home.code);
 	}
 
-	type Collide = "on" | "opp" | "game" | "none";
+	type Collide = 'on' | 'opp' | 'game' | 'none';
 	class Choice {
 		avg: number;
 		player: Picks.Player;
