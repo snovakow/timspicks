@@ -107,6 +107,13 @@ function App() {
 	const [showPercentage, setShowPercentage] = useState(true);
 	const [deVigEnabled, setDeVigEnabled] = useState(true);
 	const [minSportsbooks, setMinSportsbooks] = useState(3);
+	const [enabledStrategies, setEnabledStrategies] = useState<Record<Picks.StrategyMode, boolean>>({
+		streak: false,
+		point: false,
+		leaderboard: false,
+		hybrid: false,
+		top: true,
+	});
 
 	const [needsSort1, setNeedsSort1] = useState<Picks.ColumnKeys>('ggRaw');
 	const [needsSort2, setNeedsSort2] = useState<Picks.ColumnKeys>('ggRaw');
@@ -160,6 +167,9 @@ function App() {
 	const requestSort2: Picks.RequestSort = useCallback((key) => setNeedsSort2(key), []);
 	const requestSort3: Picks.RequestSort = useCallback((key) => setNeedsSort3(key), []);
 	const requestSortPlayer: Picks.RequestSort = useCallback((key) => setNeedsSortPlayer(key), []);
+	const handleStrategyEnabledChange = useCallback((strategy: Picks.StrategyMode, value: boolean) => {
+		setEnabledStrategies((prev) => ({ ...prev, [strategy]: value }));
+	}, []);
 
 	const memoizedDisplayData = useMemo(() => {
 		if (!data) return null;
@@ -447,6 +457,8 @@ function App() {
 							onDeVigEnabledChange={setDeVigEnabled}
 							minSportsbooks={minSportsbooks}
 							onMinSportsbooksChange={setMinSportsbooks}
+							enabledStrategies={enabledStrategies}
+							onStrategyEnabledChange={handleStrategyEnabledChange}
 						/>
 					) : (
 						<>
@@ -490,19 +502,19 @@ function App() {
 				</div>
 				<div className="table-container">
 					<h2>Pick #1</h2>
-					<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} />
+					<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
 				</div>
 				<div className="table-container">
 					<h2>Pick #2</h2>
-					<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} />
+					<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
 				</div>
 				<div className="table-container">
 					<h2>Pick #3</h2>
-					<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} />
+					<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
 				</div>
 				<div className="table-container">
 					<h2>Players</h2>
-					<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} />
+					<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
 				</div>
 			</main>
 		</>

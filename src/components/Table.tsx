@@ -207,29 +207,30 @@ export function Table(props: {
 	sortedRows: (Player | PickOdds)[],
 	requestSort: RequestSort,
 	sortConfig: SortConfig,
-	darkTheme: boolean
+	darkTheme: boolean,
+	enabledStrategies: Record<StrategyMode, boolean>
 }) {
-	const { columns, sortedRows, requestSort, sortConfig, darkTheme } = props;
+	const { columns, sortedRows, requestSort, sortConfig, darkTheme, enabledStrategies } = props;
+	const orderedModes: StrategyMode[] = ['streak', 'point', 'leaderboard', 'hybrid', 'top'];
+	const enabledModes = orderedModes.filter((mode) => enabledStrategies[mode]);
 	const strategyLabel = (mode: StrategyMode): string => {
 		if (mode === 'streak') return 'Streak';
 		if (mode === 'point') return 'Points';
 		if (mode === 'leaderboard') return 'Leaderboard';
-		return 'Hybrid';
+		if (mode === 'hybrid') return 'Hybrid';
+		return 'Top';
 	};
 	const strategyTitle = (strategy: Set<StrategyMode>): string => {
-		const modes: StrategyMode[] = ['streak', 'point', 'leaderboard', 'hybrid'];
-		const active = modes.filter((mode) => strategy.has(mode));
+		const active = enabledModes.filter((mode) => strategy.has(mode));
 		if (active.length === 0) return 'No strategy tags';
 		return `Strategies: ${active.map(strategyLabel).join(', ')}`;
 	};
 	const renderStrategyDots = (strategy: Set<StrategyMode>) => {
 		return (
 			<span className='cell-strategy-dots' aria-hidden='true'>
-				<span className={`cell-strategy-dot cell-strategy-dot-streak${strategy.has('streak') ? ' cell-strategy-dot-active' : ''}`} />
-				<span className={`cell-strategy-dot cell-strategy-dot-point${strategy.has('point') ? ' cell-strategy-dot-active' : ''}`} />
-				<span className={`cell-strategy-dot cell-strategy-dot-leaderboard${strategy.has('leaderboard') ? ' cell-strategy-dot-active' : ''}`} />
-				<span className={`cell-strategy-dot cell-strategy-dot-hybrid${strategy.has('hybrid') ? ' cell-strategy-dot-active' : ''}`} />
-				<span className={`cell-strategy-dot cell-strategy-dot-top${strategy.has('top') ? ' cell-strategy-dot-active' : ''}`} />
+				{enabledModes.map((mode) => (
+					<span key={mode} className={`cell-strategy-dot cell-strategy-dot-${mode}${strategy.has(mode) ? ' cell-strategy-dot-active' : ''}`} />
+				))}
 			</span>
 		);
 	};
@@ -242,10 +243,10 @@ export function Table(props: {
 	};
 	const visibleStrategyFor = (row: PickOdds, key: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg'): Set<StrategyMode> | undefined => {
 		const strategy = strategyFor(row, key);
-		return strategy.size > 0 ? strategy : undefined;
+		return enabledModes.some((mode) => strategy.has(mode)) ? strategy : undefined;
 	};
 	const renderBetCell = (value: string, highlight?: boolean, strategy?: Set<StrategyMode>) => {
-		const classes = [highlight ? cellClass(highlight) : undefined, strategy ? 'cell-bet-with-dots' : undefined]
+		const classes = [highlight && strategy ? cellClass(highlight) : undefined, strategy ? 'cell-bet-with-dots' : undefined]
 			.filter(Boolean)
 			.join(' ');
 		return (

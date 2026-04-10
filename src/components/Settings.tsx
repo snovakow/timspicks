@@ -1,4 +1,5 @@
 import './Settings.css';
+import type { StrategyMode } from './Table';
 
 interface SettingsPanelProps {
 	showPercentage: boolean;
@@ -7,6 +8,8 @@ interface SettingsPanelProps {
 	onDeVigEnabledChange: (value: boolean) => void;
 	minSportsbooks: number;
 	onMinSportsbooksChange: (value: number) => void;
+	enabledStrategies: Record<StrategyMode, boolean>;
+	onStrategyEnabledChange: (strategy: StrategyMode, value: boolean) => void;
 }
 
 export default function SettingsPanel(props: SettingsPanelProps) {
@@ -17,7 +20,17 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 		onDeVigEnabledChange,
 		minSportsbooks,
 		onMinSportsbooksChange,
+		enabledStrategies,
+		onStrategyEnabledChange,
 	} = props;
+
+	const strategyOptions: Array<{ key: StrategyMode; label: string }> = [
+		{ key: 'streak', label: 'Streak' },
+		{ key: 'point', label: 'Points' },
+		{ key: 'leaderboard', label: 'Leaderboard' },
+		{ key: 'hybrid', label: 'Hybrid' },
+		{ key: 'top', label: 'Top' },
+	];
 
 	return (
 		<div className="settings-container">
@@ -72,6 +85,25 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 				</select>
 				<div className="settings-description">
 					Highlight Avg when at least this many sportsbooks have values.
+				</div>
+			</div>
+
+			<div className="settings-group">
+				<div className="settings-label">Pick Strategies</div>
+				<div className="settings-checkbox-group" role="group" aria-label="Pick strategies">
+					{strategyOptions.map((option) => (
+						<label key={option.key} className={`settings-checkbox-item settings-strategy-${option.key}`}>
+							<input
+								type="checkbox"
+								checked={enabledStrategies[option.key]}
+								onChange={(e) => onStrategyEnabledChange(option.key, e.target.checked)}
+							/>
+							{option.label}
+						</label>
+					))}
+				</div>
+				<div className="settings-description">
+					Select which strategies to display.
 				</div>
 			</div>
 
