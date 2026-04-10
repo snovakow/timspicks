@@ -3,7 +3,7 @@ import './App.css';
 import './Stats.css';
 import * as Picks from './components/Table';
 import Popup from './components/Popup';
-import InfoPopupContent, { LegendPopupContent } from './InfoPopupContent';
+import InfoPopupContent, { LegendPopupContent } from './components/InfoPopupContent';
 import SettingsPanel from './components/Settings';
 import { poissonChance, roundToPercent, probabilityToAmerican } from './utility';
 import { loadInitialData, buildGamesList, buildPlayerList, buildNormalizedNameMap, mapPlayers, compilePlayerList } from './dataProcessor';
