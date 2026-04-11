@@ -282,7 +282,7 @@ if ($live && isset($_GET['picks'])) {
 		$timestamp = new DateTime('now', $timezone);
 
 		$date = $timestamp->format('Y-m-d');
-		$time = $timestamp->format('H-i');
+		$time = $timestamp->format('Hi');
 		$backupPath = $basePath . '/' . $date;
 		$backupSubPath = $basePath . '/' . $date . '/' . $time;
 		if (!is_dir($backupPath)) mkdir($backupPath, 0755, true);
