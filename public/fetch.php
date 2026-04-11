@@ -33,8 +33,8 @@ if ($fetchHistory) {
 		'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
 	]);
 
-	$basePath = './history';
-	if (!is_dir($basePath)) mkdir($basePath, 0755, true);
+	$baseHistoryPath = './history';
+	if (!is_dir($baseHistoryPath)) mkdir($baseHistoryPath, 0755, true);
 
 	$dates = [
 		['season' => '2023-2024', 'format' => 'regular', 'start' => '2023-10-10', 'end' => '2024-04-18'],
@@ -86,7 +86,7 @@ if ($fetchHistory) {
 
 			$filename = "{$season}_{$date}_{$part}.json";
 			$files[] = $filename;
-			$local_file = $basePath . '/' . $filename;
+			$local_file = $baseHistoryPath . '/' . $filename;
 			file_put_contents($local_file, $response);
 			echo ("$filename<br>");
 		}
@@ -96,7 +96,7 @@ if ($fetchHistory) {
 
 	$json_string = json_encode($dates, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-	$local_file = $basePath . '/history.json';
+	$local_file = $baseHistoryPath . '/history.json';
 	if (file_put_contents($local_file, $json_string) === false) {
 		die('Error saving local JSON file.');
 	}
