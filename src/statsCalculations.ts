@@ -1,7 +1,8 @@
 import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
 import type { Team } from './components/logo';
-import { type Pick, optimizePicks } from './picksOptimizer';
+// import { runSimulation } from './picksOptimizer';
+// runSimulation();
 
 const precision = Picks.precision;
 
@@ -38,33 +39,6 @@ export const calculateStats = (
 ): void => {
 	let logSection = 0;
 	let dataStatsPrev: LogStat | null = null;
-
-	if (betKey === 'betAvg') {
-		const gamesMap = new Map<Team, string>();
-		for (const game of gamesList) {
-			const gameName = `${game.away.code} @ ${game.home.code}`;
-			gamesMap.set(game.home.code, gameName);
-			gamesMap.set(game.away.code, gameName);
-		}
-
-		const mod = (players: Picks.PickOdds[]): Pick[] => {
-			return players.filter((item) => item.player.betAvg).map(
-				(item: Picks.PickOdds): Pick => {
-					const player = item.player;
-					return {
-						name: player.fullName,
-						prob: player.betAvg ?? 0,
-						team: player.team.code,
-						gameId: gamesMap.get(player.team.code) ?? player.team.code,
-					};
-				}
-			)
-		};
-		const p1 = mod(table1Rows);
-		const p2 = mod(table2Rows);
-		const p3 = mod(table3Rows);
-		console.log(optimizePicks(p1, p2, p3));
-	}
 
 	const addLog = (line: string, align: LogStatAlign = "left", isTitle: boolean = false) => {
 		if (dataStatsPrev) {
