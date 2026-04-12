@@ -429,7 +429,7 @@ function deVig(playerList: Picks.Player[]) {
 }
 
 // Hybrid de-vig: fit regression on the full player pool, apply normalization per pick group
-function deVigGroup(playerList: Picks.Player[]) {
+export function deVigGroup(playerList: Picks.Player[]) {
 	const minProb = 0.0001;
 	const maxProb = 0.9999;
 	const minBookPlayers = 10;
