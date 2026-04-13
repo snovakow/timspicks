@@ -1,58 +1,58 @@
 .popup-overlay {
-  position: fixed;
-  top: 3rem;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  box-sizing: border-box;
-  overscroll-behavior: contain;
+	position: fixed;
+	top: 3rem;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	background: rgba(0, 0, 0, 0.7);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	z-index: 1000;
+	box-sizing: border-box;
+	overscroll-behavior: contain;
 }
 
 .popup-content {
-  color: black;
-  background: white;
-  padding: 0;
-  border-radius: 5px;
-  max-width: 90%;
-  max-height: calc(100% - 40px);
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+	color: black;
+	background: white;
+	padding: 0;
+	border-radius: 5px;
+	max-width: 90%;
+	max-height: calc(100% - 40px);
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 }
 
 .popup-header {
-  padding: 2px 20px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  border-bottom: 1px solid #eee;
-  position: relative;
-  font-weight: bold;
-  font-size: 1rem;
+	padding: 2px 20px;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 10px;
+	flex-shrink: 0;
+	border-bottom: 1px solid #eee;
+	position: relative;
+	font-weight: bold;
+	font-size: 1rem;
 }
 
 .popup-header .close-button {
-  position: absolute;
-  right: 10px;
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
+	position: absolute;
+	right: 10px;
+	background: none;
+	border: none;
+	font-size: 1.5rem;
+	cursor: pointer;
 }
 
 .popup-body {
-  padding: 20px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  flex: 1;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+	padding: 20px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	flex: 1;
+	overscroll-behavior: contain;
+	-webkit-overflow-scrolling: touch;
 }
