@@ -40,36 +40,42 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             document.body.style.paddingRight = `${scrollbarWidth}px`;
         }
 
-        // Prevent touchmove from passing through overlay when popup is open
+        // Prevent horizontal scroll from passing through, and vertical bounce at edges
         const overlay = overlayRef.current;
+        const popupBody = overlay?.querySelector('.popup-body') as HTMLElement | null;
         let lastY: number | undefined = undefined;
+        let lastX: number | undefined = undefined;
         const handleTouchMove = (e: TouchEvent) => {
-            const popupBody = overlay?.querySelector('.popup-body') as HTMLElement | null;
-            if (!popupBody) {
+            if (!popupBody) return;
+            const touch = e.touches[0];
+            if (lastY === undefined) lastY = touch.clientY;
+            if (lastX === undefined) lastX = touch.clientX;
+            const deltaY = lastY - touch.clientY;
+            const deltaX = lastX - touch.clientX;
+            lastY = touch.clientY;
+            lastX = touch.clientX;
+            // Always prevent horizontal scroll from passing through
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
                 e.preventDefault();
                 return;
             }
+            // For vertical scroll, only prevent if at edge
             if (popupBody.scrollHeight > popupBody.clientHeight) {
-                // If scrollable, only prevent if at edge
-                const touch = e.touches[0];
-                if (lastY === undefined) lastY = touch.clientY;
-                const deltaY = lastY - touch.clientY;
-                lastY = touch.clientY;
                 const atTop = popupBody.scrollTop === 0;
                 const atBottom = popupBody.scrollTop + popupBody.clientHeight >= popupBody.scrollHeight - 1;
                 if ((atTop && deltaY < 0) || (atBottom && deltaY > 0)) {
                     e.preventDefault();
                 }
             } else {
-                // Not scrollable, always prevent
+                // Not scrollable vertically, always prevent
                 e.preventDefault();
             }
         };
-        const resetTouch = () => { lastY = undefined; };
-        if (overlay) {
-            overlay.addEventListener('touchmove', handleTouchMove, { passive: false });
-            overlay.addEventListener('touchend', resetTouch, { passive: false });
-            overlay.addEventListener('touchcancel', resetTouch, { passive: false });
+        const resetTouch = () => { lastY = undefined; lastX = undefined; };
+        if (popupBody) {
+            popupBody.addEventListener('touchmove', handleTouchMove, { passive: false });
+            popupBody.addEventListener('touchend', resetTouch, { passive: false });
+            popupBody.addEventListener('touchcancel', resetTouch, { passive: false });
         }
 
         return () => {
@@ -81,10 +87,10 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             document.body.style.right = '';
             document.body.style.paddingRight = '';
             window.scrollTo(0, scrollY);
-            if (overlay) {
-                overlay.removeEventListener('touchmove', handleTouchMove);
-                overlay.removeEventListener('touchend', resetTouch);
-                overlay.removeEventListener('touchcancel', resetTouch);
+            if (popupBody) {
+                popupBody.removeEventListener('touchmove', handleTouchMove);
+                popupBody.removeEventListener('touchend', resetTouch);
+                popupBody.removeEventListener('touchcancel', resetTouch);
             }
         };
     }, [showPopUp]);
