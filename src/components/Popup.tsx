@@ -46,6 +46,7 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             if (deltaY > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight) return false;
             return true;
         };
+        let lastY: number | undefined = undefined;
         const preventTouchMove = (e: TouchEvent) => {
             if (!popupContent) {
                 e.preventDefault();
@@ -53,14 +54,14 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             }
             // Only allow scroll if the popup content can scroll in the direction
             const touch = e.touches[0];
-            const lastY = (preventTouchMove as any)._lastY || touch.clientY;
+            if (lastY === undefined) lastY = touch.clientY;
             const deltaY = lastY - touch.clientY;
-            (preventTouchMove as any)._lastY = touch.clientY;
+            lastY = touch.clientY;
             if (!allowScroll(popupContent as HTMLElement, deltaY)) {
                 e.preventDefault();
             }
         };
-        const resetTouch = () => { (preventTouchMove as any)._lastY = undefined; };
+        const resetTouch = () => { lastY = undefined; };
         if (overlay) {
             overlay.addEventListener('touchmove', preventTouchMove, { passive: false });
             overlay.addEventListener('touchend', resetTouch, { passive: false });
