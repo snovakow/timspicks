@@ -28,48 +28,48 @@
 
 
 .popup-header-title {
-    flex: 1 1 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: bold;
-    font-size: 1rem;
-    min-width: 0;
-    margin: 0;
-    pointer-events: none;
+	flex: 1 1 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-weight: bold;
+	font-size: 1rem;
+	min-width: 0;
+	margin: 0;
+	pointer-events: none;
 }
 
 .popup-header {
-    padding: 2px 32px 2px 32px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-    border-bottom: 1px solid #eee;
-    position: relative;
-    font-weight: bold;
-    font-size: 1rem;
-    min-height: 1.8em;
-    height: 1.8em;
+	padding: 2px 32px 2px 32px;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 10px;
+	flex-shrink: 0;
+	border-bottom: 1px solid #eee;
+	position: relative;
+	font-weight: bold;
+	font-size: 1rem;
+	min-height: 1.8em;
+	height: 1.8em;
 }
 
 .popup-header .close-button {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: white;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    z-index: 2;
-    padding: 0 1px;
-    line-height: 1;
+	position: absolute;
+	right: 10px;
+	top: 50%;
+	transform: translateY(-50%);
+	background: white;
+	border: none;
+	font-size: 1.5rem;
+	cursor: pointer;
+	z-index: 2;
+	padding: 0 1px;
+	line-height: 1;
 }
 
 .popup-body {
