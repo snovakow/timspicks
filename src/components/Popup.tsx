@@ -57,13 +57,13 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             const deltaX = lastX - touch.clientX;
             lastY = touch.clientY;
             lastX = touch.clientX;
-            // If popup-body is not scrollable vertically, always block
-            if (popupBody.scrollHeight <= popupBody.clientHeight) {
+            // Always block horizontal scroll gestures
+            if (Math.abs(deltaX) > 0) {
                 e.preventDefault();
                 return;
             }
-            // If horizontal gesture, always block
-            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+            // If popup-body is not scrollable vertically, always block
+            if (popupBody.scrollHeight <= popupBody.clientHeight) {
                 e.preventDefault();
                 return;
             }
@@ -73,7 +73,7 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             if ((atTop && deltaY < 0) || (atBottom && deltaY > 0)) {
                 e.preventDefault();
             }
-            // Otherwise, allow native scroll
+            // Otherwise, allow native vertical scroll
         };
         const resetTouch = () => { lastY = undefined; lastX = undefined; };
         if (overlay) {
