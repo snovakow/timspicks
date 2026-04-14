@@ -15,6 +15,10 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
         if (!showPopUp) {
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.left = '';
+            document.body.style.right = '';
             document.documentElement.style.overflow = '';
             return;
         }
@@ -36,37 +40,8 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             document.body.style.paddingRight = `${scrollbarWidth}px`;
         }
 
-        // Prevent background scroll on iOS, even if popup content is not scrollable
-        const overlay = overlayRef.current;
-        const popupContent = overlay?.querySelector('.popup-content');
-        const allowScroll = (el: HTMLElement | null, deltaY: number) => {
-            if (!el) return false;
-            if (el.scrollHeight <= el.clientHeight) return false;
-            if (deltaY < 0 && el.scrollTop === 0) return false;
-            if (deltaY > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight) return false;
-            return true;
-        };
-        let lastY: number | undefined = undefined;
-        const preventTouchMove = (e: TouchEvent) => {
-            if (!popupContent) {
-                e.preventDefault();
-                return;
-            }
-            // Only allow scroll if the popup content can scroll in the direction
-            const touch = e.touches[0];
-            if (lastY === undefined) lastY = touch.clientY;
-            const deltaY = lastY - touch.clientY;
-            lastY = touch.clientY;
-            if (!allowScroll(popupContent as HTMLElement, deltaY)) {
-                e.preventDefault();
-            }
-        };
-        const resetTouch = () => { lastY = undefined; };
-        if (overlay) {
-            overlay.addEventListener('touchmove', preventTouchMove, { passive: false });
-            overlay.addEventListener('touchend', resetTouch, { passive: false });
-            overlay.addEventListener('touchcancel', resetTouch, { passive: false });
-        }
+        // --- Remove custom touchmove preventDefault logic ---
+        // Let .popup-body scroll natively on iOS
 
         return () => {
             document.documentElement.style.overflow = '';
@@ -77,11 +52,6 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             document.body.style.right = '';
             document.body.style.paddingRight = '';
             window.scrollTo(0, scrollY);
-            if (overlay) {
-                overlay.removeEventListener('touchmove', preventTouchMove);
-                overlay.removeEventListener('touchend', resetTouch);
-                overlay.removeEventListener('touchcancel', resetTouch);
-            }
         };
     }, [showPopUp]);
 
