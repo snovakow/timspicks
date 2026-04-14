@@ -3,12 +3,12 @@ import "./Table.css";
 
 export const precision = 1;
 
-interface LocalizedText {
+export interface LocalizedText {
 	default: string;
 	[key: string]: string;
 }
 
-interface TeamInput {
+export interface TeamInput {
 	placeName: LocalizedText;
 	commonName: LocalizedText;
 	abbrev: Team;

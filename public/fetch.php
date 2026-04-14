@@ -222,82 +222,8 @@ if ($live && isset($_GET['games'])) {
 		die('Error fetching NHL data: ' . $url);
 	}
 
-	if ($savesrc) file_put_contents($basePath . '/src_games.json', $response);
-
-	$data = json_decode($response, false);
-
-	// Get games from the first day in the gameWeek structure (which is today)
-	$games = $data->gameWeek[0]->games ?? [];
-
-	if (empty($games)) {
-		echo '<br>No games scheduled for today.<br>';
-	} else {
-		echo '<br>' . count($games) . ' games<br>';
-		foreach ($games as $game) {
-			$code = $game->homeTeam->abbrev;
-
-			$url = './players/players_' . $code . '.json';
-			$response = file_get_contents($url);
-			if ($response === false) {
-				die('Error fetching NHL data: ' . $url);
-			}
-
-			$json = json_decode($response, false);
-
-			$players = [];
-			foreach ($json->forwards as $player) {
-				$players[] = [
-					"playerId" => $player->id,
-					"headshot" => $player->headshot,
-					"firstName" => $player->firstName,
-					"lastName" => $player->lastName
-				];
-			}
-			foreach ($json->defensemen as $player) {
-				$players[] = [
-					"playerId" => $player->id,
-					"headshot" => $player->headshot,
-					"firstName" => $player->firstName,
-					"lastName" => $player->lastName
-				];
-			}
-			$game->homeTeam->players = $players;
-
-			$code = $game->awayTeam->abbrev;
-
-			$url = './players/players_' . $code . '.json';
-			$response = file_get_contents($url);
-			if ($response === false) {
-				die('Error fetching NHL data: ' . $url);
-			}
-
-			$json = json_decode($response, false);
-
-			$players = [];
-			foreach ($json->forwards as $player) {
-				$players[] = [
-					"playerId" => $player->id,
-					"headshot" => $player->headshot,
-					"firstName" => $player->firstName,
-					"lastName" => $player->lastName
-				];
-			}
-			foreach ($json->defensemen as $player) {
-				$players[] = [
-					"playerId" => $player->id,
-					"headshot" => $player->headshot,
-					"firstName" => $player->firstName,
-					"lastName" => $player->lastName
-				];
-			}
-			$game->awayTeam->players = $players;
-		}
-	}
-
-	$json_string = json_encode($games, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
 	$local_file = $basePath . '/games.json';
-	if (file_put_contents($local_file, $json_string) === false) {
+	if (file_put_contents($local_file, $response) === false) {
 		die('Error saving local JSON file.');
 	}
 	echo "<br>Data has been written to $local_file";

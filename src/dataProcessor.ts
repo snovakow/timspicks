@@ -1,9 +1,23 @@
 import * as Picks from './components/Table';
 
+// Raw player structure from players_XXX.json
+type RawPlayerJson = {
+	id: number;
+	firstName: Picks.LocalizedText;
+	lastName: Picks.LocalizedText;
+	headshot: string;
+};
+
 type PickBucket = "1" | "2" | "3";
 type PlayerDataByPick = Record<PickBucket, Picks.OddsItem[]>;
 type GameDataInput = ConstructorParameters<typeof Picks.GameData>[0];
 type PlayerInput = ConstructorParameters<typeof Picks.Player>[0];
+// Structure of games.json
+type GameListingData = {
+	gameWeek: {
+		games: GameDataInput[];
+	}[];
+};
 type GamesListingItem = GameDataInput & {
 	homeTeam: GameDataInput["homeTeam"] & { players: PlayerInput[] };
 	awayTeam: GameDataInput["awayTeam"] & { players: PlayerInput[] };
@@ -44,6 +58,17 @@ const isPlayerDataByPick = (value: unknown): value is PlayerDataByPick => {
 		const items = value[bucket];
 		if (!Array.isArray(items)) return false;
 		if (!items.every(isOddsItem)) return false;
+	}
+	return true;
+};
+
+const isGameDataInput = (value: unknown): value is GameListingData => {
+	if (!isRecord(value)) return false;
+	if (!Array.isArray(value.gameWeek)) return false;
+	for (const week of value.gameWeek) {
+		if (!Array.isArray(week.games)) return false;
+		// Validate each game is an object here
+		if (!week.games.every(isRecord)) return false;
 	}
 	return true;
 };
@@ -106,15 +131,92 @@ const loadData = async (src: string): Promise<unknown> => {
 
 const loadAndValidate = async <T>(
 	src: string,
-	validator: (value: unknown) => value is T,
+	validator: (value: unknown) => value is T | Promise<boolean>,
 	label: string
 ): Promise<T> => {
 	const value = await loadData(src);
-	if (!validator(value)) {
+	const valid = validator(value);
+	if (!valid) {
 		throw new Error(`Invalid ${label} format in ${src}`);
 	}
-	return value;
+	return value as T;
 };
+
+
+// Async loader/validator for games.json that merges players into each game
+export const loadGamesWithPlayers = async (src: string): Promise<GamesListingItem[]> => {
+	const response = await fetchData(src);
+	const gamesJsonRaw = await response.json();
+	if (!isGameDataInput(gamesJsonRaw)) {
+		throw new Error(`Invalid games listing data format in ${src}`);
+	}
+	const gamesJson = gamesJsonRaw as GameListingData;
+	if (!gamesJson || typeof gamesJson !== 'object' || !Array.isArray(gamesJson.gameWeek) || gamesJson.gameWeek.length === 0) {
+		throw new Error(`Invalid games listing data format in ${src}`);
+	}
+	const games: GameDataInput[] = gamesJson.gameWeek[0].games || [];
+	if (!Array.isArray(games) || games.length === 0) {
+		throw new Error(`No games found for today in ${src}`);
+	}
+
+	async function fetchAndValidatePlayers(team: Picks.TeamInput): Promise<PlayerInput[]> {
+		const code = team.abbrev;
+		const url = `./players/players_${code}.json`;
+		const response = await fetch(url);
+		if (!response.ok) throw new Error(`Failed to load ${url}: ${response.status}`);
+		const json = await response.json();
+		if (!isPlayersJson(json)) throw new Error(`Invalid players file: ${url}`);
+		const allPlayers: RawPlayerJson[] = [...json.forwards, ...json.defensemen];
+		return allPlayers.map((p) => ({
+			playerId: p.id,
+			firstName: p.firstName,
+			lastName: p.lastName,
+			headshot: p.headshot,
+		}));
+	}
+
+	const gamesListing: GamesListingItem[] = await Promise.all(
+		games.map(async (game) => {
+			const homePlayers = await fetchAndValidatePlayers(game.homeTeam);
+			const awayPlayers = await fetchAndValidatePlayers(game.awayTeam);
+			return {
+				...game,
+				homeTeam: {
+					...game.homeTeam,
+					players: homePlayers
+				},
+				awayTeam: {
+					...game.awayTeam,
+					players: awayPlayers
+				}
+			};
+		})
+	);
+
+	if (!Array.isArray(gamesListing) || !gamesListing.every(isGamesListingItem)) {
+		throw new Error('Invalid gamesListing structure after injecting players');
+	}
+	return gamesListing;
+};
+
+// Validate a player object from players_XXX.json
+function isPlayerJson(val: unknown): val is RawPlayerJson {
+	if (!isRecord(val)) return false;
+	if (typeof val.id !== 'number') return false;
+	if (!val.firstName || !isStringMap(val.firstName) || typeof val.firstName.default !== 'string') return false;
+	if (!val.lastName || !isStringMap(val.lastName) || typeof val.lastName.default !== 'string') return false;
+	if (typeof val.headshot !== 'string') return false;
+	return true;
+}
+
+// Validate a players_XXX.json file
+function isPlayersJson(val: unknown): val is { forwards: RawPlayerJson[]; defensemen: RawPlayerJson[] } {
+	if (!isRecord(val)) return false;
+	if (!Array.isArray(val.forwards) || !Array.isArray(val.defensemen)) return false;
+	if (!val.forwards.every(isPlayerJson)) return false;
+	if (!val.defensemen.every(isPlayerJson)) return false;
+	return true;
+}
 
 export interface InitialData {
 	playerData: PlayerDataByPick;
@@ -128,7 +230,7 @@ export interface InitialData {
 export const loadInitialData = async (): Promise<InitialData> => {
 	const [playerData, gamesListing, playerOddsDraftKings, playerOddsFanDuel, playerOddsBetMGM, playerOddsBetRivers] = await Promise.all([
 		loadAndValidate('./data/helper.json', isPlayerDataByPick, 'helper odds data'),
-		loadAndValidate('./data/games.json', (value): value is GamesListingItem[] => Array.isArray(value) && value.every(isGamesListingItem), 'games listing data'),
+		loadGamesWithPlayers('./data/games.json'),
 		loadAndValidate('./data/bet1.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'DraftKings odds data'),
 		loadAndValidate('./data/bet2.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'FanDuel odds data'),
 		loadAndValidate('./data/bet3.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'BetMGM odds data'),
