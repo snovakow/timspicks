@@ -49,10 +49,24 @@
 }
 
 .popup-body {
-  padding: 20px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  flex: 1;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+	padding: 20px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	flex: 1;
+	overscroll-behavior: contain;
+	-webkit-overflow-scrolling: touch;
+}
+
+/* Utility classes for scroll axis control */
+.popup-body--scroll-y {
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+.popup-body--scroll-x {
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+.popup-body--scroll-both {
+	overflow-x: auto;
+	overflow-y: auto;
 }

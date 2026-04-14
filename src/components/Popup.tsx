@@ -6,9 +6,10 @@ interface PopupProps {
     title: string;
     closePopUp: () => void;
     children: ReactNode;
+    scrollAxis?: 'y' | 'x' | 'both'; // new prop
 }
 
-function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
+function Popup({ showPopUp, title, closePopUp, children, scrollAxis = 'y' }: PopupProps) {
     const overlayRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -36,17 +37,42 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             document.body.style.paddingRight = `${scrollbarWidth}px`;
         }
 
-        // Block scroll events on the overlay backdrop itself
-        const preventDefault = (e: Event) => {
-            if (e.target === overlay) {
+        // Attach touchmove handler directly to .popup-body
+        const overlay = overlayRef.current;
+        const popupBody = overlay?.querySelector('.popup-body') as HTMLElement | null;
+        let lastY: number | undefined = undefined;
+        let lastX: number | undefined = undefined;
+        const handleTouchMove = (e: TouchEvent) => {
+            if (!popupBody) return;
+            const touch = e.touches[0];
+            if (lastY === undefined) lastY = touch.clientY;
+            if (lastX === undefined) lastX = touch.clientX;
+            const deltaY = lastY - touch.clientY;
+            const deltaX = lastX - touch.clientX;
+            lastY = touch.clientY;
+            lastX = touch.clientX;
+            // Always block horizontal scroll gestures
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 2) {
+                e.preventDefault();
+                return;
+            }
+            // If popup-body is not scrollable vertically, always block
+            if (popupBody.scrollHeight <= popupBody.clientHeight) {
+                e.preventDefault();
+                return;
+            }
+            // For vertical scroll, only allow if not at edge
+            const atTop = popupBody.scrollTop === 0;
+            const atBottom = popupBody.scrollTop + popupBody.clientHeight >= popupBody.scrollHeight - 1;
+            if ((atTop && deltaY < 0) || (atBottom && deltaY > 0)) {
                 e.preventDefault();
             }
         };
-
-        const overlay = overlayRef.current;
-        if (overlay) {
-            overlay.addEventListener('touchmove', preventDefault, { passive: false });
-            overlay.addEventListener('wheel', preventDefault, { passive: false });
+        const resetTouch = () => { lastY = undefined; lastX = undefined; };
+        if (popupBody) {
+            popupBody.addEventListener('touchmove', handleTouchMove, { passive: false });
+            popupBody.addEventListener('touchend', resetTouch, { passive: false });
+            popupBody.addEventListener('touchcancel', resetTouch, { passive: false });
         }
 
         return () => {
@@ -58,9 +84,10 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
             document.body.style.right = '';
             document.body.style.paddingRight = '';
             window.scrollTo(0, scrollY);
-            if (overlay) {
-                overlay.removeEventListener('touchmove', preventDefault);
-                overlay.removeEventListener('wheel', preventDefault);
+            if (popupBody) {
+                popupBody.removeEventListener('touchmove', handleTouchMove);
+                popupBody.removeEventListener('touchend', resetTouch);
+                popupBody.removeEventListener('touchcancel', resetTouch);
             }
         };
     }, [showPopUp]);
@@ -85,7 +112,7 @@ function Popup({ showPopUp, title, closePopUp, children }: PopupProps) {
                         &times;
                     </button>
                 </div>
-                <div className="popup-body">
+                <div className={`popup-body popup-body--scroll-${scrollAxis}`}>
                     {children}
                 </div>
             </div>
