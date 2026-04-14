@@ -1,22 +1,19 @@
-.popup-content {
+.layout {
   font-family: monospace;
-}
-
-.popup-body {
   white-space: pre-wrap;
 }
 
-.popup-section {
+.section {
   width: fit-content;
   max-width: 100%;
   margin-left: auto;
   margin-right: auto;
 }
 
-.popup-section-break {
+.sectionBreak {
   margin-bottom: 1rem;
 }
 
-.popup-section-title {
+.sectionTitle {
   font-weight: bold;
 }

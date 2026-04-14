@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import './App.css';
-import './Stats.css';
 import * as Picks from './components/Table';
 import Popup from './components/Popup';
-import InfoPopupContent, { LegendPopupContent } from './InfoPopupContent';
+import InfoPopupContent, { LegendPopupContent } from './components/InfoPopupContent';
+import StatsPopupContent from './components/StatsPopupContent';
 import SettingsPanel from './components/Settings';
 import { poissonChance, roundToPercent, probabilityToAmerican } from './utility';
 import { loadInitialData, buildGamesList, buildPlayerList, buildNormalizedNameMap, mapPlayers, compilePlayerList } from './dataProcessor';
@@ -111,7 +111,7 @@ function App() {
 		streak: false,
 		point: false,
 		leaderboard: false,
-		hybrid: false,
+		hybrid: true,
 		top: true,
 	});
 
@@ -292,8 +292,9 @@ function App() {
 		makeSortPlayer(needsSortPlayer);
 		playerList.sort(sortFunctionPlayer);
 
-		return { gamesList, playerList, table1Rows, table2Rows, table3Rows };
-	}, [data, showPercentage, deVigEnabled, needsSort1, needsSort2, needsSort3, needsSortPlayer]);
+		// Expose minSportsbooks in the returned object for downstream consumers
+		return { gamesList, playerList, table1Rows, table2Rows, table3Rows, minSportsbooks };
+	}, [data, showPercentage, deVigEnabled, needsSort1, needsSort2, needsSort3, needsSortPlayer, minSportsbooks]);
 
 	// Memoize stats calculations - expensive O(n³) combo calculations
 	// Also applies stats-based highlights (opp/any) to rows after 'top' highlights are set
@@ -461,22 +462,7 @@ function App() {
 							onStrategyEnabledChange={handleStrategyEnabledChange}
 						/>
 					) : (
-						<>
-							{
-								popupStats.map((stat, i) => {
-									let className = 'popup-section';
-									if (stat.break) className += ' popup-section-break';
-									if (stat.isTitle) className += ' popup-section-title';
-									return (
-										<div key={i} className={className} style={{ textAlign: stat.align }}>
-											{stat.lines.map((line, j) => (
-												<div key={j}>{line}</div>
-											))}
-										</div>
-									)
-								})
-							}
-						</>
+						<StatsPopupContent stats={popupStats} />
 					)}
 				</Popup>
 

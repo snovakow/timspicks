@@ -1,7 +1,8 @@
 import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
 import type { Team } from './components/logo';
-import { type Pick, optimizePicks } from './picksOptimizer';
+// import { runSimulation } from './picksOptimizer';
+// runSimulation();
 
 const precision = Picks.precision;
 
@@ -38,33 +39,6 @@ export const calculateStats = (
 ): void => {
 	let logSection = 0;
 	let dataStatsPrev: LogStat | null = null;
-
-	if (betKey === 'betAvg') {
-		const gamesMap = new Map<Team, string>();
-		for (const game of gamesList) {
-			const gameName = `${game.away.code} @ ${game.home.code}`;
-			gamesMap.set(game.home.code, gameName);
-			gamesMap.set(game.away.code, gameName);
-		}
-
-		const mod = (players: Picks.PickOdds[]): Pick[] => {
-			return players.filter((item) => item.player.betAvg).map(
-				(item: Picks.PickOdds): Pick => {
-					const player = item.player;
-					return {
-						name: player.fullName,
-						prob: player.betAvg ?? 0,
-						team: player.team.code,
-						gameId: gamesMap.get(player.team.code) ?? player.team.code,
-					};
-				}
-			)
-		};
-		const p1 = mod(table1Rows);
-		const p2 = mod(table2Rows);
-		const p3 = mod(table3Rows);
-		console.log(optimizePicks(p1, p2, p3));
-	}
 
 	const addLog = (line: string, align: LogStatAlign = "left", isTitle: boolean = false) => {
 		if (dataStatsPrev) {
@@ -137,14 +111,14 @@ export const calculateStats = (
 			this.on = pick.player.team.code;
 			this.opp = opp;
 		}
-		collides(pick: Picks.PickOdds, mode: Collide): boolean {
+		same(choice: Choice, mode: Collide): boolean {
 			switch (mode) {
 				case "on":
-					return this.on === pick.player.team.code;
+					return this.on === choice.pick.player.team.code;
 				case "opp":
-					return this.opp === pick.player.team.code;
+					return this.opp === choice.pick.player.team.code;
 				case "game":
-					return this.on === pick.player.team.code || this.opp === pick.player.team.code;
+					return this.on === choice.pick.player.team.code || this.opp === choice.pick.player.team.code;
 				case "none":
 					return false;
 			}
@@ -224,6 +198,7 @@ export const calculateStats = (
 	}
 
 	/*
+		- opposing: 2 picks from opposing teams in the same game, one pick from another game
 		- streak: independent games
 		- points: hybrid, best balance, still good for streaks, but leaderboard upside
 		- leaderboard: stacking, high variance, bad for streaks
@@ -232,37 +207,55 @@ export const calculateStats = (
 		- points = two picks from the same team, one pick from another game
 		- leaderboard = all three picks from the same team
 	*/
-	const calcCombos = (): { top: ComboGroup, streak: ComboGroup, points: ComboGroup, leader: ComboGroup } => {
+	const calcCombos = (gameCount: number): {
+		top: ComboGroup,
+		streak: ComboGroup,
+		points: ComboGroup,
+		leader: ComboGroup,
+		opposing: ComboGroup
+	} => {
 		const top = new ComboGroup();
 		const streak = new ComboGroup();
 		const points = new ComboGroup();
 		const leader = new ComboGroup();
+		const opposing = new ComboGroup();
 		for (const pick1 of choices1) {
 			for (const pick2 of choices2) {
 				for (const pick3 of choices3) {
 					top.add(pick1, pick2, pick3);
-					if (gamesList.length >= 3) {
-						if (!pick1.collides(pick2.pick, 'game') &&
-							!pick2.collides(pick3.pick, 'game') &&
-							!pick1.collides(pick3.pick, 'game')) {
+					if (gameCount >= 3) {
+						if (!pick1.same(pick2, 'game') &&
+							!pick2.same(pick3, 'game') &&
+							!pick1.same(pick3, 'game')) {
 							streak.add(pick1, pick2, pick3);
 						}
-					} else if (gamesList.length === 1) {
-						if (pick1.collides(pick2.pick, 'on') && pick3.collides(pick1.pick, 'opp')) streak.add(pick1, pick2, pick3);
-						if (pick1.collides(pick3.pick, 'on') && pick2.collides(pick1.pick, 'opp')) streak.add(pick1, pick2, pick3);
-						if (pick2.collides(pick3.pick, 'on') && pick1.collides(pick2.pick, 'opp')) streak.add(pick1, pick2, pick3);
+					} else if (gameCount === 1) {
+						if (pick1.same(pick2, 'on') && pick3.same(pick1, 'opp')) streak.add(pick1, pick2, pick3);
+						if (pick1.same(pick3, 'on') && pick2.same(pick1, 'opp')) streak.add(pick1, pick2, pick3);
+						if (pick2.same(pick3, 'on') && pick1.same(pick2, 'opp')) streak.add(pick1, pick2, pick3);
 					}
 
-					if (pick1.collides(pick2.pick, 'on') && !pick3.collides(pick1.pick, 'game')) points.add(pick1, pick2, pick3);
-					if (pick1.collides(pick3.pick, 'on') && !pick2.collides(pick1.pick, 'game')) points.add(pick1, pick2, pick3);
-					if (pick2.collides(pick3.pick, 'on') && !pick1.collides(pick2.pick, 'game')) points.add(pick1, pick2, pick3);
+					if (gameCount >= 2) {
+						if (pick1.same(pick2, 'opp') && !pick3.same(pick1, 'game')) opposing.add(pick1, pick2, pick3);
+						if (pick1.same(pick3, 'opp') && !pick2.same(pick1, 'game')) opposing.add(pick1, pick2, pick3);
+						if (pick2.same(pick3, 'opp') && !pick1.same(pick2, 'game')) opposing.add(pick1, pick2, pick3);
+					} else {
+						if (pick1.same(pick2, 'opp')) opposing.add(pick1, pick2, pick3);
+						if (pick1.same(pick3, 'opp')) opposing.add(pick1, pick2, pick3);
+						if (pick2.same(pick3, 'opp')) opposing.add(pick1, pick2, pick3);
+					}
 
-					if (pick1.collides(pick2.pick, 'on') && pick2.collides(pick3.pick, 'on')) leader.add(pick1, pick2, pick3);
+					if (pick1.same(pick2, 'on') && !pick3.same(pick1, 'game')) points.add(pick1, pick2, pick3);
+					if (pick1.same(pick3, 'on') && !pick2.same(pick1, 'game')) points.add(pick1, pick2, pick3);
+					if (pick2.same(pick3, 'on') && !pick1.same(pick2, 'game')) points.add(pick1, pick2, pick3);
+
+					if (pick1.same(pick2, 'on') && pick2.same(pick3, 'on')) leader.add(pick1, pick2, pick3);
 				}
 			}
 		}
 		return {
 			top,
+			opposing,
 			streak,
 			points,
 			leader
@@ -323,7 +316,7 @@ export const calculateStats = (
 
 	const logFooter = () => {
 		addLogTitle("Good Ranges");
-		addLog("Any: 66-67% - Avg: 30-31% - All: 2-3%", 'center');
+		addLog("Any: 66-69% - Avg: 30-32% - All: 2-3%", 'center');
 	}
 
 	const setStrategy = (pick: Picks.PickOdds, mode: Picks.StrategyMode) => {
@@ -339,10 +332,24 @@ export const calculateStats = (
 		for (const pick of result.players3) setStrategy(pick, strategy);
 	}
 
-	const { top, streak, points, leader } = calcCombos();
+	// calculate available games from players, rather than use the gamesList.
+	// Some games may have started, or players may not be available from a game.
+	const gamesSet = new Set<Team>();
+	let gameCount = 0;
+	for (const pick of table1Rows) {
+		const team = pick.player.team.code;
+		if (gamesSet.has(team)) continue;
+		gamesSet.add(team);
+		const opponent = gamesMap.get(team);
+		if (opponent) gamesSet.add(opponent);
+		gameCount++;
+	}
+
+	const { top, opposing, streak, points, leader } = calcCombos(gameCount);
 	if (top.combos.length === 0) return;
 
 	const topResult: Result[] = top.merge();
+	const opposingResult: Result[] = opposing.merge();
 	const streakResult: Result[] = streak.merge();
 	const pointsResult: Result[] = points.merge();
 	const leaderResult: Result[] = leader.merge();
@@ -360,12 +367,13 @@ export const calculateStats = (
 		- streak = same as points
 
 		1 game:
+		- opposing = 2 picks from opposing teams in the same game, one pick from a same team
 		- streak = two picks from the same team, one pick from the opposing team
 			Select top picks from opposing teams, and the 3rd from the same team as the stonger player
 		- points = same as leaderboard
 	*/
 
-	if (gamesList.length !== 2 && streak.total > 0) {
+	if (gameCount !== 2 && streak.total > 0) {
 		addLogTitle("Streak");
 		for (const avgResult of streakResult) {
 			logReduced(avgResult, maxResult, top.total);
@@ -373,27 +381,33 @@ export const calculateStats = (
 			addStrategyHighlights(avgResult, 'streak');
 		}
 	}
-	if (gamesList.length > 1 && points.total > 0) {
-		if (gamesList.length === 2) addLogTitle("Streak/Points");
+
+	if (opposing.total > 0) {
+		addLogTitle("Opposing");
+		for (const avgResult of opposingResult) {
+			logReduced(avgResult, maxResult, top.total);
+			logHighlights(avgResult);
+			addStrategyHighlights(avgResult, 'hybrid');
+		}
+	}
+
+	if (gameCount > 1 && points.total > 0) {
+		if (gameCount === 2) addLogTitle("Streak/Points");
 		else addLogTitle("Points");
 		for (const avgResult of pointsResult) {
 			logReduced(avgResult, maxResult, top.total);
 			logHighlights(avgResult);
-			if (gamesList.length === 2) addStrategyHighlights(avgResult, 'streak');
+			if (gameCount === 2) addStrategyHighlights(avgResult, 'streak');
 			addStrategyHighlights(avgResult, 'point');
-			addStrategyHighlights(avgResult, 'hybrid');
 		}
 	}
 	if (leader.total > 0) {
-		if (gamesList.length === 1) addLogTitle("Points/Leaderboard");
+		if (gameCount === 1) addLogTitle("Points/Leaderboard");
 		else addLogTitle("Leaderboard");
 		for (const avgResult of leaderResult) {
 			logReduced(avgResult, maxResult, top.total);
 			logHighlights(avgResult);
-			if (gamesList.length === 1) {
-				addStrategyHighlights(avgResult, 'point');
-				addStrategyHighlights(avgResult, 'hybrid');
-			}
+			if (gameCount === 1) addStrategyHighlights(avgResult, 'point');
 			addStrategyHighlights(avgResult, 'leaderboard');
 		}
 	}

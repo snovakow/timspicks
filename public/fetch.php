@@ -33,8 +33,8 @@ if ($fetchHistory) {
 		'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
 	]);
 
-	$basePath = './history';
-	if (!is_dir($basePath)) mkdir($basePath, 0755, true);
+	$baseHistoryPath = './history';
+	if (!is_dir($baseHistoryPath)) mkdir($baseHistoryPath, 0755, true);
 
 	$dates = [
 		['season' => '2023-2024', 'format' => 'regular', 'start' => '2023-10-10', 'end' => '2024-04-18'],
@@ -86,7 +86,7 @@ if ($fetchHistory) {
 
 			$filename = "{$season}_{$date}_{$part}.json";
 			$files[] = $filename;
-			$local_file = $basePath . '/' . $filename;
+			$local_file = $baseHistoryPath . '/' . $filename;
 			file_put_contents($local_file, $response);
 			echo ("$filename<br>");
 		}
@@ -96,7 +96,7 @@ if ($fetchHistory) {
 
 	$json_string = json_encode($dates, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-	$local_file = $basePath . '/history.json';
+	$local_file = $baseHistoryPath . '/history.json';
 	if (file_put_contents($local_file, $json_string) === false) {
 		die('Error saving local JSON file.');
 	}
@@ -163,10 +163,45 @@ if ($live && isset($_GET['players']) && isset($_GET['team'])) {
 	die($filename . '<br>');
 }
 
-echo '<h1>Data Downloader</h1>';
-
 $basePath = './data';
 if (!is_dir($basePath)) mkdir($basePath, 0755, true);
+
+/*
+
+   Backup
+
+*/
+if ($live && isset($_GET['backup'])) {
+	// Backup the current data directory before fetching picks
+	if (is_dir($basePath)) {
+		$timezone = new DateTimeZone('America/New_York');
+		$timestamp = new DateTime('now', $timezone);
+
+		$date = $timestamp->format('Y-m-d');
+		$time = $timestamp->format('Hi');
+		$backupPath = $basePath . '/' . $date;
+		$backupSubPath = $basePath . '/' . $date . '/' . $time;
+		if (!is_dir($backupPath)) mkdir($backupPath, 0755, true);
+		if (!is_dir($backupSubPath)) mkdir($backupSubPath, 0755, true);
+		$bet1file = '/bet1.json';
+		$bet2file = '/bet2.json';
+		$bet3file = '/bet3.json';
+		$bet4file = '/bet4.json';
+		$gamesfile = '/games.json';
+		$helperfile = '/helper.json';
+		copy($basePath . $gamesfile, $backupPath . $gamesfile);
+		copy($basePath . $bet1file, $backupSubPath . $bet1file);
+		copy($basePath . $bet2file, $backupSubPath . $bet2file);
+		copy($basePath . $bet3file, $backupSubPath . $bet3file);
+		copy($basePath . $bet4file, $backupSubPath . $bet4file);
+		copy($basePath . $helperfile, $backupSubPath . $helperfile);
+
+		die("<h2>Backup: $backupSubPath</h2>");
+	}
+	die;
+}
+
+echo '<h1>Data Downloader</h1>';
 
 /*
 

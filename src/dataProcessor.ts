@@ -366,62 +366,134 @@ export const compilePlayerList = (
 		player.bet4 = player.betRaw4;
 	}
 
-	// De-vig: correct each sportsbook's bias AND compression toward the
-	// peer average (leave-one-out mean).
-	{
-		const minProb = 0.0001;
-		const maxProb = 0.9999;
-		const minBookPlayers = 10;
-		const betKeys = ["bet1", "bet2", "bet3", "bet4"] as const;
+	deVig(playerList);
+};
 
-		const corrections: Partial<Record<typeof betKeys[number], { c: number; alpha: number }>> = {};
-		for (const key of betKeys) {
-			const xs: number[] = [];
-			const ys: number[] = [];
-			for (const player of playerList) {
-				const bookProb = player[key];
-				if (bookProb === null) continue;
-				let peerSum = 0, peerCount = 0;
-				for (const other of betKeys) {
-					if (other === key) continue;
-					if (player[other] !== null) { peerSum += player[other]!; peerCount++; }
-				}
-				if (peerCount === 0) continue;
-				xs.push(Math.log(peerSum / peerCount));
-				ys.push(Math.log(bookProb));
+// De-vig: correct each sportsbook's bias AND compression toward the
+// peer average (leave-one-out mean).
+function deVig(playerList: Picks.Player[]) {
+	const minProb = 0.0001;
+	const maxProb = 0.9999;
+	const minBookPlayers = 10;
+	const betKeys = ["bet1", "bet2", "bet3", "bet4"] as const;
+
+	const corrections: Partial<Record<typeof betKeys[number], { c: number; alpha: number }>> = {};
+	for (const key of betKeys) {
+		const xs: number[] = [];
+		const ys: number[] = [];
+		for (const player of playerList) {
+			const bookProb = player[key];
+			if (bookProb === null) continue;
+			let peerSum = 0, peerCount = 0;
+			for (const other of betKeys) {
+				if (other === key) continue;
+				if (player[other] !== null) { peerSum += player[other]!; peerCount++; }
 			}
-			if (xs.length < minBookPlayers) continue;
-
-			const n = xs.length;
-			let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0;
-			for (let i = 0; i < n; i++) {
-				sumX += xs[i];
-				sumY += ys[i];
-				sumXX += xs[i] * xs[i];
-				sumXY += xs[i] * ys[i];
-			}
-			const denom = n * sumXX - sumX * sumX;
-			if (Math.abs(denom) < 1e-12) continue;
-			const alpha = (n * sumXY - sumX * sumY) / denom;
-			const logC = (sumY - alpha * sumX) / n;
-			const c = Math.exp(logC);
-
-			if (alpha <= 0.5 || alpha > 2) continue;
-
-			corrections[key] = { c, alpha };
-			// console.log(`De-vig [${key}]: c=${c.toFixed(4)}, α=${alpha.toFixed(4)} (${n} players)`);
+			if (peerCount === 0) continue;
+			xs.push(Math.log(peerSum / peerCount));
+			ys.push(Math.log(bookProb));
 		}
+		if (xs.length < minBookPlayers) continue;
 
-		// Apply all at once: fair = (book / c) ^ (1/α)
+		const n = xs.length;
+		let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0;
+		for (let i = 0; i < n; i++) {
+			sumX += xs[i];
+			sumY += ys[i];
+			sumXX += xs[i] * xs[i];
+			sumXY += xs[i] * ys[i];
+		}
+		const denom = n * sumXX - sumX * sumX;
+		if (Math.abs(denom) < 1e-12) continue;
+		const alpha = (n * sumXY - sumX * sumY) / denom;
+		const logC = (sumY - alpha * sumX) / n;
+		const c = Math.exp(logC);
+
+		if (alpha <= 0.5 || alpha > 2) continue;
+
+		corrections[key] = { c, alpha };
+		// console.log(`De-vig [${key}]: c=${c.toFixed(4)}, α=${alpha.toFixed(4)} (${n} players)`);
+	}
+
+	// Apply all at once: fair = (book / c) ^ (1/α)
+	for (const key of betKeys) {
+		const corr = corrections[key];
+		if (corr === undefined) continue;
+		const invAlpha = 1 / corr.alpha;
+		for (const player of playerList) {
+			if (player[key] === null) continue;
+			const fair = Math.pow(player[key]! / corr.c, invAlpha);
+			player[key] = Math.min(maxProb, Math.max(minProb, fair));
+		}
+	}
+}
+
+// Hybrid de-vig: fit regression on the full player pool, apply normalization per pick group
+export function deVigGroup(playerList: Picks.Player[]) {
+	const minProb = 0.0001;
+	const maxProb = 0.9999;
+	const minBookPlayers = 10;
+	const betKeys = ["bet1", "bet2", "bet3", "bet4"] as const;
+
+	// 1. Fit regression on the full pool
+	const corrections: Partial<Record<typeof betKeys[number], { c: number; alpha: number }>> = {};
+	for (const key of betKeys) {
+		const xs: number[] = [];
+		const ys: number[] = [];
+		for (const player of playerList) {
+			const bookProb = player[key];
+			if (bookProb === null) continue;
+			let peerSum = 0, peerCount = 0;
+			for (const other of betKeys) {
+				if (other === key) continue;
+				if (player[other] !== null) { peerSum += player[other]!; peerCount++; }
+			}
+			if (peerCount === 0) continue;
+			xs.push(Math.log(peerSum / peerCount));
+			ys.push(Math.log(bookProb));
+		}
+		if (xs.length < minBookPlayers) continue;
+
+		const n = xs.length;
+		let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0;
+		for (let i = 0; i < n; i++) {
+			sumX += xs[i];
+			sumY += ys[i];
+			sumXX += xs[i] * xs[i];
+			sumXY += xs[i] * ys[i];
+		}
+		const denom = n * sumXX - sumX * sumX;
+		if (Math.abs(denom) < 1e-12) continue;
+		const alpha = (n * sumXY - sumX * sumY) / denom;
+		const logC = (sumY - alpha * sumX) / n;
+		const c = Math.exp(logC);
+
+		if (alpha <= 0.5 || alpha > 2) continue;
+
+		corrections[key] = { c, alpha };
+		// console.log(`De-vig [ALL] [${key}]: c=${c.toFixed(4)}, α=${alpha.toFixed(4)} (${n} players)`);
+	}
+
+	// 2. For each pick group, apply normalization using those parameters
+	const pickGroups: Record<1 | 2 | 3, Picks.Player[]> = { 1: [], 2: [], 3: [] };
+	for (const player of playerList) {
+		if (player.pick === 1) pickGroups[1].push(player);
+		else if (player.pick === 2) pickGroups[2].push(player);
+		else if (player.pick === 3) pickGroups[3].push(player);
+	}
+
+	for (const pick of [1, 2, 3] as const) {
+		const group = pickGroups[pick];
+		if (group.length < minBookPlayers) continue;
 		for (const key of betKeys) {
 			const corr = corrections[key];
 			if (corr === undefined) continue;
 			const invAlpha = 1 / corr.alpha;
-			for (const player of playerList) {
+			for (const player of group) {
 				if (player[key] === null) continue;
 				const fair = Math.pow(player[key]! / corr.c, invAlpha);
 				player[key] = Math.min(maxProb, Math.max(minProb, fair));
 			}
 		}
 	}
-};
+}

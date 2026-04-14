@@ -16,6 +16,10 @@ function Popup({ showPopUp, title, closePopUp, children, scrollAxis = 'y' }: Pop
         if (!showPopUp) {
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.left = '';
+            document.body.style.right = '';
             document.documentElement.style.overflow = '';
             return;
         }
@@ -67,6 +71,7 @@ function Popup({ showPopUp, title, closePopUp, children, scrollAxis = 'y' }: Pop
             if ((atTop && deltaY < 0) || (atBottom && deltaY > 0)) {
                 e.preventDefault();
             }
+            // Otherwise, allow native vertical scroll
         };
         const resetTouch = () => { lastY = undefined; lastX = undefined; };
         if (popupBody) {
@@ -107,7 +112,7 @@ function Popup({ showPopUp, title, closePopUp, children, scrollAxis = 'y' }: Pop
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="popup-header">
-                    {title}
+                    <span className="popup-header-title">{title}</span>
                     <button className="close-button" onClick={closePopUp} aria-label="Close">
                         &times;
                     </button>

@@ -324,3 +324,260 @@ export function optimizePicks(picks1: Pick[], picks2: Pick[], picks3: Pick[]): O
         hybrid: buildResult('hybrid', bestHybrid, top3Hybrid),
     };
 }
+
+/* 
+{
+    const gamesMap = new Map<Team, string>();
+    for (const game of gamesList) {
+        const gameName = `${game.away.code} @ ${game.home.code}`;
+        gamesMap.set(game.home.code, gameName);
+        gamesMap.set(game.away.code, gameName);
+    }
+
+    const mod = (players: Picks.PickOdds[]): Pick[] => {
+        return players.filter((item) => item.player.betAvg).map(
+            (item: Picks.PickOdds): Pick => {
+                const player = item.player;
+                return {
+                    name: player.fullName,
+                    prob: player.betAvg ?? 0,
+                    team: player.team.code,
+                    gameId: gamesMap.get(player.team.code) ?? player.team.code,
+                };
+            }
+        )
+    };
+    const p1 = mod(table1Rows);
+    const p2 = mod(table2Rows);
+    const p3 = mod(table3Rows);
+    console.log(optimizePicks(p1, p2, p3));
+}
+*/
+
+interface HistoryPlayer {
+    "nhlPlayerId": number;
+    "fullName": string;
+    "team": string;
+    "opponent": string;
+    "scored": boolean;
+    "note": string;
+    "availableTimes": string[];
+}
+
+type PlayerSet = Array<HistoryPlayer>;
+function getRandomEntry(entries: PlayerSet = []): HistoryPlayer | undefined {
+    const randomEntry = entries[Math.floor(Math.random() * entries.length)];
+    return randomEntry;
+}
+
+class Result {
+    least1: boolean
+    all3: boolean
+    hits: number
+    points: number
+    constructor(hit1: boolean, hit2: boolean, hit3: boolean) {
+        this.least1 = hit1 || hit2 || hit3;
+        this.all3 = hit1 && hit2 && hit3;
+        const hitCount = (hit1 ? 1 : 0) + (hit2 ? 1 : 0) + (hit3 ? 1 : 0);
+        this.hits = hitCount;
+        this.points = hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100;
+    }
+}
+class ResultTotal {
+    title: string
+    least1: number
+    all3: number
+    hits: number
+    points: number
+    count: number
+    constructor(title: string) {
+        this.title = title;
+        this.least1 = 0;
+        this.all3 = 0;
+        this.hits = 0;
+        this.points = 0;
+        this.count = 0;
+    }
+    add(result: Result) {
+        if (result.least1) this.least1++;
+        if (result.all3) this.all3++;
+        this.hits += result.hits;
+        this.points += result.points;
+        this.count++;
+    }
+    getTotal() {
+        return {
+            count: this.count,
+            title: this.title,
+            least1: this.least1 / this.count,
+            all3: this.all3 / this.count,
+            hitsAvg: this.hits / this.count,
+            pointsAvg: this.points / this.count,
+        };
+    }
+}
+const simulateRandom = (set1: PlayerSet, set2: PlayerSet, set3: PlayerSet): Result | null => {
+    const pick1 = getRandomEntry(set1);
+    if (!pick1) return null;
+    const pick2 = getRandomEntry(set2);
+    if (!pick2) return null;
+    const pick3 = getRandomEntry(set3);
+    if (!pick3) return null;
+    return new Result(pick1.scored, pick2.scored, pick3.scored);
+}
+function getIndependentSet(player: HistoryPlayer, set: PlayerSet): PlayerSet {
+    const independent = set.filter((p) => p.team !== player.team && p.opponent !== player.team);
+    return independent;
+}
+const simulateIndependent = (set1: PlayerSet, set2: PlayerSet, set3: PlayerSet): Result | null => {
+    const pick1 = getRandomEntry(set1);
+    if (!pick1) return null;
+    const independent2 = getIndependentSet(pick1, set2);
+    const pick2 = getRandomEntry(independent2);
+    if (!pick2) return null;
+    const independent3 = getIndependentSet(pick2, getIndependentSet(pick1, set3));
+    const pick3 = getRandomEntry(independent3);
+    if (!pick3) return null;
+    return new Result(pick1.scored, pick2.scored, pick3.scored);
+
+}
+function getStackedSet(player: HistoryPlayer, set: PlayerSet): PlayerSet {
+    const stacked = set.filter((p) => p.team === player.team);
+    return stacked;
+}
+const simulateStacked = (set1: PlayerSet, set2: PlayerSet, set3: PlayerSet): Result | null => {
+    const pick1 = getRandomEntry(set1);
+    if (!pick1) return null;
+    const stacked2 = getStackedSet(pick1, set2);
+    const pick2 = getRandomEntry(stacked2);
+    if (!pick2) return null;
+    const stacked3 = getStackedSet(pick2, getStackedSet(pick1, set3));
+    const pick3 = getRandomEntry(stacked3);
+    if (!pick3) return null;
+    return new Result(pick1.scored, pick2.scored, pick3.scored);
+
+}
+function getOpposingSet(player: HistoryPlayer, set: PlayerSet): PlayerSet {
+    const opposing = set.filter((p) => p.team === player.opponent);
+    return opposing;
+}
+const simulateOpposing = (set1: PlayerSet, set2: PlayerSet, set3: PlayerSet): Result | null => {
+    const pick1 = getRandomEntry(set1);
+    if (!pick1) return null;
+    const opposing2 = getOpposingSet(pick1, set2);
+    const pick2 = getRandomEntry(opposing2);
+    if (!pick2) return null;
+    const independent3 = getIndependentSet(pick2, getIndependentSet(pick1, set3));
+    const pick3 = getRandomEntry(independent3);
+    if (!pick3) return null;
+    return new Result(pick1.scored, pick2.scored, pick3.scored);
+
+}
+
+/*
+    sss = stacked
+    iii = independent
+    sso = stacked + opposing - s vs o order
+    ssi = stacked + independent - s vs i order
+    ooi = opposing - i vs o order
+    # of games
+*/
+export const runSimulation = async () => {
+    const ITERATIONS_PER_FILE = 10000;
+    const response = await fetch('./history/history.json');
+    const data = await response.json();
+    const randomResults = new ResultTotal("Random");
+    const independentResults = new ResultTotal("Independent");
+    const opposingResults = new ResultTotal("Opposing");
+    const stackedResults = new ResultTotal("Stacked");
+    let totalCount = 0;
+    for (const item of data) {
+        if (item.format !== 'regular') continue;
+        for (const file of item.files) {
+            const response = await fetch(`./history/${file}`);
+            const fileData = await response.json();
+            const set1: Map<number, HistoryPlayer> = new Map();
+            const set2: Map<number, HistoryPlayer> = new Map();
+            const set3: Map<number, HistoryPlayer> = new Map();
+            const teams = new Set<string>();
+            let gameCount = 0;
+            for (const playerList of fileData.playerLists) {
+                const set = playerList.id === 1 ? set1 : playerList.id === 2 ? set2 : set3;
+                for (const player of playerList.players) {
+                    set.set(player.nhlPlayerId, player);
+                    if (!teams.has(player.team)) {
+                        gameCount++;
+                        teams.add(player.team);
+                        teams.add(player.opponent);
+                    }
+                }
+            }
+            if (gameCount !== 1) continue;
+            if (set1.size === 0 || set2.size === 0 || set3.size === 0) continue;
+            const array1 = Array.from(set1.values());
+            const array2 = Array.from(set2.values());
+            const array3 = Array.from(set3.values());
+
+            for (let i = 0; i < ITERATIONS_PER_FILE; i++) {
+                const resultRandom = simulateRandom(array1, array2, array3);
+                if (resultRandom !== null) randomResults.add(resultRandom);
+                const resultIndependent = simulateIndependent(array1, array2, array3);
+                if (resultIndependent !== null) independentResults.add(resultIndependent);
+                const resultStacked = simulateStacked(array1, array2, array3);
+                if (resultStacked !== null) stackedResults.add(resultStacked);
+                const resultOpposing = simulateOpposing(array1, array2, array3);
+                if (resultOpposing !== null) opposingResults.add(resultOpposing);
+                totalCount++;
+            }
+        }
+    }
+    if (totalCount > 0) {
+        const rand = randomResults.getTotal();
+        const ind = independentResults.getTotal();
+        const opp = opposingResults.getTotal();
+        const stack = stackedResults.getTotal();
+
+        // Correlation factors for each goal
+        const corr = {
+            all3: {
+                sameTeam: (rand.all3 && stack.all3) ? stack.all3 / rand.all3 : null,
+                opposing: (rand.all3 && opp.all3) ? opp.all3 / rand.all3 : null,
+                independent: (rand.all3 && ind.all3) ? ind.all3 / rand.all3 : null
+            },
+            least1: {
+                sameTeam: (rand.least1 && stack.least1) ? stack.least1 / rand.least1 : null,
+                opposing: (rand.least1 && opp.least1) ? opp.least1 / rand.least1 : null,
+                independent: (rand.least1 && ind.least1) ? ind.least1 / rand.least1 : null
+            },
+            hitsAvg: {
+                sameTeam: (rand.hitsAvg && stack.hitsAvg) ? stack.hitsAvg / rand.hitsAvg : null,
+                opposing: (rand.hitsAvg && opp.hitsAvg) ? opp.hitsAvg / rand.hitsAvg : null,
+                independent: (rand.hitsAvg && ind.hitsAvg) ? ind.hitsAvg / rand.hitsAvg : null
+            },
+            pointsAvg: {
+                sameTeam: (rand.pointsAvg && stack.pointsAvg) ? stack.pointsAvg / rand.pointsAvg : null,
+                opposing: (rand.pointsAvg && opp.pointsAvg) ? opp.pointsAvg / rand.pointsAvg : null,
+                independent: (rand.pointsAvg && ind.pointsAvg) ? ind.pointsAvg / rand.pointsAvg : null
+            }
+        };
+
+        // console.log(rand);
+        // console.log(ind);
+        // console.log(opp);
+        // console.log(stack);
+
+        console.log('--- Correlation Factors (relative to Independent) ---');
+        console.log('All 3 hit:', corr.all3);
+        console.log('At least 1 hit:', corr.least1);
+        console.log('Average hits:', corr.hitsAvg);
+        console.log('Average points:', corr.pointsAvg);
+
+        return {
+            independent: ind,
+            opposing: opp,
+            random: rand,
+            stacked: stack,
+            correlation: corr
+        };
+    }
+}

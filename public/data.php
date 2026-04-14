@@ -27,6 +27,7 @@ $csrfToken = $_SESSION['csrf_token'];
 			<option value="games">Games</option>
 			<option value="picks,odds">Picks + Odds</option>
 			<option value="picks,odds,games">Games + Picks + Odds</option>
+			<option value="backup">Backup</option>
 			<option value="players">Players</option>
 		</select>
 		<input type="text" id="name" />
