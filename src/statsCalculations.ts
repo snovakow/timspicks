@@ -1,8 +1,6 @@
 import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
 import type { Team } from './components/logo';
-// import { runSimulation } from './picksOptimizer';
-// runSimulation();
 
 const precision = Picks.precision;
 

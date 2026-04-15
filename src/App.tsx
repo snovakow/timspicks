@@ -18,8 +18,10 @@ import iconInfo from './images/info_i_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg
 import iconLegend from './images/legend_toggle_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyDark from './images/sports_hockey_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyLight from './images/sports_hockey_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
+import { runSimulation } from './picksOptimizer';
 
 const precision = Picks.precision;
+let SIMULATE = false;
 
 type Sportsbook = {
 	key: "bet1" | "bet2" | "bet3" | "bet4";
@@ -128,6 +130,8 @@ function App() {
 				const gamesList = buildGamesList(initialData.gamesListing);
 				const playerList = buildPlayerList(initialData.gamesListing);
 				const normalizedNameMap = buildNormalizedNameMap(playerList);
+
+				if (SIMULATE) { runSimulation(gamesList.length, 10000); SIMULATE = false; }
 
 				const { table1Rows, table2Rows, table3Rows } = mapPlayers(
 					playerList,

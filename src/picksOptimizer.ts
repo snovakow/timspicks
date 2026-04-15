@@ -194,8 +194,7 @@ function simulateCombo(set1: PlayerSet, set2: PlayerSet, set3: PlayerSet, patter
     return new Result(pick1.scored, pick2.scored, pick3.scored);
 }
 
-export const runSimulation = async () => {
-    const ITERATIONS_PER_FILE = 10000;
+export const runSimulation = async (gamesCount: number, iterations: number) => {
     const response = await fetch('./history/history.json');
     const data = await response.json();
     class GameResults {
@@ -216,9 +215,7 @@ export const runSimulation = async () => {
             }
         }
     }
-    const gameResults1 = new GameResults(1, 1);
-    const gameResults2 = new GameResults(2, 2);
-    const gameResults3 = new GameResults(3);
+    const gameResults = gamesCount === 1 ? new GameResults(1, 1) : gamesCount === 2 ? new GameResults(2, 2) : new GameResults(3);
 
     for (const item of data) {
         // if (item.format !== 'regular') continue;
@@ -242,10 +239,7 @@ export const runSimulation = async () => {
                 }
             }
 
-            let gameResults: GameResults;
-            if (gameCount === 1) gameResults = gameResults1;
-            else if (gameCount === 2) gameResults = gameResults2;
-            else gameResults = gameResults3;
+            if(gameResults.gamesMin > gameCount || gameResults.gamesMax < gameCount) continue;
             gameResults.nightsCount++;
 
             if (set1.size === 0 || set2.size === 0 || set3.size === 0) continue;
@@ -253,7 +247,7 @@ export const runSimulation = async () => {
             const array2 = Array.from(set2.values());
             const array3 = Array.from(set3.values());
 
-            for (let i = 0; i < ITERATIONS_PER_FILE; i++) {
+            for (let i = 0; i < iterations; i++) {
                 const resultRandom = simulateRandom(array1, array2, array3);
                 if (resultRandom !== null) gameResults.randomResults.add(resultRandom);
                 for (const [type, strategy] of gameResults.strategyResults) {
@@ -314,9 +308,6 @@ export const runSimulation = async () => {
         };
     }
 
-    return {
-        "1": compile(gameResults1, gameResults1.randomResults.getTotal()),
-        "2": compile(gameResults2, gameResults2.randomResults.getTotal()),
-        "3+": compile(gameResults3, gameResults3.strategyResults.get('iii')!.getTotal())
-    };
+    const baseline = gamesCount >= 3 ? gameResults.strategyResults.get('iii')!.getTotal() : gameResults.randomResults.getTotal();
+    return compile(gameResults, baseline);
 }
