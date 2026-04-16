@@ -2,15 +2,72 @@
 $live = true;
 $secure = true;
 $savesrc = false;
-$fetchHistory = false;
 $debug = false;
+
+if ($live && $secure) {
+	session_start();
+
+	if (!isset($_SESSION['csrf_token'])) die();
+
+	$csrf_token = $_SESSION['csrf_token'];
+	// unset($_SESSION['csrf_token']);
+
+	if ($_SERVER['REQUEST_METHOD'] !== 'POST') die();
+
+	$json_data = file_get_contents('php://input');
+
+	$data = json_decode($json_data, true);
+
+	if (!isset($data['code']) || !isset($data['name'])) die();
+	if (!hash_equals($csrf_token, $data['csrf_token'])) die();
+	if (!hash_equals('snovakow', $data['name'])) die();
+
+	$source_file = './pwd.txt';
+	$stored_hash = file_get_contents($source_file);
+	$user_input_password = $data['code'];
+	if (password_verify($user_input_password, $stored_hash)) {
+		if (password_needs_rehash($stored_hash, PASSWORD_DEFAULT)) {
+			$stored_hash = password_hash($user_input_password, PASSWORD_DEFAULT);
+			file_put_contents($source_file, $stored_hash);
+		}
+	} else {
+		if ($debug) die("Password is incorrect.");
+		else die();
+	}
+}
+
+/*
+
+   Players
+
+*/
+if ($live && isset($_GET['players']) && isset($_GET['team'])) {
+	$code = $_GET['team'];
+	$url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
+	$response = file_get_contents($url);
+	if ($response === false) {
+		die('Error fetching NHL data: ' . $url);
+	}
+
+	$filename = 'players_' . $code . '.json';
+	$filepath = './players/' . $filename;
+
+	$dir = dirname($filepath);
+	if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+	if (file_put_contents($filepath, $response) === false) {
+		die('Error saving ' . $filepath . '<br>');
+	}
+
+	die($filename . '<br>');
+}
 
 /*
 
    History
 
 */
-if ($fetchHistory) {
+if ($live && isset($_GET['history'])) {
 	echo '<h2>History</h2>';
 
 	$ch = curl_init();
@@ -102,135 +159,13 @@ if ($fetchHistory) {
 	}
 	echo "Index has been written to $local_file";
 
-	die("<h2>Complete!!!</h2>");
+	die("<h2>Complete</h2>");
 }
 
-if ($live && $secure) {
-	session_start();
-
-	if (!isset($_SESSION['csrf_token'])) die();
-
-	$csrf_token = $_SESSION['csrf_token'];
-	// unset($_SESSION['csrf_token']);
-
-	if ($_SERVER['REQUEST_METHOD'] !== 'POST') die();
-
-	$json_data = file_get_contents('php://input');
-
-	$data = json_decode($json_data, true);
-
-	if (!isset($data['code']) || !isset($data['name'])) die();
-	if (!hash_equals($csrf_token, $data['csrf_token'])) die();
-	if (!hash_equals('snovakow', $data['name'])) die();
-
-	$source_file = './pwd.txt';
-	$stored_hash = file_get_contents($source_file);
-	$user_input_password = $data['code'];
-	if (password_verify($user_input_password, $stored_hash)) {
-		if (password_needs_rehash($stored_hash, PASSWORD_DEFAULT)) {
-			$stored_hash = password_hash($user_input_password, PASSWORD_DEFAULT);
-			file_put_contents($source_file, $stored_hash);
-		}
-	} else {
-		if ($debug) die("Password is incorrect.");
-		else die();
-	}
-}
-
-/*
-
-   Players
-
-*/
-if ($live && isset($_GET['players']) && isset($_GET['team'])) {
-	$code = $_GET['team'];
-	$url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
-	$response = file_get_contents($url);
-	if ($response === false) {
-		die('Error fetching NHL data: ' . $url);
-	}
-
-	$filename = 'players_' . $code . '.json';
-	$filepath = './players/' . $filename;
-
-	$dir = dirname($filepath);
-	if (!is_dir($dir)) mkdir($dir, 0755, true);
-
-	if (file_put_contents($filepath, $response) === false) {
-		die('Error saving ' . $filepath . '<br>');
-	}
-
-	die($filename . '<br>');
-}
+if ($live && !isset($_GET['update'])) die("<h2>Invalid Request</h2>");
 
 $basePath = './data';
 if (!is_dir($basePath)) mkdir($basePath, 0755, true);
-
-/*
-
-   Backup
-
-*/
-if ($live && isset($_GET['backup'])) {
-	// Backup the current data directory before fetching picks
-	if (!is_dir($basePath)) die("$basePath does not exist.");
-
-	$local_file = $basePath . '/games.json';
-	if (!file_exists($local_file)) die("$local_file does not exist.");
-
-	$data = file_get_contents($local_file);
-	if ($data === false) die("Error reading $local_file");
-
-	$data = json_decode($data, true);
-	if ($data === null) die("Error decoding JSON from $local_file");
-
-	$games = $data["gameWeek"][0]["games"] ?? [];
-	if (empty($games)) die('No games scheduled for today.');
-
-	$timezone = new DateTimeZone('America/New_York');
-	$timestamp = new DateTime('now', $timezone);
-
-	$closestGame = null;
-	$closestTime = null;
-	foreach ($games as $game) {
-		$gameTime = DateTime::createFromFormat('Y-m-d\TH:i:se', $game["startTimeUTC"]);
-
-		if (!$gameTime) continue;
-		if ($gameTime <= $timestamp) continue;
-		if ($closestTime === null || $gameTime < $closestTime) {
-			$closestTime = clone $gameTime;
-			$closestGame = $game;
-		}
-	}
-
-	if ($closestGame) {
-		$closestTime->setTimezone($timezone);
-	} else {
-		die('No game found after the current time.');
-	}
-
-	$date = $timestamp->format('Y-m-d');
-	$time = $closestTime->format('Hi');
-
-	$backupPath = $basePath . '/' . $date;
-	$backupSubPath = $basePath . '/' . $date . '/' . $time;
-	if (!is_dir($backupPath)) mkdir($backupPath, 0755, true);
-	if (!is_dir($backupSubPath)) mkdir($backupSubPath, 0755, true);
-	$bet1file = '/bet1.json';
-	$bet2file = '/bet2.json';
-	$bet3file = '/bet3.json';
-	$bet4file = '/bet4.json';
-	$gamesfile = '/games.json';
-	$helperfile = '/helper.json';
-	copy($basePath . $gamesfile, $backupPath . $gamesfile);
-	copy($basePath . $bet1file, $backupSubPath . $bet1file);
-	copy($basePath . $bet2file, $backupSubPath . $bet2file);
-	copy($basePath . $bet3file, $backupSubPath . $bet3file);
-	copy($basePath . $bet4file, $backupSubPath . $bet4file);
-	copy($basePath . $helperfile, $backupSubPath . $helperfile);
-
-	die("<h2>Backup: $backupSubPath</h2>");
-}
 
 echo '<h1>Data Downloader</h1>';
 
@@ -239,13 +174,12 @@ echo '<h1>Data Downloader</h1>';
    Games
 
 */
-if ($live && isset($_GET['games'])) {
-	echo '<h2>Games</h2>';
+if ($live) {
+	echo '<h3>Games</h3>';
 
 	// Endpoint for today's schedule
 	$date = new DateTime('now', new DateTimeZone('America/New_York'));
 	$url = 'https://api-web.nhle.com/v1/schedule/' . $date->format('Y-m-d');
-	echo "{$url}<br>";
 
 	// Fetch the JSON data
 	$response = file_get_contents($url);
@@ -257,7 +191,7 @@ if ($live && isset($_GET['games'])) {
 	if (file_put_contents($local_file, $response) === false) {
 		die('Error saving local JSON file.');
 	}
-	echo "<br>Data has been written to $local_file";
+	echo "Data has been written to $local_file";
 }
 
 $ch = curl_init();
@@ -267,11 +201,10 @@ $ch = curl_init();
    Picks
 
 */
-if ($live && isset($_GET['picks'])) {
-	echo '<h2>Picks</h2>';
+if ($live) {
+	echo '<h3>Picks</h3>';
 
 	$helper = 'https://api.hockeychallengehelper.com/api/picks';
-	echo "{$helper}<br>";
 
 	curl_reset($ch);
 
@@ -295,7 +228,7 @@ if ($live && isset($_GET['picks'])) {
 	]);
 
 	$response = curl_exec($ch);
-	if ($response === false) echo 'cURL Error: ' . curl_error($ch);
+	if ($response === false) die('cURL Error: ' . curl_error($ch));
 
 	if ($savesrc) file_put_contents($basePath . '/src_helper.json', $response);
 
@@ -328,7 +261,7 @@ if ($live && isset($_GET['picks'])) {
 	if (file_put_contents($local_file, $json_string) === false) {
 		die('Error saving local JSON file.');
 	}
-	echo "<br>Data has been written to $local_file";
+	echo "Data has been written to $local_file";
 }
 
 /*
@@ -336,11 +269,10 @@ if ($live && isset($_GET['picks'])) {
    DraftKings
 
 */
-if ($live && isset($_GET['odds'])) {
-	echo '<h2>DraftKings</h2>';
+if ($live) {
+	echo '<h3>DraftKings</h3>';
 
 	$draftkings = 'https://sportsbook-nash.draftkings.com/sites/CA-ON-SB/api/sportscontent/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=42133%2C14495&eventsQuery=%24filter%3DleagueId%20eq%20%2742133%27%20AND%20clientMetadata%2FSubcategories%2Fany%28s%3A%20s%2FId%20eq%20%2714495%27%29&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%2714495%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Events&entity=events';
-	echo "{$draftkings}<br>";
 
 	curl_reset($ch);
 
@@ -369,7 +301,7 @@ if ($live && isset($_GET['odds'])) {
 	$local_file = $basePath . '/bet1.json';
 	if (file_put_contents($local_file, $json_string) === false) die();
 
-	echo "<br>Data has been written to $local_file";
+	echo "Data has been written to $local_file";
 }
 
 $timezone = new DateTimeZone('America/New_York');
@@ -381,11 +313,10 @@ $endOfDay = $endOfDay->getTimestamp();
    FanDuel
 
 */
-if ($live && isset($_GET['odds'])) {
-	echo '<h2>FanDuel</h2>';
+if ($live) {
+	echo '<h3>FanDuel</h3>';
 
 	$fanduel = 'https://sbapi.on.sportsbook.fanduel.ca/api/content-managed-page?page=CUSTOM&customPageId=nhl&pbHorizontal=false&_ak=FhMFpcPWXMeyZxOx&timezone=America%2FNew_York';
-	echo "{$fanduel}<br>";
 
 	curl_reset($ch);
 
@@ -444,7 +375,7 @@ if ($live && isset($_GET['odds'])) {
 	$local_file = $basePath . '/bet2.json';
 	if (file_put_contents($local_file, $json_string) === false) die();
 
-	echo "<br>Data has been written to $local_file";
+	echo "Data has been written to $local_file";
 }
 
 /*
@@ -452,11 +383,10 @@ if ($live && isset($_GET['odds'])) {
    BetMGM
 
 */
-if ($live && isset($_GET['odds'])) {
-	echo '<h2>BetMGM</h2>';
+if ($live) {
+	echo '<h3>BetMGM: </h3>';
 
 	$remote_url = 'https://www.on.betmgm.ca/cds-api/bettingoffer/fixtures?x-bwin-accessid=MzViOTU5Y2EtNzgyMy00ZTBmLThkNDctYjRlYjgwNjMwZDQy&lang=en-us&country=CA&userCountry=CA&subdivision=CA-Ontario&fixtureTypes=Standard&state=Latest&offerMapping=Filtered&offerCategories=Gridable&fixtureCategories=Gridable,NonGridable,Other&sportIds=12&isPriceBoost=false&statisticsModes=None&skip=0&take=50&sortBy=Tags';
-	echo "{$remote_url}<br>";
 
 	curl_reset($ch);
 
@@ -513,7 +443,6 @@ if ($live && isset($_GET['odds'])) {
 
 		$ids[] = $fixture->id;
 	}
-	echo "<br>" . count($ids) . " games<br>";
 
 	if ($savesrc) $items = [];
 
@@ -592,7 +521,7 @@ if ($live && isset($_GET['odds'])) {
 
 	if (file_put_contents($local_file, $json_string, LOCK_EX) === false) die();
 
-	echo "<br>Data has been merged and written to $local_file";
+	echo count($ids) . " games of data have been merged and written to $local_file";
 }
 
 /*
@@ -600,12 +529,12 @@ if ($live && isset($_GET['odds'])) {
    BetRivers
 
 */
-if ($live && isset($_GET['odds'])) {
-	echo '<h2>BetRivers</h2>';
+if ($live) {
+	echo '<h3>BetRivers</h3>';
 	$remote_url_base = 'https://on.betrivers.ca/api/service/sportsbook/offering/propcentral/offers?groupId=1000093657&marketCategory=TO_SCORE&pageSize=20&cageCode=249&t=' . time() . '&pageNr=';
 
 	$remote_url = $remote_url_base . '1';
-	echo "{$remote_url}<br>";
+
 	$json_data = file_get_contents($remote_url);
 	if ($json_data === false) {
 		if ($debug) die('Error fetching remote JSON file.');
@@ -635,7 +564,6 @@ if ($live && isset($_GET['odds'])) {
 	}
 
 	$pages = $data_array->paging->totalPages;
-	echo "<br>{$pages} pages<br>";
 	for ($i = 2; $i <= $pages; $i++) {
 		$remote_url = $remote_url_base . $i;
 		$json_data = file_get_contents($remote_url);
@@ -675,7 +603,73 @@ if ($live && isset($_GET['odds'])) {
 
 	if (file_put_contents($local_file, $json_string, LOCK_EX) === false) die();
 
-	echo "<br>Data has been merged and written to $local_file";
+	echo "{$pages} pages of data have been merged and written to $local_file";
 }
 
-die("<h2>Complete.</h2>");
+/*
+
+   Backup
+
+*/
+if ($live) {
+	// Backup the current data directory before fetching picks
+	if (!is_dir($basePath)) die("$basePath does not exist.");
+
+	$local_file = $basePath . '/games.json';
+	if (!file_exists($local_file)) die("$local_file does not exist.");
+
+	$data = file_get_contents($local_file);
+	if ($data === false) die("Error reading $local_file");
+
+	$data = json_decode($data, true);
+	if ($data === null) die("Error decoding JSON from $local_file");
+
+	$games = $data["gameWeek"][0]["games"] ?? [];
+	if (empty($games)) die('No games scheduled for today.');
+
+	$timezone = new DateTimeZone('America/New_York');
+	$timestamp = new DateTime('now', $timezone);
+
+	$closestGame = null;
+	$closestTime = null;
+	foreach ($games as $game) {
+		$gameTime = DateTime::createFromFormat('Y-m-d\TH:i:se', $game["startTimeUTC"]);
+
+		if (!$gameTime) continue;
+		if ($gameTime <= $timestamp) continue;
+		if ($closestTime === null || $gameTime < $closestTime) {
+			$closestTime = clone $gameTime;
+			$closestGame = $game;
+		}
+	}
+
+	if ($closestGame) {
+		$closestTime->setTimezone($timezone);
+
+		$date = $timestamp->format('Y-m-d');
+		$time = $closestTime->format('Hi');
+
+		$backupPath = $basePath . '/' . $date;
+		$backupSubPath = $basePath . '/' . $date . '/' . $time;
+		if (!is_dir($backupPath)) mkdir($backupPath, 0755, true);
+		if (!is_dir($backupSubPath)) mkdir($backupSubPath, 0755, true);
+		$bet1file = '/bet1.json';
+		$bet2file = '/bet2.json';
+		$bet3file = '/bet3.json';
+		$bet4file = '/bet4.json';
+		$gamesfile = '/games.json';
+		$helperfile = '/helper.json';
+		copy($basePath . $gamesfile, $backupPath . $gamesfile);
+		copy($basePath . $bet1file, $backupSubPath . $bet1file);
+		copy($basePath . $bet2file, $backupSubPath . $bet2file);
+		copy($basePath . $bet3file, $backupSubPath . $bet3file);
+		copy($basePath . $bet4file, $backupSubPath . $bet4file);
+		copy($basePath . $helperfile, $backupSubPath . $helperfile);
+
+		echo ("<h3>Backup: $backupSubPath</h3>");
+	} else {
+		echo ('<h3>No game found after the current time</h3>');
+	}
+}
+
+echo ("<h2>Complete</h2>");
