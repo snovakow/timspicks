@@ -98,9 +98,8 @@ if ($live && isset($_GET['history'])) {
 		['season' => '2023-2024', 'format' => 'playoff', 'start' => '2024-04-20', 'end' => '2024-06-24'],
 		['season' => '2024-2025', 'format' => 'regular', 'start' => '2024-10-04', 'end' => '2025-04-17'],
 		['season' => '2024-2025', 'format' => 'playoff', 'start' => '2025-04-19', 'end' => '2025-06-17'],
-		['season' => '2025-2026', 'format' => 'regular', 'start' => '2025-10-07', 'end' => '2026-04-15'],
-		// ['season'=>'2025-2026', 'format' => 'regular', 'start' => '2025-10-07', 'end' => '2026-04-16'],
-		// ['season'=>'2025-2026', 'format' => 'playoff', 'start' => '2026-04-18', 'end' => ''],
+		['season' => '2025-2026', 'format' => 'regular', 'start' => '2025-10-07', 'end' => '2026-04-16'],
+		// ['season' => '2025-2026', 'format' => 'playoff', 'start' => '2026-04-18', 'end' => ''],
 	];
 
 	$baseURL = 'https://api.hockeychallengehelper.com/api/history?datetime=';
@@ -536,41 +535,11 @@ if ($live) {
 	$remote_url = $remote_url_base . '1';
 
 	$json_data = file_get_contents($remote_url);
-	if ($json_data === false) {
-		if ($debug) die('Error fetching remote JSON file.');
-		else die();
-	}
-
-	if ($savesrc) file_put_contents($basePath . '/src_bet4_1.json', $json_data);
-
-	$data_array = json_decode($json_data, false);
-	if (json_last_error() !== JSON_ERROR_NONE) {
-		if ($debug) die('Error decoding JSON: ' . json_last_error_msg());
-		else die();
-	}
-
-	if ($savesrc) $items = [$data_array->items];
-
 	$map = [];
-	foreach ($data_array->items as $item) {
-		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $item->closingTime);
-		$closingTime = $closingTime->getTimestamp();
-		if ($closingTime > $endOfDay) continue;
-
-		$map[] = [
-			"name" => $item->playerInfo->name,
-			"odds" => $item->outcomes[0]->odds
-		];
-	}
-
-	$pages = $data_array->paging->totalPages;
-	for ($i = 2; $i <= $pages; $i++) {
-		$remote_url = $remote_url_base . $i;
-		$json_data = file_get_contents($remote_url);
-
-		if ($json_data === false) die();
-
-		if ($savesrc) file_put_contents($basePath . '/src_bet4_' . $i . '.json', $json_data);
+	if ($json_data === false) {
+		$pages = 0;
+	} else {
+		if ($savesrc) file_put_contents($basePath . '/src_bet4_1.json', $json_data);
 
 		$data_array = json_decode($json_data, false);
 		if (json_last_error() !== JSON_ERROR_NONE) {
@@ -578,7 +547,7 @@ if ($live) {
 			else die();
 		}
 
-		if ($savesrc) $items[] = $data_array->items;
+		if ($savesrc) $items = [$data_array->items];
 
 		foreach ($data_array->items as $item) {
 			$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $item->closingTime);
@@ -590,18 +559,54 @@ if ($live) {
 				"odds" => $item->outcomes[0]->odds
 			];
 		}
-	}
 
-	if ($savesrc) {
-		$items = array_merge([], ...$items);
-		$json_string = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-		file_put_contents($basePath . '/src_bet4.json', $json_string, LOCK_EX);
+		$pages = $data_array->paging->totalPages;
+
+		for ($i = 2; $i <= $pages; $i++) {
+			$remote_url = $remote_url_base . $i;
+			$json_data = file_get_contents($remote_url);
+
+			if ($json_data === false) {
+				if ($debug) die("Error fetching $remote_url");
+				else die();
+			}
+
+			if ($savesrc) file_put_contents($basePath . '/src_bet4_' . $i . '.json', $json_data);
+
+			$data_array = json_decode($json_data, false);
+			if (json_last_error() !== JSON_ERROR_NONE) {
+				if ($debug) die('Error decoding JSON: ' . json_last_error_msg());
+				else die();
+			}
+
+			if ($savesrc) $items[] = $data_array->items;
+
+			foreach ($data_array->items as $item) {
+				$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $item->closingTime);
+				$closingTime = $closingTime->getTimestamp();
+				if ($closingTime > $endOfDay) continue;
+
+				$map[] = [
+					"name" => $item->playerInfo->name,
+					"odds" => $item->outcomes[0]->odds
+				];
+			}
+		}
+
+		if ($savesrc) {
+			$items = array_merge([], ...$items);
+			$json_string = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+			file_put_contents($basePath . '/src_bet4.json', $json_string);
+		}
 	}
 
 	$json_string = json_encode($map, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 	$local_file = $basePath . '/bet4.json';
 
-	if (file_put_contents($local_file, $json_string, LOCK_EX) === false) die();
+	if (file_put_contents($local_file, $json_string) === false) {
+		if ($debug) die('Error writing file: ' . $local_file);
+		else die();
+	}
 
 	echo "{$pages} pages of data have been merged and written to $local_file";
 }
@@ -625,7 +630,6 @@ if ($live) {
 	if ($data === null) die("Error decoding JSON from $local_file");
 
 	$games = $data["gameWeek"][0]["games"] ?? [];
-	if (empty($games)) die('No games scheduled for today.');
 
 	$timezone = new DateTimeZone('America/New_York');
 	$timestamp = new DateTime('now', $timezone);
@@ -668,7 +672,8 @@ if ($live) {
 
 		echo ("<h3>Backup: $backupSubPath</h3>");
 	} else {
-		echo ('<h3>No game found after the current time</h3>');
+		if (empty($games)) echo ('<h3>No games scheduled for today</h3>');
+		else echo ('<h3>No game found after the current time</h3>');
 	}
 }
 
