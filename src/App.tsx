@@ -110,10 +110,10 @@ function App() {
 	const [deVigEnabled, setDeVigEnabled] = useState(true);
 	const [minSportsbooks, setMinSportsbooks] = useState(3);
 	const [enabledStrategies, setEnabledStrategies] = useState<Record<Picks.StrategyMode, boolean>>({
-		streak: false,
-		point: false,
-		leaderboard: false,
-		hybrid: false,
+		least1: true,
+		points: true,
+		hits: true,
+		all3: true,
 		top: true,
 	});
 
