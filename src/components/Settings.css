@@ -116,20 +116,20 @@
 	transform: scale(1);
 }
 
-.settings-strategy-streak {
-	--strategy-color: var(--highlight-streak-dot, rgb(31, 157, 85));
+.settings-strategy-least1 {
+	--strategy-color: var(--highlight-least1-dot, rgb(31, 157, 85));
 }
 
-.settings-strategy-point {
-	--strategy-color: var(--highlight-point-dot, rgb(196, 58, 138));
+.settings-strategy-points {
+	--strategy-color: var(--highlight-points-dot, rgb(196, 58, 138));
 }
 
-.settings-strategy-leaderboard {
-	--strategy-color: var(--highlight-leaderboard-dot, rgb(200, 138, 0));
+.settings-strategy-hits {
+	--strategy-color: var(--highlight-hits-dot, rgb(200, 138, 0));
 }
 
-.settings-strategy-hybrid {
-	--strategy-color: var(--highlight-hybrid-dot, rgb(74, 123, 192));
+.settings-strategy-all3 {
+	--strategy-color: var(--highlight-all3-dot, rgb(74, 123, 192));
 }
 
 .settings-strategy-top {

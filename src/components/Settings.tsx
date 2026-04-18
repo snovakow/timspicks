@@ -25,10 +25,10 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 	} = props;
 
 	const strategyOptions: Array<{ key: StrategyMode; label: string }> = [
-		{ key: 'streak', label: 'Streak' },
-		{ key: 'point', label: 'Points' },
-		{ key: 'leaderboard', label: 'Leaderboard' },
-		{ key: 'hybrid', label: 'Hybrid' },
+		{ key: 'least1', label: 'Streak' },
+		{ key: 'points', label: 'Points' },
+		{ key: 'hits', label: 'Leaderboard' },
+		{ key: 'all3', label: 'All 3' },
 		{ key: 'top', label: 'Top' },
 	];
 
