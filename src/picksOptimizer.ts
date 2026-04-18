@@ -19,14 +19,14 @@ function getRandomEntry(entries: PlayerSet = []): HistoryPlayer | undefined {
 class Result {
     least1: boolean
     all3: boolean
-    hits: number
     points: number
+    hits: number
     constructor(hit1: boolean, hit2: boolean, hit3: boolean) {
         this.least1 = hit1 || hit2 || hit3;
         this.all3 = hit1 && hit2 && hit3;
         const hitCount = (hit1 ? 1 : 0) + (hit2 ? 1 : 0) + (hit3 ? 1 : 0);
-        this.hits = hitCount;
         this.points = hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100;
+        this.hits = hitCount;
     }
 }
 interface Total {
@@ -34,29 +34,30 @@ interface Total {
     title: string;
     least1: number;
     all3: number;
-    hitsAvg: number;
-    pointsAvg: number;
+    points: number;
+    hits: number;
 }
+
 class ResultTotal {
     title: string
     least1: number
     all3: number
-    hits: number
     points: number
+    hits: number
     count: number
     constructor(title: string) {
         this.title = title;
         this.least1 = 0;
         this.all3 = 0;
-        this.hits = 0;
         this.points = 0;
+        this.hits = 0;
         this.count = 0;
     }
     add(result: Result) {
         if (result.least1) this.least1++;
         if (result.all3) this.all3++;
-        this.hits += result.hits;
         this.points += result.points;
+        this.hits += result.hits;
         this.count++;
     }
     getTotal(): Total {
@@ -65,8 +66,8 @@ class ResultTotal {
             title: this.title,
             least1: this.least1 / this.count,
             all3: this.all3 / this.count,
-            hitsAvg: this.hits / this.count,
-            pointsAvg: this.points / this.count,
+            points: this.points / this.count,
+            hits: this.hits / this.count,
         };
     }
 }
@@ -214,21 +215,17 @@ export const runSimulation = async (gamesCount: number, iterations: number) => {
 
     const compile = (gameResults: GameResults, baseline: Total) => {
         const corr = {
-            all3: {} as Record<strategyPattern, number | null>,
             least1: {} as Record<strategyPattern, number | null>,
-            hitsAvg: {} as Record<strategyPattern, number | null>,
-            pointsAvg: {} as Record<strategyPattern, number | null>
+            all3: {} as Record<strategyPattern, number | null>,
+            points: {} as Record<strategyPattern, number | null>,
+            hits: {} as Record<strategyPattern, number | null>
         };
 
-        const cutOff = 0.0; // Only show correlations above cutOff (positive or negative)
         const assign = (key: keyof typeof corr, type: strategyPattern, total: Total) => {
             const randVal = baseline[key];
             const totalVal = total[key];
             if (randVal && totalVal) {
-                const ratio = totalVal / randVal - 1;
-                if (ratio > -cutOff && ratio < cutOff) return;
-                const precision = Math.pow(10, 2);
-                corr[key][type] = Math.round(ratio * 100 * precision) / precision;
+                corr[key][type] = totalVal / randVal;
             } else {
                 corr[key][type] = null;
             }
@@ -240,10 +237,10 @@ export const runSimulation = async (gamesCount: number, iterations: number) => {
         }
         for (const [type, strategy] of gameResults.strategyResults) {
             const total = strategy.getTotal();
-            assign('all3', type, total);
             assign('least1', type, total);
-            assign('hitsAvg', type, total);
-            assign('pointsAvg', type, total);
+            assign('all3', type, total);
+            assign('points', type, total);
+            assign('hits', type, total);
         }
 
         console.log('--- Correlation Factors (relative to ' + baseline.title + ') ---');
@@ -251,10 +248,7 @@ export const runSimulation = async (gamesCount: number, iterations: number) => {
         else if (gameResults.gamesMax === Infinity) console.log(gameResults.gamesMin + '+ Game Nights');
         else console.log(gameResults.gamesMin + ' - ' + gameResults.gamesMax + ' Game Nights');
         console.log(gameResults.nightsCount + ' nights simulated');
-        console.log('All 3 hit:', corr.all3);
-        console.log('At least 1 hit:', corr.least1);
-        console.log('Average hits:', corr.hitsAvg);
-        console.log('Average points:', corr.pointsAvg);
+        console.log(corr);
 
         return {
             gameResults: gameResults,

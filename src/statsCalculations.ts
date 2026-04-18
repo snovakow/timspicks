@@ -88,21 +88,11 @@ export const calculateStats = (
 		return names.join(shortTab ? "\n   " : "\n           ");
 	}
 
-	const calcAny = (max1: number, max2: number, max3: number): number => {
-		return 1 - (1 - max1) * (1 - max2) * (1 - max3);
-	}
-	const calcAvg = (max1: number, max2: number, max3: number): number => {
-		return (max1 + max2 + max3) / 3;
-	}
-	const calcAll = (max1: number, max2: number, max3: number): number => {
-		return max1 * max2 * max3;
-	}
-
 	class Choice {
-		avg: number;
+		prob: number;
 		pick: Picks.PickOdds;
-		constructor(pick: Picks.PickOdds, avg: number) {
-			this.avg = avg;
+		constructor(pick: Picks.PickOdds, prob: number) {
+			this.prob = prob;
 			this.pick = pick;
 		}
 	}
@@ -128,27 +118,67 @@ export const calculateStats = (
 		pick3: Choice;
 	}
 
+	const calcAny = (prob1: number, prob2: number, prob3: number): number => {
+		return 1 - (1 - prob1) * (1 - prob2) * (1 - prob3);
+	}
+	const calcAll = (prob1: number, prob2: number, prob3: number): number => {
+		return prob1 * prob2 * prob3;
+	}
+	const calcPnt = (prob1: number, prob2: number, prob3: number): number => {
+		const not1 = 1 - prob1;
+		const not2 = 1 - prob2;
+		const not3 = 1 - prob3;
+		const p1 = prob1 * not2 * not3 + not1 * prob2 * not3 + not1 * not2 * prob3;
+		const p2 = prob1 * prob2 * not3 + prob1 * not2 * prob3 + not1 * prob2 * prob3;
+		const p3 = prob1 * prob2 * prob3;
+		return p1 * 25 + p2 * 50 + p3 * 100;
+	}
+	const calcHit = (prob1: number, prob2: number, prob3: number): number => {
+		return prob1 + prob2 + prob3;
+	}
 	class Result {
 		players1: Set<Picks.PickOdds>;
 		players2: Set<Picks.PickOdds>;
 		players3: Set<Picks.PickOdds>;
-		avg1: number;
-		avg2: number;
-		avg3: number;
+		prob1: number;
+		prob2: number;
+		prob3: number;
+
+		least1: number;
+		all3: number;
+		points: number;
+		hits: number;
+
 		constructor(combo: BestCombo) {
 			this.players1 = new Set([combo.pick1.pick]);
 			this.players2 = new Set([combo.pick2.pick]);
 			this.players3 = new Set([combo.pick3.pick]);
-			this.avg1 = combo.pick1.avg;
-			this.avg2 = combo.pick2.avg;
-			this.avg3 = combo.pick3.avg;
+			this.prob1 = combo.pick1.prob;
+			this.prob2 = combo.pick2.prob;
+			this.prob3 = combo.pick3.prob;
+
+			this.least1 = calcAny(this.prob1, this.prob2, this.prob3);
+			this.all3 = calcAll(this.prob1, this.prob2, this.prob3);
+			this.points = calcPnt(this.prob1, this.prob2, this.prob3);
+			this.hits = calcHit(this.prob1, this.prob2, this.prob3);
 		}
 		merge(combo: BestCombo): boolean {
-			if (this.avg1 !== combo.pick1.avg || this.avg2 !== combo.pick2.avg || this.avg3 !== combo.pick3.avg) return false;
+			if (this.prob1 !== combo.pick1.prob || this.prob2 !== combo.pick2.prob || this.prob3 !== combo.pick3.prob) return false;
 			this.players1.add(combo.pick1.pick);
 			this.players2.add(combo.pick2.pick);
 			this.players3.add(combo.pick3.pick);
 			return true;
+		}
+
+		correlate(strategy: strategyPattern, ref: Correlation) {
+			const least1 = ref.least1[strategy];
+			if (least1 !== null) this.least1 *= least1;
+			const all3 = ref.all3[strategy];
+			if (all3 !== null) this.all3 *= all3;
+			const points = ref.points[strategy];
+			if (points !== null) this.points *= points;
+			const hits = ref.hits[strategy];
+			if (hits !== null) this.hits *= hits;
 		}
 	}
 
@@ -156,7 +186,7 @@ export const calculateStats = (
 		combos: BestCombo[] = [];
 		total: number = 0;
 		add(pick1: Choice, pick2: Choice, pick3: Choice) {
-			const total = pick1.avg + pick2.avg + pick3.avg;
+			const total = pick1.prob + pick2.prob + pick3.prob;
 			if (total > this.total) {
 				this.combos.splice(0, this.combos.length, { pick1, pick2, pick3 });
 				this.total = total;
@@ -177,67 +207,74 @@ export const calculateStats = (
 		}
 	}
 
+	type Correlation = {
+		least1: Record<typeof allStrategies[number], number | null>;
+		all3: Record<typeof allStrategies[number], number | null>;
+		points: Record<typeof allStrategies[number], number | null>;
+		hits: Record<typeof allStrategies[number], number | null>;
+	};
+
 	// 1000000 iterations per night
 	/*
 		1 Game Night
 		aa71 nights simulated
 	*/
-	const historical1Night = {
-		all3: {
-			"sss": 0.3540804309550738,
+	const historical1Night: Correlation = {
+		"least1": {
 			"iii": null,
-			"ssi": null,
-			"sis": null,
+			"sss": 0.996044409833046,
 			"iss": null,
-			"oso": -0.19852383895152925,
-			"soo": -0.201339738581906,
-			"sos": -0.4216911721838089,
-			"oss": 0.34408194676025783,
-			"ooi": null,
+			"sis": null,
+			"ssi": null,
+			"ioo": null,
 			"oio": null,
-			"ioo": null
+			"ooi": null,
+			"oso": 1.000471434119312,
+			"soo": 1.0005066302537835,
+			"sos": 1.0032197931415312,
+			"oss": 0.9874751028404549
 		},
-		least1: {
-			"sss": -0.004014311640537005,
+		"all3": {
 			"iii": null,
-			"ssi": null,
-			"sis": null,
+			"sss": 1.3540216030239554,
 			"iss": null,
-			"oso": 0.0006240918487641078,
-			"soo": 0.00044823245447056514,
-			"sos": 0.0032392539068162307,
-			"oss": -0.012501356173756362,
-			"ooi": null,
+			"sis": null,
+			"ssi": null,
+			"ioo": null,
 			"oio": null,
-			"ioo": null
+			"ooi": null,
+			"oso": 0.8010380217902658,
+			"soo": 0.8024247814536987,
+			"sos": 0.5815555113456835,
+			"oss": 1.3517805525973952
 		},
-		points: {
-			"sss": 0.0002046458851772126,
+		"points": {
 			"iii": null,
-			"ssi": null,
-			"sis": null,
+			"sss": 1.0000044621770354,
 			"iss": null,
-			"oso": -0.001494086335342537,
-			"soo": -0.0016537224129409278,
-			"sos": -0.007361560971168135,
-			"oss": -0.0016649101955718004,
-			"ooi": null,
+			"sis": null,
+			"ssi": null,
+			"ioo": null,
 			"oio": null,
-			"ioo": null
+			"ooi": null,
+			"oso": 0.9982959010571092,
+			"soo": 0.9984362009567944,
+			"sos": 0.9926526374958418,
+			"oss": 0.9984341962105899
 		},
-		avg: {
-			"sss": -0.0017689767998229078,
+		"hits": {
 			"iii": null,
-			"ssi": null,
-			"sis": null,
+			"sss": 0.9980372747743135,
 			"iss": null,
-			"oso": -0.00039521942839537694,
-			"soo": -0.000540041093066046,
-			"sos": -0.005050777486519498,
-			"oss": -0.003593196529209308,
-			"ooi": null,
+			"sis": null,
+			"ssi": null,
+			"ioo": null,
 			"oio": null,
-			"ioo": null
+			"ooi": null,
+			"oso": 0.9993920152572664,
+			"soo": 0.9995253888823101,
+			"sos": 0.9949370045350285,
+			"oss": 0.996470736194448
 		}
 	};
 
@@ -245,62 +282,62 @@ export const calculateStats = (
 		2 Game Nights
 		66 nights simulated
 	*/
-	const historical2Night = {
-		all3: {
-			"sss": -0.03643002717391297,
+	const historical2Night: Correlation = {
+		"least1": {
 			"iii": null,
-			"ssi": 0.2025220788043478,
-			"sis": -0.021849524456521774,
-			"iss": 0.10036514945652186,
-			"oso": 0.10313349184782616,
-			"soo": 0.1059103260869565,
-			"sos": 0.02137398097826093,
-			"oss": 0.1704313858695652,
-			"ooi": -0.23429008152173914,
-			"oio": -0.3779976222826087,
-			"ioo": -0.04595788043478266
+			"sss": 1.001891024635451,
+			"iss": 0.9945713961806759,
+			"sis": 0.9978982650536891,
+			"ssi": 1.0015005405341784,
+			"ioo": 0.9891612031697926,
+			"oio": 0.9921797804707926,
+			"ooi": 1.0022393189575538,
+			"oso": 0.9964253606142546,
+			"soo": 0.9962914349062009,
+			"sos": 1.0022683070339111,
+			"oss": 1.0005349075489127
 		},
-		least1: {
-			"sss": 0.0016397614909724467,
+		"all3": {
 			"iii": null,
-			"ssi": 0.0013562708324488248,
-			"sis": -0.0021483034211132734,
-			"iss": -0.005404490402980411,
-			"oso": -0.004019675706722903,
-			"soo": -0.0037126105200119275,
-			"sos": 0.0018256941525787163,
-			"oss": -0.00005374833407989499,
-			"ooi": 0.0017901137095304165,
-			"oio": -0.00834558175177258,
-			"ioo": -0.01120867440865303
+			"sss": 0.9605476613129262,
+			"iss": 1.100342288320579,
+			"sis": 0.9785793760669967,
+			"ssi": 1.19402566737729,
+			"ioo": 0.9566491417311466,
+			"oio": 0.618845392697283,
+			"ooi": 0.7596592405106297,
+			"oso": 1.1016757688746954,
+			"soo": 1.0967325479670793,
+			"sos": 1.0220746239499903,
+			"oss": 1.1731571213807046
 		},
-		points: {
-			"sss": 0.004839322553280123,
+		"points": {
 			"iii": null,
-			"ssi": 0.0024313139969136532,
-			"sis": -0.004613398916930134,
-			"iss": -0.006105781933706034,
-			"oso": -0.002110325033674698,
-			"soo": -0.0017824835752299206,
-			"sos": 0.001245449699693646,
-			"oss": -0.005322684347078277,
-			"ooi": -0.003089953574170967,
-			"oio": -0.013505676718338022,
-			"ioo": -0.012041538504135696
+			"sss": 1.0050709299378218,
+			"iss": 0.9938816350410576,
+			"sis": 0.9956518085772835,
+			"ssi": 1.00243616322993,
+			"ioo": 0.9882783239160793,
+			"oio": 0.9870636694984828,
+			"ooi": 0.9972667318124117,
+			"oso": 0.9983220650447268,
+			"soo": 0.9981049164277052,
+			"sos": 1.0017908411020824,
+			"oss": 0.9953538337725771
 		},
-		avg: {
-			"sss": 0.005009065033670712,
+		"hits": {
 			"iii": null,
-			"ssi": 0.0016083327058060704,
-			"sis": -0.004542506045567829,
-			"iss": -0.006543701118358447,
-			"oso": -0.0025431970474408816,
-			"soo": -0.0022254283939180386,
-			"sos": 0.0011626602482381898,
-			"oss": -0.0060455678432931315,
-			"ooi": -0.002139018232474199,
-			"oio": -0.012006506817880513,
-			"ioo": -0.011902039237897233
+			"sss": 1.0052540709643187,
+			"iss": 0.9934437221490953,
+			"sis": 0.995722033942835,
+			"ssi": 1.0016480832093186,
+			"ioo": 0.9884084266931554,
+			"oio": 0.9885782903983196,
+			"ooi": 0.9982441012015953,
+			"oso": 0.997896932209778,
+			"soo": 0.9976992237137838,
+			"sos": 1.0017074062392177,
+			"oss": 0.9946224616695668
 		}
 	};
 
@@ -308,62 +345,62 @@ export const calculateStats = (
 		3+ Game Nights
 		485 nights simulated
 	*/
-	const historical3PlusNight = {
-		all3: {
-			"sss": -0.042778741322703095,
-			"iii": 0,
-			"ssi": -0.024463727323760676,
-			"sis": 0.009448673264365492,
-			"iss": 0.014592796009131659,
-			"oso": -0.13929147748737547,
-			"soo": -0.14124097649865808,
-			"sos": -0.14448844247218962,
-			"oss": -0.09945674200013654,
-			"ooi": -0.014805137860949391,
-			"oio": -0.05420164062392663,
-			"ioo": -0.08925221000885031
+	const historical3PlusNight: Correlation = {
+		"least1": {
+			"iii": 1,
+			"sss": 0.9955411129995313,
+			"iss": 0.9960620128161661,
+			"sis": 0.9972240240199007,
+			"ssi": 0.998841124703338,
+			"ioo": 1.0008954025396748,
+			"oio": 0.9962086403180294,
+			"ooi": 1.0082513551168613,
+			"oso": 0.9992936683818823,
+			"soo": 0.9992127857830574,
+			"sos": 1.0078187801762248,
+			"oss": 1.0031276144454642
 		},
-		least1: {
-			"sss": -0.004487664487160314,
-			"iii": 0,
-			"ssi": -0.0011402301686510574,
-			"sis": -0.0027711255369844423,
-			"iss": -0.0038676938477631984,
-			"oso": -0.0007725094821269263,
-			"soo": -0.0008237897360976465,
-			"sos": 0.007887930616157668,
-			"oss": 0.0030079576305068745,
-			"ooi": 0.00831744099696663,
-			"oio": -0.0036962289353361655,
-			"ioo": 0.0009114296235401831
+		"all3": {
+			"iii": 1,
+			"sss": 0.9596266393469162,
+			"iss": 1.0141953472690364,
+			"sis": 1.0109199318960629,
+			"ssi": 0.9756804379927416,
+			"ioo": 0.9126589561526434,
+			"oio": 0.946397419250924,
+			"ooi": 0.9848933602193917,
+			"oso": 0.8616628915134652,
+			"soo": 0.8604581378232579,
+			"sos": 0.8571923803553235,
+			"oss": 0.9014267737994256
 		},
-		points: {
-			"sss": -0.008335966295803243,
-			"iii": 0,
-			"ssi": -0.0041025072419969,
-			"sis": -0.003243947202320685,
-			"iss": -0.004081121056163983,
-			"oso": -0.00782972486973732,
-			"soo": -0.007899117334319472,
-			"sos": 0.0006387309014401765,
-			"oss": -0.0028583877077610342,
-			"ooi": 0.004594460748213791,
-			"oio": -0.0057273489073904615,
-			"ioo": -0.0017902885106692024
+		"points": {
+			"iii": 1,
+			"sss": 0.9916880244789621,
+			"iss": 0.9957658650221768,
+			"sis": 0.9967264916116636,
+			"ssi": 0.9958811701609408,
+			"ioo": 0.9981700461974617,
+			"oio": 0.9941509948861489,
+			"ooi": 1.0044981724413817,
+			"oso": 0.9922012869409813,
+			"soo": 0.9920786005371944,
+			"sos": 1.0005809152874516,
+			"oss": 0.9972299228351148
 		},
-		avg: {
-			"sss": -0.008111914990911684,
-			"iii": 0,
-			"ssi": -0.003970056882670714,
-			"sis": -0.0033265130866270143,
-			"iss": -0.004202595457766356,
-			"oso": -0.006974562148547747,
-			"soo": -0.00703172446254563,
-			"sos": 0.0015827876025682475,
-			"oss": -0.0022300124588825465,
-			"ooi": 0.004720655730451995,
-			"oio": -0.005412022157315843,
-			"ioo": -0.0012213460365309015
+		"hits": {
+			"iii": 1,
+			"sss": 0.9918963658990133,
+			"iss": 0.9956461064875312,
+			"sis": 0.9966342597417027,
+			"ssi": 0.9960124386388516,
+			"ioo": 0.99872571470201,
+			"oio": 0.9944613073607782,
+			"ooi": 1.0046255685099341,
+			"oso": 0.9930495520599889,
+			"soo": 0.992933897150135,
+			"sos": 1.0015126832339643,
+			"oss": 0.9978524712382256
 		}
 	};
 
@@ -391,10 +428,10 @@ export const calculateStats = (
 		if (strategy === 'ioo') return "Opposing + Pick 1 Independent";
 		if (strategy === 'oio') return "Opposing + Pick 2 Independent";
 		if (strategy === 'ooi') return "Opposing + Pick 3 Independent";
-		if (strategy === 'oso') return "Stacked + Pick 3 Opposing Pick 1";
-		if (strategy === 'soo') return "Stacked + Pick 3 Opposing Pick 2";
-		if (strategy === 'sos') return "Opposing + Pick 3 Stacked Pick 1";
-		if (strategy === 'oss') return "Opposing + Pick 3 Stacked Pick 2";
+		if (strategy === 'oso') return "Stacked + Pick 1 Opposing Pick 3";
+		if (strategy === 'soo') return "Stacked + Pick 2 Opposing Pick 3";
+		if (strategy === 'sos') return "Opposing + Pick 1 Stacked Pick 3";
+		if (strategy === 'oss') return "Opposing + Pick 2 Stacked Pick 3";
 		return strategy;
 	}
 
@@ -452,10 +489,14 @@ export const calculateStats = (
 
 	const comboPrecision = 2;
 	const logCalcStats = (avgResult: Result) => {
-		const any = roundToPercent(calcAny(avgResult.avg1, avgResult.avg2, avgResult.avg3), precision);
-		const avg = roundToPercent(calcAvg(avgResult.avg1, avgResult.avg2, avgResult.avg3), precision);
-		const all = roundToPercent(calcAll(avgResult.avg1, avgResult.avg2, avgResult.avg3), precision);
-		addLog(`Any: ${any} - Avg: ${avg} - All: ${all}`, 'center');
+		const any = roundToPercent(calcAny(avgResult.prob1, avgResult.prob2, avgResult.prob3), 1);
+		const all = roundToPercent(calcAll(avgResult.prob1, avgResult.prob2, avgResult.prob3), 2);
+		const pnt = calcPnt(avgResult.prob1, avgResult.prob2, avgResult.prob3).toFixed(1);
+		const hit = calcHit(avgResult.prob1, avgResult.prob2, avgResult.prob3).toFixed(2);
+		addLog(`Any: ${any}`, 'center');
+		addLog(`All: ${all}`, 'center');
+		addLog(`Points: ${pnt}`, 'center');
+		addLog(`Hits: ${hit}`, 'center');
 		logSection++;
 	}
 
@@ -466,28 +507,28 @@ export const calculateStats = (
 	}
 
 	const logTopPicks = (avgResult: Result) => {
-		addLog(`1: ${roundToPercent(avgResult.avg1, precision)} - ${names(avgResult.players1)}`);
-		addLog(`2: ${roundToPercent(avgResult.avg2, precision)} - ${names(avgResult.players2)}`);
-		addLog(`3: ${roundToPercent(avgResult.avg3, precision)} - ${names(avgResult.players3)}`);
+		addLog(`1: ${roundToPercent(avgResult.prob1, precision)} - ${names(avgResult.players1)}`);
+		addLog(`2: ${roundToPercent(avgResult.prob2, precision)} - ${names(avgResult.players2)}`);
+		addLog(`3: ${roundToPercent(avgResult.prob3, precision)} - ${names(avgResult.players3)}`);
 		logCalcStats(avgResult);
 	}
 
 	const logReduced = (avgResult: Result, topResult: Result, totalMax: number): void => {
 		let line1 = `1: ${names(avgResult.players1, true)}`;
 		let reducedCount = 0;
-		if (avgResult.avg1 !== topResult.avg1) {
+		if (avgResult.prob1 !== topResult.prob1) {
 			reducedCount++;
-			line1 += " " + roundToPercent(avgResult.avg1 - topResult.avg1, comboPrecision);
+			line1 += " " + roundToPercent(avgResult.prob1 - topResult.prob1, comboPrecision);
 		}
 		let line2 = `2: ${names(avgResult.players2, true)}`;
-		if (avgResult.avg2 !== topResult.avg2) {
+		if (avgResult.prob2 !== topResult.prob2) {
 			reducedCount++;
-			line2 += " " + roundToPercent(avgResult.avg2 - topResult.avg2, comboPrecision);
+			line2 += " " + roundToPercent(avgResult.prob2 - topResult.prob2, comboPrecision);
 		}
 		let line3 = `3: ${names(avgResult.players3, true)}`;
-		if (avgResult.avg3 !== topResult.avg3) {
+		if (avgResult.prob3 !== topResult.prob3) {
 			reducedCount++;
-			line3 += " " + roundToPercent(avgResult.avg3 - topResult.avg3, comboPrecision);
+			line3 += " " + roundToPercent(avgResult.prob3 - topResult.prob3, comboPrecision);
 		}
 
 		addLog(line1);
@@ -495,10 +536,10 @@ export const calculateStats = (
 		addLog(line3);
 
 		if (reducedCount > 1) {
-			const total = avgResult.avg1 + avgResult.avg2 + avgResult.avg3;
+			const total = avgResult.prob1 + avgResult.prob2 + avgResult.prob3;
 			addLog(`Total: ${roundToPercent(total - totalMax, comboPrecision)}`, 'center');
 		}
-		if (reducedCount > 0) logCalcStats(avgResult);
+		if (reducedCount < 0) logCalcStats(avgResult);
 		else logSection++;
 	}
 
@@ -552,15 +593,60 @@ export const calculateStats = (
 		addStrategyHighlights(avgResult, 'top');
 	}
 
-	for (const [strategy, result] of strategyResults.entries()) {
+	type strategyType = 'least1' | 'all3' | 'points' | 'hits';
+	const findMax = (key: strategyType): { strategy: strategyPattern, result: Result } => {
+		let max = 0;
+		let maxResult: Result | null = null;
+		let maxStrategy: strategyPattern | null = null;
+		for (const [strategy, result] of strategyResults) {
+			const value = result[0][key];
+			if (value > max) {
+				max = value;
+				maxResult = result[0];
+				maxStrategy = strategy;
+			}
+		}
+		return { strategy: maxStrategy!, result: maxResult! };
+	}
+
+	for (const [strategy, result] of strategyResults) {
+		for (const avgResult of result) {
+			avgResult.correlate(strategy, ref);
+		}
+	}
+
+	const least1 = findMax('least1');
+	const all3 = findMax('all3');
+	const points = findMax('points');
+	const hits = findMax('hits');
+
+	const logCorrelation = (strategy: strategyPattern, key: strategyType) => {
+		let value = ref[key][strategy];
+		if (value === null) return "-";
+		value -= 1;
+		return roundToPercent(value, comboPrecision);
+	}
+	addLogTitle("Any" + " " + logCorrelation(least1.strategy, 'least1'));
+	logReduced(least1.result, maxResult, top.total);
+
+	addLogTitle("All" + " " + logCorrelation(all3.strategy, 'all3'));
+	logReduced(all3.result, maxResult, top.total);
+
+	addLogTitle("Pnt" + " " + logCorrelation(points.strategy, 'points'));
+	logReduced(points.result, maxResult, top.total);
+
+	addLogTitle("Hit" + " " + logCorrelation(hits.strategy, 'hits'));
+	logReduced(hits.result, maxResult, top.total);
+
+	for (const [strategy, result] of strategyResults) {
 		addLogTitle(strategyTitle(strategy));
 		for (const avgResult of result) {
+			avgResult.correlate(strategy, ref);
 			logReduced(avgResult, maxResult, top.total);
 			// logHighlights(avgResult);
 			// addStrategyHighlights(avgResult, 'streak');
 		}
 	}
-	console.log(ref);
 
 	logFooter();
 };
