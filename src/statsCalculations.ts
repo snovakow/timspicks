@@ -460,7 +460,7 @@ export const calculateStats = (
 	}
 	type strategyMap = Map<strategyPattern, ComboGroup>;
 	const addStrategy = (strategies: strategyMap, pick1: Choice, pick2: Choice, pick3: Choice) => {
-		let strategy = getStrategy(pick1, pick2, pick3);
+		const strategy = getStrategy(pick1, pick2, pick3);
 		if (!strategy) return;
 		const combo = strategies.get(strategy);
 		if (combo) combo.add(pick1, pick2, pick3);
