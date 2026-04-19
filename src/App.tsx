@@ -5,7 +5,7 @@ import Popup from './components/Popup';
 import InfoPopupContent, { LegendPopupContent } from './components/InfoPopupContent';
 import StatsPopupContent from './components/StatsPopupContent';
 import SettingsPanel from './components/Settings';
-import { poissonChance, roundToPercent, probabilityToAmerican } from './utility';
+import { roundToPercent, probabilityToAmerican } from './utility';
 import { loadInitialData, buildNormalizedNameMap, mapPlayers, compilePlayerList } from './dataProcessor';
 import { precalculateLogStats, cloneLogStats, type LogStatsKey, type LogStat } from './statsCalculations';
 import logo1 from './images/sb-logo-16-draftkings.svg';
@@ -46,8 +46,8 @@ const sortFunction = (sortConfig: Picks.SortConfig) => {
 		const aPlayer = a instanceof Picks.PickOdds ? a.player : a;
 		const bPlayer = b instanceof Picks.PickOdds ? b.player : b;
 		for (const key of sortConfig.keyOrder) {
-			const aVal = key === 'ggRaw' ? (a as Picks.PickOdds)[key] : aPlayer[key];
-			const bVal = key === 'ggRaw' ? (b as Picks.PickOdds)[key] : bPlayer[key];
+			const aVal = aPlayer[key];
+			const bVal = bPlayer[key];
 
 			if (aVal === null) {
 				if (bVal === null) continue;
@@ -117,9 +117,9 @@ function App() {
 		top: true,
 	});
 
-	const [needsSort1, setNeedsSort1] = useState<Picks.ColumnKeys>('ggRaw');
-	const [needsSort2, setNeedsSort2] = useState<Picks.ColumnKeys>('ggRaw');
-	const [needsSort3, setNeedsSort3] = useState<Picks.ColumnKeys>('ggRaw');
+	const [needsSort1, setNeedsSort1] = useState<Picks.ColumnKeys>('betAvg');
+	const [needsSort2, setNeedsSort2] = useState<Picks.ColumnKeys>('betAvg');
+	const [needsSort3, setNeedsSort3] = useState<Picks.ColumnKeys>('betAvg');
 	const [needsSortPlayer, setNeedsSortPlayer] = useState<Picks.ColumnKeys>('betAvg');
 
 	// Load data on mount
@@ -219,19 +219,6 @@ function App() {
 		const table1Rows = cloneRows(origTable1);
 		const table2Rows = cloneRows(origTable2);
 		const table3Rows = cloneRows(origTable3);
-
-		// Update pick odds display values
-		const updatePickOddsDisplay = (rows: Picks.PickOdds[]) => {
-			for (const row of rows) {
-				row.ggDisplay = showPercentage
-					? poissonChance(row.ggRaw, precision)
-					: row.ggRaw.toFixed(2);
-			}
-		};
-
-		updatePickOddsDisplay(table1Rows);
-		updatePickOddsDisplay(table2Rows);
-		updatePickOddsDisplay(table3Rows);
 
 		// Update player betting display values
 		const key1 = deVigEnabled ? 'bet1' : 'betRaw1';
@@ -409,7 +396,6 @@ function App() {
 
 	const columns: Picks.ColumnData[] = [
 		{ key: "fullName", title: "Player", sort: true },
-		{ key: "ggRaw", title: "G/GP", sort: true },
 		...oddsColumns,
 		{ key: "betAvg", title: "Avg", sort: true },
 	];

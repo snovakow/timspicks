@@ -170,7 +170,7 @@ export class Player {
 	}
 }
 
-export type ColumnKeys = 'fullName' | 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg' | 'ggRaw' | 'pick' | 'gameTime';
+export type ColumnKeys = 'fullName' | 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg' | 'pick' | 'gameTime';
 export interface ColumnData {
 	key: ColumnKeys;
 	title: string;
@@ -191,8 +191,6 @@ export type StrategyMode = Strategy | 'top';
 export class PickOdds {
 	player: Player;
 
-	ggRaw: number;
-	ggDisplay: string;
 	highlight1: boolean = false;
 	highlight2: boolean = false;
 	highlight3: boolean = false;
@@ -203,10 +201,8 @@ export class PickOdds {
 	strategy3: Set<StrategyMode> = new Set();
 	strategy4: Set<StrategyMode> = new Set();
 	strategyAvg: Set<StrategyMode> = new Set();
-	constructor(player: Player, item: OddsItem) {
+	constructor(player: Player) {
 		this.player = player;
-		this.ggRaw = item.gamesPlayed > 0 ? item.goals / item.gamesPlayed : 0;
-		this.ggDisplay = "-";
 	}
 }
 
@@ -323,7 +319,6 @@ export function Table(props: {
 								<td><a href={player.link} target="_blank" rel="noopener noreferrer">🔗</a></td>
 							)}
 
-							{picks && (<td>{row.ggDisplay}</td>)}
 							{renderBetCell(player.betDisplay1, picks ? row.highlight1 : undefined, picks ? visibleStrategyFor(row, 'bet1') : undefined)}
 							{renderBetCell(player.betDisplay2, picks ? row.highlight2 : undefined, picks ? visibleStrategyFor(row, 'bet2') : undefined)}
 							{renderBetCell(player.betDisplay3, picks ? row.highlight3 : undefined, picks ? visibleStrategyFor(row, 'bet3') : undefined)}

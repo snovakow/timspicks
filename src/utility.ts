@@ -2,16 +2,6 @@ export const roundToPercent = (num: number, places: number): string => {
 	return (num * 100).toFixed(places) + "%";
 };
 
-// Poisson distribution chance of 0 goals: e^(−μ)
-// Chance of at least one goal: 1 − e^(−μ)
-const poisson = (x: number): number => {
-	return 1 - Math.exp(-x);
-}
-
-export const poissonChance = (x: number, precision: number): string => {
-	return roundToPercent(poisson(x), precision);
-}
-
 export const probabilityToAmerican = (chance: number | null): string => {
 	if (chance === null || chance <= 0) return "-";
 	const decimal = 1 / chance;

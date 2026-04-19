@@ -335,7 +335,7 @@ export const mapPlayers = (
 			}
 			if (player) {
 				player.pick = pick;
-				row.push(new Picks.PickOdds(player, item));
+				row.push(new Picks.PickOdds(player));
 			} else {
 				console.warn(`Player not found for odds data:`, item);
 			}
