@@ -92,7 +92,11 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 				<div className="settings-label">Pick Strategies</div>
 				<div className="settings-checkbox-group" role="group" aria-label="Pick strategies">
 					{strategyOptions.map((option) => (
-						<label key={option.key} className={`settings-checkbox-item settings-strategy-${option.key}`}>
+						<label
+							key={option.key}
+							className={`settings-checkbox-item settings-strategy-${option.key} settings-checkbox-hoverable`}
+							tabIndex={0}
+						>
 							<input
 								type="checkbox"
 								checked={enabledStrategies[option.key]}
