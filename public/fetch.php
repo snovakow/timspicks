@@ -144,7 +144,7 @@ if ($live && isset($_GET['history'])) {
 			$files[] = $filename;
 			$local_file = $baseHistoryPath . '/' . $filename;
 			file_put_contents($local_file, $response);
-			echo ("$filename<br>");
+			echo "$filename<br>";
 		}
 		echo "<br>";
 		$dateRange["files"] = $files;
@@ -168,6 +168,9 @@ if (!is_dir($basePath)) mkdir($basePath, 0755, true);
 
 echo '<h1>Data Downloader</h1>';
 
+$timezone = new DateTimeZone('America/New_York');
+$now = new DateTime('now', $timezone);
+
 /*
 
    Games
@@ -177,8 +180,7 @@ if ($live) {
 	echo '<h3>Games</h3>';
 
 	// Endpoint for today's schedule
-	$date = new DateTime('now', new DateTimeZone('America/New_York'));
-	$url = 'https://api-web.nhle.com/v1/schedule/' . $date->format('Y-m-d');
+	$url = 'https://api-web.nhle.com/v1/schedule/' . $now->format('Y-m-d');
 
 	// Fetch the JSON data
 	$response = file_get_contents($url);
@@ -303,7 +305,6 @@ if ($live) {
 	echo "Data has been written to $local_file";
 }
 
-$timezone = new DateTimeZone('America/New_York');
 $endOfDay = new DateTime('tomorrow midnight', $timezone);
 $endOfDay = $endOfDay->getTimestamp();
 
@@ -631,16 +632,13 @@ if ($live) {
 
 	$games = $data["gameWeek"][0]["games"] ?? [];
 
-	$timezone = new DateTimeZone('America/New_York');
-	$timestamp = new DateTime('now', $timezone);
-
 	$closestGame = null;
 	$closestTime = null;
 	foreach ($games as $game) {
 		$gameTime = DateTime::createFromFormat('Y-m-d\TH:i:se', $game["startTimeUTC"]);
 
 		if (!$gameTime) continue;
-		if ($gameTime <= $timestamp) continue;
+		if ($gameTime <= $now) continue;
 		if ($closestTime === null || $gameTime < $closestTime) {
 			$closestTime = clone $gameTime;
 			$closestGame = $game;
@@ -650,7 +648,7 @@ if ($live) {
 	if ($closestGame) {
 		$closestTime->setTimezone($timezone);
 
-		$date = $timestamp->format('Y-m-d');
+		$date = $now->format('Y-m-d');
 		$time = $closestTime->format('Hi');
 
 		$backupPath = $basePath . '/' . $date;
@@ -670,11 +668,12 @@ if ($live) {
 		copy($basePath . $bet4file, $backupSubPath . $bet4file);
 		copy($basePath . $helperfile, $backupSubPath . $helperfile);
 
-		echo ("<h3>Backup: $backupSubPath</h3>");
+		echo "<h3>Backup: $backupSubPath</h3>";
 	} else {
-		if (empty($games)) echo ('<h3>No games scheduled for today</h3>');
-		else echo ('<h3>No game found after the current time</h3>');
+		if (empty($games)) echo '<h3>No games scheduled for today</h3>';
+		else echo '<h3>No game found after the current time</h3>';
 	}
 }
 
-echo ("<h2>Complete</h2>");
+echo "<h2>Complete</h2>";
+echo $now->format('Y-m-d h:i A');
