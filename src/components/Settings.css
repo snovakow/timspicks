@@ -1,14 +1,21 @@
-.settings-checkbox-hoverable {
-	border: 1.5px solid transparent;
-	border-radius: 6px;
-	transition: background 0.15s, border 0.15s;
+/* Remove border highlight for single checkboxes only, not for checkbox groups */
+.single-checkbox {
+	border: none !important;
 }
 
-.settings-checkbox-hoverable:hover,
-.settings-checkbox-hoverable:focus {
-	background: #dbeafe;
+.single-checkbox:hover {
+	border: none !important;
+}
+
+/* Restore border highlight for Pick Strategies (checkbox group) */
+.settings-strategy-checkbox.settings-checkbox-hoverable {
+	border: 1.5px solid transparent;
+	border-radius: 6px;
+	transition: border 0.15s;
+}
+
+.settings-strategy-checkbox.settings-checkbox-hoverable:hover {
 	border: 1.5px solid #2563eb;
-	outline: none;
 }
 
 .settings-container {
@@ -98,20 +105,24 @@
 }
 
 .settings-checkbox-item input[type="checkbox"] {
-	appearance: none;
-	-webkit-appearance: none;
 	width: 16px;
 	height: 16px;
+	margin: 0;
+	cursor: pointer;
+}
+
+/* Only apply custom circle style to Pick Strategies */
+.settings-strategy-checkbox input[type="checkbox"] {
+	appearance: none;
+	-webkit-appearance: none;
 	border: 2px solid color-mix(in srgb, var(--strategy-color) 55%, #64748b);
 	border-radius: 50%;
 	background: transparent;
 	display: inline-grid;
 	place-items: center;
-	margin: 0;
-	cursor: pointer;
 }
 
-.settings-checkbox-item input[type="checkbox"]::after {
+.settings-strategy-checkbox input[type="checkbox"]::after {
 	content: "";
 	width: 8px;
 	height: 8px;
@@ -121,13 +132,19 @@
 	background: var(--strategy-color);
 }
 
-.settings-checkbox-item input[type="checkbox"]:checked {
+.settings-strategy-checkbox input[type="checkbox"]:checked {
 	border-color: var(--strategy-color);
 }
 
-.settings-checkbox-item input[type="checkbox"]:checked::after {
+.settings-strategy-checkbox input[type="checkbox"]:checked::after {
 	transform: scale(1);
 }
+
+
+
+
+
+
 
 .settings-strategy-least1 {
 	--strategy-color: var(--highlight-least1-dot, rgb(31, 157, 85));
