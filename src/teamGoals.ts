@@ -100,7 +100,7 @@ export async function getTeamTotalsForAllGames() {
 
         const selections: Map<string, DataSelection[]> = new Map();
         for (const selection of data.selections) {
-            const name = selection.participants[0].seoIdentifier;
+            const name = selection.participants[0].name;
             if (!selections.has(name)) {
                 selections.set(name, []);
             }
