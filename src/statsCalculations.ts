@@ -435,7 +435,7 @@ export const calculateStats = (
 
 	const getStrategy = (pick1: Picks.Player, pick2: Picks.Player, pick3: Picks.Player): strategyPattern | null => {
 		if (!pick1.sameGame(pick2) && !pick2.sameGame(pick3) && !pick1.sameGame(pick3)) return 'iii';
-		if (pick1.sameGame(pick2) && pick2.sameGame(pick3)) return 'sss';
+		if (pick1.sameTeam(pick2) && pick2.sameTeam(pick3)) return 'sss';
 
 		if (pick2.sameTeam(pick3) && !pick1.sameGame(pick2)) return 'iss';
 		if (pick1.sameTeam(pick3) && !pick2.sameGame(pick1)) return 'sis';
@@ -482,17 +482,35 @@ export const calculateStats = (
 	}
 
 	const comboPrecision = 2;
+
+	const printStrategy = (strategy: Picks.Strategy, value: number): string => {
+		switch (strategy) {
+			case 'least1': return `Streak: ${roundToPercent(value, comboPrecision)}`;
+			case 'points': return `Points: ${value.toFixed(comboPrecision)}`;
+			case 'hits': return `Leaderboard: ${value.toFixed(comboPrecision)}`;
+			case 'all3': return `All 3: ${roundToPercent(value, comboPrecision)}`;
+		}
+	}
+	const printStrategyDiff = (strategy: Picks.Strategy, top: number, value: number): string => {
+		let diff = value - top;
+		let percent = "";
+		if (strategy === 'least1' || strategy === 'all3') {
+			diff *= 100;
+			percent = "%";
+		}
+		const places = Math.pow(10, comboPrecision);
+		diff = Math.round(diff * places) / places;
+		if (diff === 0) return "";
+		const sign = diff > 0 ? "+" : "";
+		return " (" + sign + diff.toFixed(comboPrecision) + percent + ")";
+	}
 	const logCalcStats = (avgResult: Result) => {
-		const any = roundToPercent(calcAny(avgResult.prob1, avgResult.prob2, avgResult.prob3), comboPrecision);
-		const all = roundToPercent(calcAll(avgResult.prob1, avgResult.prob2, avgResult.prob3), comboPrecision);
-		const pnt = calcPnt(avgResult.prob1, avgResult.prob2, avgResult.prob3).toFixed(comboPrecision);
-		const hit = calcHit(avgResult.prob1, avgResult.prob2, avgResult.prob3).toFixed(comboPrecision);
-		logSection++;
 		addLog();
-		addLog(`Any: ${any}`, 'left');
-		addLog(`Points: ${pnt}`, 'left');
-		addLog(`Hits: ${hit}`, 'left');
-		addLog(`All 3: ${all}`, 'left');
+		logSection++;
+		addLog(printStrategy('least1', calcAny(avgResult.prob1, avgResult.prob2, avgResult.prob3)), 'left');
+		addLog(printStrategy('points', calcPnt(avgResult.prob1, avgResult.prob2, avgResult.prob3)), 'left');
+		addLog(printStrategy('hits', calcHit(avgResult.prob1, avgResult.prob2, avgResult.prob3)), 'left');
+		addLog(printStrategy('all3', calcAll(avgResult.prob1, avgResult.prob2, avgResult.prob3)), 'left');
 		addLog();
 	}
 
@@ -541,7 +559,11 @@ export const calculateStats = (
 
 	const logFooter = () => {
 		addLogTitle("Good Ranges");
-		addLog("Any: 66-69% - Hits: 90-96", 'center');
+		logSection++;
+		addLog("Streak: 66-69% ", 'left');
+		addLog("Points: 23-24", 'left');
+		addLog("Leaderboard: 0.9-1.0", 'left');
+		addLog("All 3: 2-3%", 'left');
 	}
 
 	const setStrategy = (pick: Picks.PickOdds, mode: Picks.StrategyMode) => {
@@ -607,17 +629,24 @@ export const calculateStats = (
 		}
 	}
 
+	const isSameSet = (set1: Set<Picks.PickOdds>, set2: Set<Picks.PickOdds>): boolean => {
+		if (set1.size !== set2.size) return false;
+		for (const player of set1) if (!set2.has(player)) return false;
+		return true;
+	}
+	const isSameResult = (top: Result, group: Result): boolean => {
+		if (!isSameSet(top.players1, group.players1)) return false;
+		if (!isSameSet(top.players2, group.players2)) return false;
+		if (!isSameSet(top.players3, group.players3)) return false;
+		return true;
+	}
 	const isSameGroup = (top: Result[], group: Result[]): boolean => {
 		if (top.length !== group.length) return false;
 		for (let i = 0; i < top.length; i++) {
 			const topResult = top[i];
 			const groupResult = group[i];
-			if (topResult.players1.size !== groupResult.players1.size) return false;
-			if (topResult.players2.size !== groupResult.players2.size) return false;
-			if (topResult.players3.size !== groupResult.players3.size) return false;
-			for (const player of topResult.players1) if (!groupResult.players1.has(player)) return false;
-			for (const player of topResult.players2) if (!groupResult.players2.has(player)) return false;
-			for (const player of topResult.players3) if (!groupResult.players3.has(player)) return false;
+			const isSame = isSameResult(topResult, groupResult);
+			if (!isSame) return false;
 		}
 		return true;
 	}
@@ -633,8 +662,7 @@ export const calculateStats = (
 
 		const same = isSameGroup(top, group.result);
 		if (!same) return group;
-		topStrategy = group.strategy;
-		return null;
+		return group;
 	}
 	const least1 = processSameGroup(topResult, 'least1');
 	const points = processSameGroup(topResult, 'points');
@@ -648,47 +676,53 @@ export const calculateStats = (
 		addStrategyHighlights(avgResult, 'top');
 	}
 
-	const logCorrelation = (strategy: strategyPattern, key: Picks.Strategy) => {
-		let value = ref[key][strategy];
-		if (value === null) return "-";
-		value -= 1;
-		const percent = roundToPercent(value, comboPrecision);
-		if (value > 0) return "+" + percent;
-		return percent;
-	}
-	const addReducedTitle = (title: string, strategy: strategyPattern, key: Picks.Strategy) => {
-		addLogTitle(title + " " + logCorrelation(strategy, key));
-	}
-	if (least1) {
-		addReducedTitle("Top Any Hit", least1.strategy, 'least1');
-		for (const avgResult of least1.result) {
-			logReduced(avgResult, maxResult, top.total, least1.strategy);
+	class GroupedPlayer {
+		result: Result;
+		strategy: strategyPattern;
+		strategyCombos: string[];
+		constructor(result: Result, strategy: strategyPattern, key: Picks.Strategy) {
+			this.result = result;
+			this.strategy = strategy;
+			this.strategyCombos = [];
+			this.add(key, result[key]);
 		}
-		addLog();
+		add(strategy: Picks.Strategy, value: number) {
+			const diff = printStrategyDiff(strategy, topResult[0][strategy], value);
+			this.strategyCombos.push(printStrategy(strategy, value) + diff);
+		}
 	}
 
-	if (points) {
-		addReducedTitle("Top Points", points.strategy, 'points');
-		for (const avgResult of points.result) {
-			logReduced(avgResult, maxResult, top.total, points.strategy);
+	const groupedMap: Map<Set<Picks.PickOdds>, GroupedPlayer> = new Map();
+	const mergeSameResults = (result: Result, strategy: strategyPattern, key: Picks.Strategy): void => {
+		const combined = new Set<Picks.PickOdds>();
+		for (const pick of result.players1) combined.add(pick);
+		for (const pick of result.players2) combined.add(pick);
+		for (const pick of result.players3) combined.add(pick);
+		for (const [set, groupedPlayer] of groupedMap) {
+			if (isSameSet(combined, set)) {
+				groupedPlayer.add(key, result[key]);
+				return;
+			};
 		}
-		addLog();
+		const groupedPlayer = new GroupedPlayer(result, strategy, key);
+		groupedMap.set(combined, groupedPlayer);
 	}
 
-	if (hits) {
-		addReducedTitle("Top Hits", hits.strategy, 'hits');
-		for (const avgResult of hits.result) {
-			logReduced(avgResult, maxResult, top.total, hits.strategy);
-		}
-		addLog();
-	}
+	if (least1) for (const avgResult of least1.result) mergeSameResults(avgResult, least1.strategy, 'least1');
+	if (points) for (const avgResult of points.result) mergeSameResults(avgResult, points.strategy, 'points');
+	if (hits) for (const avgResult of hits.result) mergeSameResults(avgResult, hits.strategy, 'hits');
+	if (all3) for (const avgResult of all3.result) mergeSameResults(avgResult, all3.strategy, 'all3');
 
-	if (all3) {
-		addReducedTitle("Top All 3", all3.strategy, 'all3');
-		for (const avgResult of all3.result) {
-			logReduced(avgResult, maxResult, top.total, all3.strategy);
+	if (groupedMap.size > 0) {
+		addLogTitle("Top Correlated");
+		for (const groupedPlayer of groupedMap.values()) {
+			logReduced(groupedPlayer.result, maxResult, top.total, groupedPlayer.strategy);
+			addLog();
+			logSection++;
+			for (const strategyCombo of groupedPlayer.strategyCombos) addLog(strategyCombo, 'left');
+			logSection++;
+			addLog();
 		}
-		addLog();
 	}
 
 	logFooter();
