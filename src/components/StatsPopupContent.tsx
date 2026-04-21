@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import type { LogStat } from '../statsCalculations';
 import styles from './StatsPopupContent.module.css';
 
@@ -16,7 +15,7 @@ export default function StatsPopupContent({ stats }: StatsPopupContentProps) {
 				].filter(Boolean).join(' ');
 
 				return (
-					<div key={index} className={className + ' stat-align-' + (stat.align || 'left')}>
+					<div key={index} className={className + ' stat-align-' + (stat.align)}>
 						{stat.lines.map((line, lineIndex) => (
 							<div key={lineIndex}>{line}</div>
 						))}

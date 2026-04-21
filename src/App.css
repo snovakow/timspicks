@@ -128,18 +128,6 @@ button:hover {
 	justify-self: end;
 }
 
-.stat-align-left {
-	text-align: left;
-}
-
-.stat-align-center {
-	text-align: center;
-}
-
-.stat-align-right {
-	text-align: right;
-}
-
 .no-games-message {
 	text-align: center;
 	font-size: 1.2rem;

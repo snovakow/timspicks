@@ -13,3 +13,11 @@
 .sectionTitle {
   font-weight: bold;
 }
+
+.stat-align-left {
+  text-align: left;
+}
+
+.stat-align-center {
+  text-align: center;
+}
