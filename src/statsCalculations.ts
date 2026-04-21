@@ -498,18 +498,16 @@ export const calculateStats = (
 	const printStrategyDiff = (strategy: Picks.Strategy, top: number, value: number): string => {
 		let diff = value - top;
 		let percent = "";
-		let precision = comboPrecision;
 		if (strategy === 'least1' || strategy === 'all3') {
 			diff *= 100;
 			percent = "%";
 		}
-		if (strategy === 'hits') precision += 1;
 
-		const places = Math.pow(10, precision);
+		const places = Math.pow(10, comboPrecision);
 		diff = Math.round(diff * places) / places;
 		if (diff === 0) return "";
 		const sign = diff > 0 ? "+" : "";
-		return " (" + sign + diff.toFixed(precision) + percent + ")";
+		return " (" + sign + diff.toFixed(comboPrecision) + percent + ")";
 	}
 	const logCalcStats = (avgResult: Result) => {
 		addLog();
