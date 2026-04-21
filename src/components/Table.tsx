@@ -69,7 +69,7 @@ export function Basic(props: {
 	const formatXG = (teamCode: string) => {
 		if (!xgMap) return null;
 		const val = xgMap.get(teamCode);
-		return val !== undefined ? ` (𝑥𝐺: ${val.toFixed(2)})` : null;
+		return val !== undefined ? `xG: ${val.toFixed(2)}` : null;
 	};
 	return (
 		<table>
@@ -78,8 +78,10 @@ export function Basic(props: {
 					<tr key={game.link} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
 						<td>
 							<span className='cell-container right-align'>
-								{game.away.name}
-								{xgMap && <span className="xg-value">{formatXG(game.away.code)}</span>}
+								<span className="team-name-stack">
+									{game.away.name}
+									{xgMap && <span className="xg-value away">{formatXG(game.away.code)}</span>}
+								</span>
 								<img
 									className='td-name-logo'
 									src={darkTheme ? game.away.logoDark : game.away.logoLight}
@@ -97,8 +99,10 @@ export function Basic(props: {
 									alt=""
 									onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
 								/>
-								{game.home.name}
-								{xgMap && <span className="xg-value">{formatXG(game.home.code)}</span>}
+								<span className="team-name-stack">
+									{game.home.name}
+									{xgMap && <span className="xg-value home">{formatXG(game.home.code)}</span>}
+								</span>
 							</span>
 						</td>
 						<td className="cell-container">

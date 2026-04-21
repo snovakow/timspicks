@@ -50,6 +50,7 @@ table {
   border-style: solid;
   margin-left: auto;
   margin-right: auto;
+  overflow: hidden;
 }
 
 .scrollable-table-wrapper {
@@ -163,14 +164,6 @@ td {
   background-color: var(--highlight-top-dot);
 }
 
-.xg-value {
-  font-size: 0.7em;
-  color: #888;
-  margin-left: 0.25em;
-  font-style: italic;
-  white-space: nowrap;
-}
-
 :root {
   --highlight-top-bg: rgb(170, 235, 170);
 
@@ -216,6 +209,32 @@ td {
 .td-name-logo {
   height: 2em;
   width: 3em;
+}
+
+.team-name-stack {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+}
+
+.xg-value {
+  position: absolute;
+  --line-height: 0.65em;
+  bottom: 0px;
+  transform: translateY(65%);
+
+  font-size: var(--line-height);
+  color: #888;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.away {
+  right: 0;
+}
+
+.home {
+  left: 0;
 }
 
 .right-align {
