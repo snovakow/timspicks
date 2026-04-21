@@ -16,7 +16,7 @@ export default function StatsPopupContent({ stats }: StatsPopupContentProps) {
 				].filter(Boolean).join(' ');
 
 				return (
-					<div key={index} className={className} style={{ textAlign: stat.align } as CSSProperties}>
+					<div key={index} className={className + ' stat-align-' + (stat.align || 'left')}>
 						{stat.lines.map((line, lineIndex) => (
 							<div key={lineIndex}>{line}</div>
 						))}

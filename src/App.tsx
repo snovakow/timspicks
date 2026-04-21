@@ -364,8 +364,8 @@ function App() {
 
 	if (error) {
 		return (
-			<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '1rem' }}>
-				<p style={{ color: '#d32f2f', fontSize: '1.1rem' }}>{error}</p>
+			<div className="error-screen">
+				<p className="error-message">{error}</p>
 				<button onClick={() => window.location.reload()}>Refresh Page</button>
 			</div>
 		);
@@ -405,7 +405,7 @@ function App() {
 	return (
 		<>
 			<header>
-				<div className='toolBar' style={{ justifySelf: 'start' }}>
+				<div className='toolBar toolbar-start'>
 					<button className="button" title="Settings" aria-label="Settings"
 						onClick={
 							() => {
@@ -429,7 +429,7 @@ function App() {
 					<img className="header-title-icon" src={darkTheme ? iconHockeyLight : iconHockeyDark} alt="" aria-hidden="true" />
 					Tims Hockey Picks
 				</span>
-				<div className='toolBar' style={{ justifySelf: 'end' }}>
+				<div className='toolBar toolbar-end'>
 					<button className="button" title="Legend" aria-label="Legend"
 						onClick={
 							() => {
