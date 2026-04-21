@@ -8,6 +8,8 @@ interface SettingsPanelProps {
 	onMinSportsbooksChange: (value: number) => void;
 	enabledStrategies: Record<StrategyMode, boolean>;
 	onStrategyEnabledChange: (strategy: StrategyMode, value: boolean) => void;
+	xgEnabled: boolean;
+	onXgEnabledChange: (value: boolean) => void;
 }
 
 export default function SettingsPanel(props: SettingsPanelProps) {
@@ -18,6 +20,8 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 		onMinSportsbooksChange,
 		enabledStrategies,
 		onStrategyEnabledChange,
+		xgEnabled,
+		onXgEnabledChange,
 	} = props;
 
 	const strategyOptions: Array<{ key: StrategyMode; label: string }> = [
@@ -61,6 +65,19 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 				</label>
 				<div className="settings-description">
 					Show sportsbook odds as implied probability percentages, otherwise as American odds.
+				</div>
+			</div>
+			<div className="settings-group">
+				<label className="settings-checkbox-item settings-checkbox settings-strategy-checkbox settings-label-single settings-checkbox-hoverable">
+					<input
+						type="checkbox"
+						checked={xgEnabled}
+						onChange={(e) => onXgEnabledChange(e.target.checked)}
+					/>
+					<span>Expected Team Goals</span>
+				</label>
+				<div className="settings-description">
+					Include expected team goals in the Games table.
 				</div>
 			</div>
 

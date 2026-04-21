@@ -83,7 +83,7 @@ export async function getTeamTotalsForAllGames() {
         for (const [name, selection] of selections) {
             const xG = expectedGoals(selection);
             if (xG === null) continue;
-            console.log(name, xG.toFixed(1));
+            // console.log(name, xG.toFixed(1));
 
             const parse = name.split(" ");
             if (parse.length < 1) continue;
@@ -102,4 +102,5 @@ export async function getTeamTotalsForAllGames() {
             }
         }
     }
+    return results;
 }

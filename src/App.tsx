@@ -20,6 +20,7 @@ import iconHockeyDark from './images/sports_hockey_24dp_000000_FILL0_wght400_GRA
 import iconHockeyLight from './images/sports_hockey_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
 import { runSimulation } from './picksOptimizer';
 import CollapsibleSection from './components/CollapsibleSection';
+import { getTeamTotalsForAllGames } from './teamGoals';
 
 const precision = Picks.precision;
 let SIMULATE = false;
@@ -103,6 +104,20 @@ interface InitializedData {
 }
 
 function App() {
+	// xG (expected goals) state
+	const [xgEnabled, setXgEnabled] = useState(false);
+	const [xgMap, setXgMap] = useState<Map<string, number> | null>(null);
+	const xgLoadedRef = useRef(false);
+
+	// Lazy-load xG data only if enabled and not already loaded
+	useEffect(() => {
+		if (xgEnabled && !xgLoadedRef.current) {
+			getTeamTotalsForAllGames().then((map) => {
+				setXgMap(map);
+				xgLoadedRef.current = true;
+			});
+		}
+	}, [xgEnabled]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [data, setData] = useState<InitializedData | null>(null);
@@ -464,6 +479,8 @@ function App() {
 							onMinSportsbooksChange={setMinSportsbooks}
 							enabledStrategies={enabledStrategies}
 							onStrategyEnabledChange={handleStrategyEnabledChange}
+							xgEnabled={xgEnabled}
+							onXgEnabledChange={setXgEnabled}
 						/>
 					) : (
 						<StatsPopupContent stats={popupStats} />
@@ -495,7 +512,7 @@ function App() {
 						{gamesList.length === 0 ? (
 							<div className="no-games-message">No games today</div>
 						) : (
-							<Picks.Basic games={gamesList} darkTheme={darkTheme} />
+							<Picks.Basic games={gamesList} darkTheme={darkTheme} xgMap={xgEnabled && xgMap ? xgMap : undefined} />
 						)}
 					</div>
 				</CollapsibleSection>

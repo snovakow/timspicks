@@ -62,9 +62,15 @@ const includeLinks = false;
 
 export function Basic(props: {
 	games: GameData[],
-	darkTheme: boolean
+	darkTheme: boolean,
+	xgMap?: Map<string, number> | null
 }) {
-	const { games, darkTheme } = props;
+	const { games, darkTheme, xgMap } = props;
+	const formatXG = (teamCode: string) => {
+		if (!xgMap) return null;
+		const val = xgMap.get(teamCode);
+		return val !== undefined ? ` (𝑥𝐺: ${val.toFixed(2)})` : null;
+	};
 	return (
 		<table>
 			<tbody>
@@ -73,6 +79,7 @@ export function Basic(props: {
 						<td>
 							<span className='cell-container right-align'>
 								{game.away.name}
+								{xgMap && <span className="xg-value">{formatXG(game.away.code)}</span>}
 								<img
 									className='td-name-logo'
 									src={darkTheme ? game.away.logoDark : game.away.logoLight}
@@ -91,6 +98,7 @@ export function Basic(props: {
 									onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
 								/>
 								{game.home.name}
+								{xgMap && <span className="xg-value">{formatXG(game.home.code)}</span>}
 							</span>
 						</td>
 						<td className="cell-container">

@@ -163,6 +163,14 @@ td {
   background-color: var(--highlight-top-dot);
 }
 
+.xg-value {
+  font-size: 0.7em;
+  color: #888;
+  margin-left: 0.25em;
+  font-style: italic;
+  white-space: nowrap;
+}
+
 :root {
   --highlight-top-bg: rgb(170, 235, 170);
 
