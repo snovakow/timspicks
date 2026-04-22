@@ -1,23 +1,23 @@
-.layout {
+.stats-layout {
   font-family: monospace;
   white-space: pre-wrap;
 }
 
-.section {
+.stats-section {
   width: fit-content;
   max-width: 100%;
   margin-left: auto;
   margin-right: auto;
 }
 
-.bold {
+.stats-bold {
   font-weight: bold;
 }
 
-.stat-align-left {
+.stats-align-left {
   text-align: left;
 }
 
-.stat-align-center {
+.stats-align-center {
   text-align: center;
 }
