@@ -140,14 +140,30 @@ const loadAndValidate = async <T>(
 
 // Async loader/validator for games.json that merges players into each game
 export const loadGamesAndPlayers = async (processSrc: string, gamesSrc: string): Promise<[Picks.Player[], Picks.GameData[]]> => {
-	const metaDataResponse = await fetchData(processSrc);
-	const metaData = await metaDataResponse.json();
-	if (!metaData || typeof metaData !== 'object' || typeof metaData.processed !== 'string') {
-		throw new Error(`Invalid process metadata format in ${processSrc}`);
+	let cutoff: Date | null = null;
+
+	let metaDataResponse;
+	try { metaDataResponse = await fetchData(processSrc); }
+	catch (error) { console.warn(`Error loading metadata from ${processSrc}:`, error); }
+
+	let metaData;
+	if (metaDataResponse) {
+		try { metaData = await metaDataResponse.json(); }
+		catch (error) { console.warn(`Error parsing metadata from ${processSrc}:`, error); }
 	}
-	const cutoff = new Date(metaData.processed);
-	if (isNaN(cutoff.getTime())) {
-		throw new Error(`Invalid processed date in process metadata: ${metaData.processed}`);
+
+	if (metaData) {
+		if (!metaData || typeof metaData !== 'object') {
+			throw new Error(`Invalid metadata format in ${processSrc}: ${metaData}`);
+		}
+		if (typeof metaData.processed !== 'string') {
+			throw new Error(`Invalid 'processed' metadata in ${processSrc}: ${metaData.processed}`);
+		}
+
+		cutoff = new Date(metaData.processed);
+		if (!cutoff || isNaN(cutoff.getTime())) {
+			throw new Error(`Invalid 'processed' date in ${processSrc}: ${metaData.processed}`);
+		}
 	}
 
 	const response = await fetchData(gamesSrc);
@@ -171,7 +187,7 @@ export const loadGamesAndPlayers = async (processSrc: string, gamesSrc: string):
 	const gamesList: Picks.GameData[] = [];
 	for (const gameData of games) {
 		const game = new Picks.GameData(gameData);
-		if (cutoff < game.time) gamesList.push(game);
+		if (!cutoff || cutoff < game.time) gamesList.push(game);
 	}
 
 	async function fetchAndValidatePlayers(
