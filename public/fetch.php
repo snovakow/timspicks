@@ -354,6 +354,7 @@ if ($live) {
 	$map = [];
 	foreach ($data as $market) {
 		if ($market->marketType !== 'ANY_TIME_GOAL_SCORER') continue;
+		if ($market->marketName !== 'Any Time Goal Scorer') continue;
 
 		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $market->marketTime);
 		$closingTime = $closingTime->getTimestamp();
