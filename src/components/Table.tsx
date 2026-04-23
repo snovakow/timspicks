@@ -1,3 +1,4 @@
+import type { LogStatsKey } from "../statsCalculations";
 import { type Team } from "./logo";
 import "./Table.css";
 
@@ -182,7 +183,7 @@ export class Player {
 	}
 }
 
-export type ColumnKeys = 'fullName' | 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg' | 'pick' | 'gameTime';
+export type ColumnKeys = LogStatsKey | 'fullName' | 'pick' | 'gameTime';
 export interface ColumnData {
 	key: ColumnKeys;
 	title: string;
@@ -255,14 +256,14 @@ export function Table(props: {
 			</span>
 		);
 	};
-	const strategyFor = (row: PickOdds, key: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg'): Set<StrategyMode> => {
+	const strategyFor = (row: PickOdds, key: LogStatsKey): Set<StrategyMode> => {
 		if (key === 'bet1') return row.strategy1;
 		if (key === 'bet2') return row.strategy2;
 		if (key === 'bet3') return row.strategy3;
 		if (key === 'bet4') return row.strategy4;
 		return row.strategyAvg;
 	};
-	const visibleStrategyFor = (row: PickOdds, key: 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg'): Set<StrategyMode> | undefined => {
+	const visibleStrategyFor = (row: PickOdds, key: LogStatsKey): Set<StrategyMode> | undefined => {
 		const strategy = strategyFor(row, key);
 		return enabledModes.some((mode) => strategy.has(mode)) ? strategy : undefined;
 	};

@@ -13,7 +13,8 @@ export interface LogLine {
 }
 export type LogLines = LogLine[][];
 
-export type LogStatsKey = 'bet1' | 'bet2' | 'bet3' | 'bet4' | 'betAvg';
+export type SportsbookKey = 'bet1' | 'bet2' | 'bet3' | 'bet4';
+export type LogStatsKey = SportsbookKey | 'betAvg';
 export type PickIndex = 1 | 2 | 3;
 
 export interface LogStatsCacheItem {

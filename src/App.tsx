@@ -7,7 +7,8 @@ import StatsPopupContent from './components/StatsPopupContent';
 import SettingsPanel from './components/Settings';
 import { roundToPercent, probabilityToAmerican } from './utility';
 import * as DataProcessor from './dataProcessor';
-import { precalculateLogStats, cloneLogStats, type LogStatsKey, type LogLines } from './statsCalculations';
+import { precalculateLogStats, cloneLogStats } from './statsCalculations';
+import type { LogStatsKey, LogLines, SportsbookKey } from './statsCalculations';
 import logo1 from './images/sb-logo-16-draftkings.svg';
 import logo2 from './images/sb-logo-16-fanduel.svg';
 import logo3 from './images/sb-logo-16-mgm.svg';
@@ -27,7 +28,7 @@ const precision = Picks.precision;
 let SIMULATE = Feature.simulate;
 
 type Sportsbook = {
-	key: "bet1" | "bet2" | "bet3" | "bet4";
+	key: SportsbookKey;
 	title: string;
 	logo: string;
 };
