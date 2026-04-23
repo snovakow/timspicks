@@ -46,7 +46,7 @@ $csrfToken = $_SESSION['csrf_token'];
 				csrf_token: "<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>"
 			};
 
-			const response = await fetch("./fetch.php?" + query, {
+			const response = await fetch("./fetch_service.php?" + query, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
