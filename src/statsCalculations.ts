@@ -555,6 +555,7 @@ export const calculateStats = (
 			const totalMax = topResult.prob1 + topResult.prob2 + topResult.prob3;
 			logHandler.addLine(`Total: ${roundToPercent(total - totalMax, comboPrecision)}`, 'center');
 		}
+		logHandler.addSection();
 		logHandler.addLine(strategyTitle(strategy), 'center');
 	}
 
