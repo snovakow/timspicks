@@ -1,5 +1,6 @@
 import './Settings.css';
 import type { StrategyMode } from './Table';
+import * as Feature from '../features';
 
 interface SettingsPanelProps {
 	showPercentage: boolean;
@@ -72,19 +73,21 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					Show sportsbook odds as implied probability percentages, otherwise as American odds.
 				</div>
 			</div>
-			<div className="settings-group">
-				<label className={labelClassNames}>
-					<input
-						type="checkbox"
-						checked={deVigEnabled}
-						onChange={(e) => onDeVigEnabledChange(e.target.checked)}
-					/>
-					<span>Normalize Sportsbooks</span>
-				</label>
-				<div className="settings-description">
-					Remove sportsbook bias by adjusting odds to a consensus value.
+			{Feature.normalize && (
+				<div className="settings-group">
+					<label className={labelClassNames}>
+						<input
+							type="checkbox"
+							checked={deVigEnabled}
+							onChange={(e) => onDeVigEnabledChange(e.target.checked)}
+						/>
+						<span>Normalize Sportsbooks</span>
+					</label>
+					<div className="settings-description">
+						Remove sportsbook bias by adjusting odds to a consensus value.
+					</div>
 				</div>
-			</div>
+			)}
 			<div className="settings-group">
 				<label className={labelClassNames}>
 					<input

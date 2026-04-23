@@ -1,4 +1,5 @@
 import * as Picks from './components/Table';
+import * as Feature from './features';
 
 // Raw player structure from players_XXX.json
 type RawPlayerJson = {
@@ -467,7 +468,7 @@ export const compilePlayerList = (
 		player.bet4 = player.betRaw4;
 	}
 
-	// deVig(playerList);
+	if (Feature.normalize) deVig(playerList);
 };
 
 // De-vig: correct each sportsbook's bias AND compression toward the
