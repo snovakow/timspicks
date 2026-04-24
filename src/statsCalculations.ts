@@ -509,11 +509,11 @@ export const calculateStats = (
 	}
 
 	const logFooter = () => {
-		logHandler.addTitle("Good Ranges");
+		logHandler.addTitle("Good Values");
 		logHandler.addSection();
-		logHandler.addLine("Streak: 64-70% ", 'left');
-		logHandler.addLine("Points: 22-25", 'left');
-		logHandler.addLine("Pick %: 0.85-1.0", 'left');
+		logHandler.addLine("Streak: 66% ", 'left');
+		logHandler.addLine("Points: 23", 'left');
+		logHandler.addLine("Pick %: 30%", 'left');
 	}
 
 	const setStrategy = (pick: Picks.PickOdds, mode: Picks.StrategyMode) => {
