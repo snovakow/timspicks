@@ -371,18 +371,18 @@ export const calculateStats = (
 	*/
 
 	const strategyTitle = (strategy: strategyPattern): string => {
-		if (strategy === 'iii') return "Independent";
-		if (strategy === 'sss') return "Stacked";
-		if (strategy === 'iss') return "Stacked + Pick 1 Independent";
-		if (strategy === 'sis') return "Stacked + Pick 2 Independent";
-		if (strategy === 'ssi') return "Stacked + Pick 3 Independent";
-		if (strategy === 'ioo') return "Opposing + Pick 1 Independent";
-		if (strategy === 'oio') return "Opposing + Pick 2 Independent";
-		if (strategy === 'ooi') return "Opposing + Pick 3 Independent";
-		if (strategy === 'oso') return "Stacked + Pick 1 Opposing Pick 3";
-		if (strategy === 'soo') return "Stacked + Pick 2 Opposing Pick 3";
-		if (strategy === 'sos') return "Opposing + Pick 1 Stacked Pick 3";
-		if (strategy === 'oss') return "Opposing + Pick 2 Stacked Pick 3";
+		if (strategy === 'iii') return "All Independent";
+		if (strategy === 'sss') return "All Stacked";
+		if (strategy === 'iss') return "2-3 Stacked, 1 Independent";
+		if (strategy === 'sis') return "1-3 Stacked, 2 Independent";
+		if (strategy === 'ssi') return "1-2 Stacked, 3 Independent";
+		if (strategy === 'ioo') return "2-3 Opposing, 1 Independent";
+		if (strategy === 'oio') return "1-3 Opposing, 2 Independent";
+		if (strategy === 'ooi') return "1-2 Opposing, 3 Independent";
+		if (strategy === 'oso') return "1-2 Stacked, 1-3 Opposing";
+		if (strategy === 'soo') return "1-2 Stacked, 2-3 Opposing";
+		if (strategy === 'sos') return "1-2 Opposing, 1-3 Stacked";
+		if (strategy === 'oss') return "1-2 Opposing, 2-3 Stacked";
 		return strategy;
 	}
 
