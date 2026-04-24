@@ -1,5 +1,4 @@
 import * as Picks from './components/Table';
-import * as Feature from './features';
 
 // Raw player structure from players_XXX.json
 type RawPlayerJson = {
