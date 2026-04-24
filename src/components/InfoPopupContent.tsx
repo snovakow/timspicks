@@ -103,7 +103,7 @@ export function LegendPopupContent() {
 					</span>
 				</p>
 				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-hits-left-dot" aria-hidden="true" />
-					<span className="legend-strategy-text"><strong>Leaderboard (Amber): </strong>
+					<span className="legend-strategy-text"><strong>Pick % (Amber): </strong>
 						Best picks for competing on the leaderboard.
 					</span>
 				</p>

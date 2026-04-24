@@ -239,7 +239,7 @@ export function Table(props: {
 	const strategyLabel = (mode: StrategyMode): string => {
 		if (mode === 'least1') return 'Streak';
 		if (mode === 'points') return 'Points';
-		if (mode === 'hits') return 'Leaderboard';
+		if (mode === 'hits') return 'Pick %';
 		return 'Top';
 	};
 	const strategyTitle = (strategy: Set<StrategyMode>): string => {

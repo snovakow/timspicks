@@ -32,7 +32,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 	const strategyOptions: Array<{ key: StrategyMode; label: string }> = [
 		{ key: 'least1', label: 'Streak' },
 		{ key: 'points', label: 'Points' },
-		{ key: 'hits', label: 'Leaderboard' },
+		{ key: 'hits', label: 'Pick %' },
 		{ key: 'top', label: 'Top' },
 	];
 

@@ -440,13 +440,13 @@ export const calculateStats = (
 		switch (strategy) {
 			case 'least1': return `Streak: ${roundToPercent(value, comboPrecision)}`;
 			case 'points': return `Points: ${value.toFixed(comboPrecision)}`;
-			case 'hits': return `Leaderboard: ${value.toFixed(comboPrecision)}`;
+			case 'hits': return `Pick %: ${roundToPercent(value / 3, comboPrecision)}`;
 		}
 	}
 	const printStrategyDiff = (strategy: Picks.Strategy, top: number, value: number): string => {
 		let diff = value - top;
 		let percent = "";
-		if (strategy === 'least1') {
+		if (strategy === 'least1' || strategy === 'hits') {
 			diff *= 100;
 			percent = "%";
 		}
@@ -513,7 +513,7 @@ export const calculateStats = (
 		logHandler.addSection();
 		logHandler.addLine("Streak: 64-70% ", 'left');
 		logHandler.addLine("Points: 22-25", 'left');
-		logHandler.addLine("Leaderboard: 0.85-1.0", 'left');
+		logHandler.addLine("Pick %: 0.85-1.0", 'left');
 	}
 
 	const setStrategy = (pick: Picks.PickOdds, mode: Picks.StrategyMode) => {
