@@ -528,8 +528,9 @@ function deVig(playerList: Picks.Player[]) {
 		if (corr === undefined) continue;
 		const invAlpha = 1 / corr.alpha;
 		for (const player of playerList) {
-			if (player[key] === null) continue;
-			const fair = Math.pow(player[key]! / corr.c, invAlpha);
+			const playerBet = player[key];
+			if (playerBet === null) continue;
+			const fair = Math.pow(playerBet / corr.c, invAlpha);
 			player[key] = Math.min(maxProb, Math.max(minProb, fair));
 		}
 	}
