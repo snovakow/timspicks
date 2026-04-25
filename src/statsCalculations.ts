@@ -449,6 +449,7 @@ export const calculateStats = (
 		if (strategy === 'least1' || strategy === 'hits') {
 			diff *= 100;
 			percent = "%";
+			if (strategy === 'hits') diff /= 3;
 		}
 
 		const places = Math.pow(10, comboPrecision);
