@@ -27,22 +27,19 @@ class Result {
         this.hits = hitCount;
     }
 }
+
 interface Total {
-    count: number;
-    title: string;
     least1: number;
     points: number;
     hits: number;
+    count: number;
 }
-
-class ResultTotal {
-    title: string
+class ResultTotal implements Total {
     least1: number
     points: number
     hits: number
     count: number
-    constructor(title: string) {
-        this.title = title;
+    constructor() {
         this.least1 = 0;
         this.points = 0;
         this.hits = 0;
@@ -53,15 +50,6 @@ class ResultTotal {
         this.points += result.points;
         this.hits += result.hits;
         this.count++;
-    }
-    getTotal(): Total {
-        return {
-            count: this.count,
-            title: this.title,
-            least1: this.least1 / this.count,
-            points: this.points / this.count,
-            hits: this.hits / this.count,
-        };
     }
 }
 
@@ -142,111 +130,121 @@ function simulateCombo(set1: PlayerSet, set2: PlayerSet, set3: PlayerSet, patter
     return new Result(pick1.scored, pick2.scored, pick3.scored);
 }
 
-export const runSimulation = async (gamesCount: number, iterations: number) => {
+export const runSimulation = async (iterations: number) => {
     const response = await fetch('./history/history.json');
     const data = await response.json();
-    class GameResults {
-        gamesMin: number;
-        gamesMax: number;
 
-        randomResults = new ResultTotal("Random");
+    class PickIndex {
+        readonly slotTotal: number;
+        readonly slotIndex: number;
+        readonly gameCount: number;
+        constructor(slotTotal: number, slotIndex: number, gameCount: number) {
+            this.slotTotal = slotTotal;
+            this.slotIndex = slotIndex;
+            this.gameCount = gameCount;
+        }
+    }
+    const codeForIndex = (slotTotal: number, slotIndex: number, gameCount: number) => {
+        return `${slotTotal} ${slotIndex} ${gameCount}`;
+    }
+    const indexes: Map<string, PickIndex> = new Map();
+
+    class GameResult {
+        randomResults = new ResultTotal();
         strategyResults: Map<strategyPattern, ResultTotal> = new Map();
 
-        nightsCount = 0;
+        gameDay: string;
+        picksCount = 0;
 
-        constructor(min: number = 0, max: number = Number.POSITIVE_INFINITY) {
-            this.gamesMin = min;
-            this.gamesMax = max;
-
+        constructor(date: string) {
+            this.gameDay = date;
             for (const strategy of allStrategies) {
-                this.strategyResults.set(strategy, new ResultTotal(strategy));
+                this.strategyResults.set(strategy, new ResultTotal());
             }
         }
     }
-    const gameResults = gamesCount === 1 ? new GameResults(1, 1) : gamesCount === 2 ? new GameResults(2, 2) : new GameResults(3);
+
+    const gameResults: Map<PickIndex, GameResult> = new Map();
 
     for (const item of data) {
         // if (item.format !== 'regular') continue;
         for (const file of item.files) {
             const response = await fetch(`./history/${file}`);
             const fileData = await response.json();
-            const set1: Map<number, HistoryPlayer> = new Map();
-            const set2: Map<number, HistoryPlayer> = new Map();
-            const set3: Map<number, HistoryPlayer> = new Map();
-            const teams = new Set<string>();
-            let gameCount = 0;
-            for (const playerList of fileData.playerLists) {
-                const set = playerList.id === 1 ? set1 : playerList.id === 2 ? set2 : set3;
-                for (const player of playerList.players) {
-                    set.set(player.nhlPlayerId, player);
-                    if (!teams.has(player.team)) {
-                        gameCount++;
-                        teams.add(player.team);
-                        teams.add(player.opponent);
+
+            const slotTotal = fileData.availableTimes.length;
+            for (let slotIndex = 0; slotIndex < slotTotal; slotIndex++) {
+                const availableTime = fileData.availableTimes[slotIndex];
+
+                const set1: Map<number, HistoryPlayer> = new Map();
+                const set2: Map<number, HistoryPlayer> = new Map();
+                const set3: Map<number, HistoryPlayer> = new Map();
+                const teams = new Set<string>();
+                let gameCount = 0;
+                for (const playerList of fileData.playerLists) {
+                    const set = playerList.id === 1 ? set1 : playerList.id === 2 ? set2 : set3;
+                    for (const player of playerList.players) {
+                        const playsAtTime = player.availableTimes.includes(availableTime);
+                        if (!playsAtTime) continue;
+
+                        set.set(player.nhlPlayerId, player);
+                        if (!teams.has(player.team)) {
+                            gameCount++;
+                            teams.add(player.team);
+                            teams.add(player.opponent);
+                        }
+                    }
+                }
+
+                if (set1.size === 0 || set2.size === 0 || set3.size === 0) continue;
+
+                const indexKey = codeForIndex(slotTotal, slotIndex, gameCount);
+                let index = indexes.get(indexKey);
+                if (!index) {
+                    index = new PickIndex(slotTotal, slotIndex, gameCount);
+                    indexes.set(indexKey, index);
+                }
+                let gameResult = gameResults.get(index);
+                if (!gameResult) {
+                    gameResult = new GameResult(fileData.date);
+                    gameResults.set(index, gameResult);
+                }
+                gameResult.picksCount++;
+
+                const array1 = Array.from(set1.values());
+                const array2 = Array.from(set2.values());
+                const array3 = Array.from(set3.values());
+
+                for (let i = 0; i < iterations; i++) {
+                    const resultRandom = simulateRandom(array1, array2, array3);
+                    if (resultRandom !== null) gameResult.randomResults.add(resultRandom);
+                    for (const [type, strategy] of gameResult.strategyResults) {
+                        const result = simulateCombo(array1, array2, array3, type);
+                        if (result !== null) strategy.add(result);
                     }
                 }
             }
-
-            if (gameResults.gamesMin > gameCount || gameResults.gamesMax < gameCount) continue;
-            gameResults.nightsCount++;
-
-            if (set1.size === 0 || set2.size === 0 || set3.size === 0) continue;
-            const array1 = Array.from(set1.values());
-            const array2 = Array.from(set2.values());
-            const array3 = Array.from(set3.values());
-
-            for (let i = 0; i < iterations; i++) {
-                const resultRandom = simulateRandom(array1, array2, array3);
-                if (resultRandom !== null) gameResults.randomResults.add(resultRandom);
-                for (const [type, strategy] of gameResults.strategyResults) {
-                    const result = simulateCombo(array1, array2, array3, type);
-                    if (result !== null) strategy.add(result);
-                }
-            }
         }
     }
 
-    const compile = (gameResults: GameResults, baseline: Total) => {
-        const corr = {
-            least1: {} as Record<strategyPattern, number | null>,
-            points: {} as Record<strategyPattern, number | null>,
-            hits: {} as Record<strategyPattern, number | null>
-        };
-
-        const assign = (key: keyof typeof corr, type: strategyPattern, total: Total) => {
-            const randVal = baseline[key];
-            const totalVal = total[key];
-            if (randVal && totalVal) {
-                corr[key][type] = totalVal / randVal;
-            } else {
-                corr[key][type] = null;
+    const compile = () => {
+        const results = [];
+        for (const [index, result] of gameResults) {
+            const totals = {} as Record<strategyPattern | 'random', Total>;
+            totals.random = { ...result.randomResults };
+            for (const [type, strategy] of result.strategyResults) {
+                totals[type] = { ...strategy };
             }
-        }
 
-        const totals = {} as Record<strategyPattern, Total>;
-        for (const [type, strategy] of gameResults.strategyResults) {
-            totals[type] = strategy.getTotal();
+            results.push({
+                totals,
+                ...index,
+                gameDay: result.gameDay,
+                picksCount: result.picksCount
+            });
         }
-        for (const [type, strategy] of gameResults.strategyResults) {
-            const total = strategy.getTotal();
-            assign('least1', type, total);
-            assign('points', type, total);
-            assign('hits', type, total);
-        }
-
-        console.log('--- Correlation Factors (relative to ' + baseline.title + ') ---');
-        if (gameResults.gamesMin === gameResults.gamesMax) console.log(gameResults.gamesMin + ' Game Nights');
-        else if (gameResults.gamesMax === Infinity) console.log(gameResults.gamesMin + '+ Game Nights');
-        else console.log(gameResults.gamesMin + ' - ' + gameResults.gamesMax + ' Game Nights');
-        console.log(gameResults.nightsCount + ' nights simulated');
-        console.log(corr);
-
-        return {
-            gameResults: gameResults,
-            correlation: corr
-        };
+        return results;
     }
 
-    const baseline = gamesCount >= 3 ? gameResults.strategyResults.get('iii')!.getTotal() : gameResults.randomResults.getTotal();
-    return compile(gameResults, baseline);
+    return compile();
 }

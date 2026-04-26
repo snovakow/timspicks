@@ -149,13 +149,9 @@ function App() {
 				const normalizedNameMap = DataProcessor.buildNormalizedNameMap(playerList);
 
 				if (SIMULATE) {
-					const now = new Date();
-					const gamesRemaining = gamesList.filter(game => game.time > now).length;
-					runSimulation(gamesRemaining, 10000);
-					// const iterations = 1000000;
-					// runSimulation(1, iterations);
-					// runSimulation(2, iterations);
-					// runSimulation(3, iterations);
+					runSimulation(1000000).then((results) => {
+						console.log(JSON.stringify(results));
+					});
 					SIMULATE = false;
 				}
 
