@@ -103,7 +103,7 @@ export const calculateStats = (
 		for (const row of list) {
 			const avg = row.player[betKey];
 			if (avg === null) continue;
-			if (betKey === 'betAvg' && row.player.betCount < minSportsbooks) continue;
+			if (row.player.betCount < minSportsbooks) continue;
 			choices.push(new Choice(row, avg));
 		}
 		return choices;
