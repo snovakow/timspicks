@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Data Seeder</title>
+</head>
+
+<body>
+	<div id="form">
+		<input type="text" id="name" />
+		<input type="password" id="input" />
+		<button id="button">Submit</button>
+	</div>
+
+	<div id="response"></div>
+
+	<script>
+		const sendRequest = async (query) => {
+			const data = {
+				name: name.value,
+				code: input.value,
+			};
+
+			const response = await fetch("./seed_service.php?" + query, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(data) // Converts JavaScript object to a JSON string
+			});
+
+			// Handle the response from the server
+			return await response.text();
+		};
+
+		const button = document.getElementById('button');
+		const name = document.getElementById('name');
+		const input = document.getElementById('input');
+
+		const scrollResponseToBottom = (element) => {
+			window.requestAnimationFrame(() => {
+				element.scrollTop = element.scrollHeight;
+			});
+		};
+
+		const keydown = (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				button.focus();
+				button.click();
+			}
+		};
+		name.addEventListener("keydown", keydown);
+		input.addEventListener("keydown", keydown);
+
+		button.addEventListener('click', async () => {
+			const responseElement = document.getElementById('response');
+			responseElement.replaceChildren();
+			responseElement.textContent = "";
+			responseElement.scrollTop = 0;
+
+			const result = await sendRequest('update');
+			if (result) responseElement.replaceChildren();
+			if (result) {
+				responseElement.insertAdjacentHTML('beforeend', result);
+				scrollResponseToBottom(responseElement);
+			}
+		});
+	</script>
+
+</body>
+
+</html>

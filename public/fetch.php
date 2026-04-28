@@ -15,7 +15,7 @@ $csrfToken = $_SESSION['csrf_token'];
 
 <head>
 	<title>Data Fetcher</title>
-	<link rel="stylesheet" href="./data.css">
+	<link rel="stylesheet" href="./fetch.css">
 </head>
 
 <body>
