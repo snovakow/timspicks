@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/update_lib.php';
+require_once '../public/fetch_lib.php';
 
 $live = true;
 

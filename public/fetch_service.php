@@ -1,5 +1,5 @@
 <?php
-require_once dirname(__DIR__) . '/update/update_lib.php';
+require_once './fetch_lib.php';
 
 $live = true;
 $secure = true;
