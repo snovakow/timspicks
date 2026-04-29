@@ -430,7 +430,9 @@ function App() {
 				</div>
 				<span className="header-title">
 					<img className="header-title-icon" src={darkTheme ? iconHockeyLight : iconHockeyDark} alt="" aria-hidden="true" />
-					Tims Hockey Picks
+					<span className="header-title-text">
+						Tims Hockey Picks
+					</span>
 				</span>
 				<div className='toolBar toolbar-end'>
 					<button className="button" title="Legend" aria-label="Legend"
