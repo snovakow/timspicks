@@ -1,7 +1,7 @@
 <?php
 
 /* Games */
-function updateGames($now, $basePath)
+function updateGames(DateTime $now, string $basePath)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'Games';
@@ -26,7 +26,7 @@ function updateGames($now, $basePath)
 }
 
 /* Picks */
-function updatePicks($ch, $basePath, $savesrc = false)
+function updatePicks(CurlHandle $ch, string $basePath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'Picks';
@@ -100,7 +100,7 @@ function updatePicks($ch, $basePath, $savesrc = false)
 }
 
 /* DraftKings */
-function updateBet1($ch, $basePath, $savesrc = false)
+function updateBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'DraftKings';
@@ -149,7 +149,7 @@ function updateBet1($ch, $basePath, $savesrc = false)
 }
 
 /* FanDuel */
-function updateBet2($endOfDay, $ch, $basePath, $savesrc = false)
+function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'FanDuel';
@@ -203,7 +203,6 @@ function updateBet2($endOfDay, $ch, $basePath, $savesrc = false)
 		if ($market->marketName !== 'Any Time Goal Scorer') continue;
 
 		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $market->marketTime);
-		$closingTime = $closingTime->getTimestamp();
 		if ($closingTime > $endOfDay) continue;
 
 		foreach ($market->runners as $runner) {
@@ -229,7 +228,7 @@ function updateBet2($endOfDay, $ch, $basePath, $savesrc = false)
 }
 
 /* BetMGM */
-function updateBet3($endOfDay, $ch, $basePath, $savesrc = false)
+function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'BetMGM';
@@ -287,7 +286,6 @@ function updateBet3($endOfDay, $ch, $basePath, $savesrc = false)
 		if ($fixture->competition->name->value !== 'NHL') continue;
 
 		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:se', $fixture->startDate);
-		$closingTime = $closingTime->getTimestamp();
 		if ($closingTime > $endOfDay) continue;
 
 		$ids[] = $fixture->id;
@@ -359,7 +357,7 @@ function updateBet3($endOfDay, $ch, $basePath, $savesrc = false)
 		}
 	}
 
-	if ($savesrc) {
+	if ($savesrc && isset($items)) {
 		$items = array_merge([], ...$items);
 		$json_string = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 		file_put_contents($basePath . '/src_bet3.json', $json_string);
@@ -376,7 +374,7 @@ function updateBet3($endOfDay, $ch, $basePath, $savesrc = false)
 }
 
 /* BetRivers */
-function updateBet4($endOfDay, $basePath, $savesrc = false)
+function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'BetRivers';
@@ -403,7 +401,6 @@ function updateBet4($endOfDay, $basePath, $savesrc = false)
 
 		foreach ($data_array->items as $item) {
 			$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $item->closingTime);
-			$closingTime = $closingTime->getTimestamp();
 			if ($closingTime > $endOfDay) continue;
 
 			$map[] = [
@@ -435,7 +432,6 @@ function updateBet4($endOfDay, $basePath, $savesrc = false)
 
 			foreach ($data_array->items as $item) {
 				$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $item->closingTime);
-				$closingTime = $closingTime->getTimestamp();
 				if ($closingTime > $endOfDay) continue;
 
 				$map[] = [
@@ -445,7 +441,7 @@ function updateBet4($endOfDay, $basePath, $savesrc = false)
 			}
 		}
 
-		if ($savesrc) {
+		if ($savesrc && isset($items)) {
 			$items = array_merge([], ...$items);
 			$json_string = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 			file_put_contents($basePath . '/src_bet4.json', $json_string);
@@ -463,7 +459,7 @@ function updateBet4($endOfDay, $basePath, $savesrc = false)
 }
 
 /* Backup */
-function backup($now, $timezone, $basePath)
+function backup(DateTime $now, DateTimeZone $timezone, string $basePath)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 
@@ -529,7 +525,8 @@ function backup($now, $timezone, $basePath)
 		copy($basePath . $bet4file, $backupSubPath . $bet4file);
 		copy($basePath . $helperfile, $backupSubPath . $helperfile);
 
-		$output['title'] = "Backup: $backupSubPath";
+		$output['title'] = "Backup";
+		$output['content'] = "$backupSubPath";
 	} else {
 		if (empty($games)) $output['title'] = 'No games scheduled for today';
 		else $output['title'] = 'No game found after the current time';

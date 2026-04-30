@@ -202,7 +202,6 @@ if ($live) {
 }
 
 $endOfDay = new DateTime('tomorrow midnight', $timezone);
-$endOfDay = $endOfDay->getTimestamp();
 
 /* FanDuel */
 if ($live) {
