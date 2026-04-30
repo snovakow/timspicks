@@ -8,7 +8,7 @@ $savesrc = false;
 if ($live && $secure) {
 	session_start();
 
-	if (!isset($_SESSION['csrf_token'])) die("CSRF token not found in session.");
+	if (!isset($_SESSION['csrf_token'])) die("Access denied.");
 
 	$csrf_token = $_SESSION['csrf_token'];
 	// unset($_SESSION['csrf_token']);
