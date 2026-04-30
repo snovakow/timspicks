@@ -510,6 +510,22 @@ function App() {
 						<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
 					</div>
 				</CollapsibleSection>
+
+				{showCorrelate ? (
+					<Correlate
+						value={correlationFactor}
+						setValue={setCorrelationFactor}
+						onClose={() => setShowCorrelate(false)}
+					/>
+				) : (
+					<button className="correlate-button"
+						title="Show Correlation Slider"
+						aria-label="Show Correlation Slider"
+						onClick={() => setShowCorrelate(true)}
+					>
+						<i>𝑳%</i>
+					</button>
+				)}
 			</main>
 		</>
 	)
