@@ -1,3 +1,4 @@
+import Correlate from './components/Correlate';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as Picks from './components/Table';
 import Popup from './components/Popup';
