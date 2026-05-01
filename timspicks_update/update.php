@@ -2,7 +2,7 @@
 /*
 1. Enter crontab edit mode: crontab -e
 2. Enter insert mode: i
-3. Type command: * * * * * curl https://snovakow.sensitive/update.php?lib=../public >> timspicks_log.txt
+3. Type command: * * * * * curl "https://snovakow.sensitive/update.php?lib=public" >> timspicks_log.txt
 4. Save the file: Esc, :w, Enter
 5. Quit vim: :q
 6. List your cron jobs: crontab -l
@@ -10,8 +10,8 @@
 Delete all crontabs: crontab -r
 */
 
-$includeRoot = isset($_GET['lib']) ? $_GET['lib'] : '../public';
-require_once "{$includeRoot}/fetch_lib.php";
+$codeRoot = isset($_GET['lib']) ? $_GET['lib'] : 'public';
+require_once "../{$codeRoot}/fetch_lib.php";
 
 function process(string $basePath)
 {
@@ -92,7 +92,7 @@ function logEnd(DateTime $now, string $message)
     die('*** ' . $now->format('Y-m-d h:i A') . ": {$message}\n");
 }
 
-$basePath = '../public/data';
+$basePath = "../{$codeRoot}/data";
 if (!is_dir($basePath)) mkdir($basePath, 0755, true);
 
 $timezone = new DateTimeZone('America/New_York');
