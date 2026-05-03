@@ -280,12 +280,12 @@ export class Correlation {
 			this.strategy.points[combo] += result[combo].points;
 			this.strategy.hits[combo] += result[combo].hits;
 			this.strategy.count[combo] += result[combo].count;
-
-			this.baseline.least1 += result[this.baselineKey].least1;
-			this.baseline.points += result[this.baselineKey].points;
-			this.baseline.hits += result[this.baselineKey].hits;
-			this.baseline.count += result[this.baselineKey].count;
 		}
+
+		this.baseline.least1 += result[this.baselineKey].least1;
+		this.baseline.points += result[this.baselineKey].points;
+		this.baseline.hits += result[this.baselineKey].hits;
+		this.baseline.count += result[this.baselineKey].count;
 	}
 	calculate() {
 		this.baseline.least1 /= this.baseline.count;
