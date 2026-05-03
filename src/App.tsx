@@ -314,9 +314,8 @@ function App() {
 		makeSortPlayer(needsSortPlayer);
 		playerList.sort(sortFunctionPlayer);
 
-		// Expose minSportsbooks in the returned object for downstream consumers
-		return { gamesList, playerList, table1Rows, table2Rows, table3Rows, minSportsbooks, correlationFactor };
-	}, [data, showPercentage, deVigEnabled, needsSort1, needsSort2, needsSort3, needsSortPlayer, minSportsbooks, correlationFactor]);
+		return { gamesList, playerList, table1Rows, table2Rows, table3Rows };
+	}, [data, showPercentage, deVigEnabled, needsSort1, needsSort2, needsSort3, needsSortPlayer]);
 
 	// Only stats popup uses 'key', others do not
 	const [showPopup, setShowPopup] = useState<{ visible: boolean; title: string; key?: LogStatsKey }>({ visible: false, title: 'Stats', key: 'betAvg' });
