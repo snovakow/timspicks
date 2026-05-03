@@ -153,6 +153,8 @@ export const calculateStats = (
 			this.players3.add(combo.pick3.pick);
 		}
 
+		// Scale correlation effect with linear interpolation:
+		// factor=0 => no effect, factor=1 => full effect, factor>1 => amplified effect.
 		correlate(strategy: strategyPattern, ref: Correlation): void {
 			const least1 = ref.strategy.least1[strategy];
 			if (least1 !== null) this.least1 *= (least1 - 1) * factor + 1;

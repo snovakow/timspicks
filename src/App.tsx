@@ -33,12 +33,14 @@ const betDisplayRounded = (chance: number | null): string => {
 
 const sortFunction = (sortConfig: Picks.SortConfig) => {
 	return (a: Picks.PickOdds | Picks.Player, b: Picks.PickOdds | Picks.Player): number => {
+		// Rows can be either PickOdds or Player depending on the table; normalize for shared sorting.
 		const aPlayer = a instanceof Picks.PickOdds ? a.player : a;
 		const bPlayer = b instanceof Picks.PickOdds ? b.player : b;
 		for (const key of sortConfig.keyOrder) {
 			const aVal = aPlayer[key];
 			const bVal = bPlayer[key];
 
+			// Keep nulls at the end regardless of sort key.
 			if (aVal === null) {
 				if (bVal === null) continue;
 				return 1;
@@ -46,6 +48,7 @@ const sortFunction = (sortConfig: Picks.SortConfig) => {
 			if (bVal === null) return -1;
 
 			if (typeof aVal === 'number' && typeof bVal === 'number') {
+				// Treat 0 as low-signal/missing for ranking and push it down.
 				if (aVal === 0) {
 					if (bVal === 0) continue;
 					return 1;
@@ -74,6 +77,7 @@ const sortFunction = (sortConfig: Picks.SortConfig) => {
 const makeSort = (sortConfig: Picks.SortConfig) => {
 	return (keyPrimary: Picks.ColumnKeys) => {
 		if (sortConfig.keyOrder[0] === keyPrimary) return;
+		// Keep the chosen key first while preserving the existing fallback key order.
 		const keyOrder = [keyPrimary];
 		for (const key of sortConfig.keyOrder) {
 			if (key === keyPrimary) continue;
@@ -202,6 +206,7 @@ function App() {
 			return Object.assign(Object.create(Picks.PickOdds.prototype), row, { player }) as Picks.PickOdds;
 		};
 
+		// Preserve shared player identity across cloned rows so updates stay consistent per player.
 		const playerById = new Map<number, Picks.Player>();
 		const playerList = origPlayerList.map((player) => {
 			const clone = clonePlayer(player);
@@ -216,7 +221,7 @@ function App() {
 			});
 		};
 
-		// Create fresh object graphs so all display mutations stay local to this memoized result.
+		// Create fresh object graphs so display mutations do not leak back into source data.
 		const table1Rows = cloneRows(origTable1);
 		const table2Rows = cloneRows(origTable2);
 		const table3Rows = cloneRows(origTable3);
@@ -228,6 +233,7 @@ function App() {
 		const key4 = deVigEnabled ? 'bet4' : 'betRaw4';
 
 		if (Feature.normalize) {
+			// Reset to raw values before reapplying de-vig to avoid compounding transformations.
 			for (const player of playerList) {
 				player.bet1 = player.betRaw1;
 				player.bet2 = player.betRaw2;
@@ -269,6 +275,7 @@ function App() {
 		}
 
 		const clearArray = (array: Picks.PickOdds[]) => {
+			// Derived highlight/strategy state is recomputed every memo run.
 			for (const row of array) {
 				row.highlight1 = false;
 				row.highlight2 = false;
@@ -323,6 +330,7 @@ function App() {
 	// Memoize stats calculations - expensive O(n³) combo calculations
 	const statsCache = useMemo(() => {
 		if (!memoizedDisplayData) return null;
+		// Precompute once per dependency change and clone on read to keep cache immutable.
 		return precalculateLogStats(
 			minSportsbooks,
 			memoizedDisplayData.table1Rows,
@@ -332,7 +340,7 @@ function App() {
 		);
 	}, [memoizedDisplayData, minSportsbooks, correlationFactor]);
 
-	// Update popupStats only when stats popup is open and cache is available
+	// Keep popup stats in sync with the latest cache only while the stats view is visible.
 	useEffect(() => {
 		if (popupView === 'stats' && showPopup.visible && statsCache) {
 			setPopupStats(cloneLogStats(statsCache));
