@@ -110,13 +110,6 @@ interface InitializedData {
 	table3Rows: Picks.PickOdds[];
 }
 
-if (SIMULATE) {
-	runSimulation(1000000).then((results) => {
-		console.log(JSON.stringify(results));
-	});
-	SIMULATE = false;
-}
-
 function App() {
 	// xG (expected goals) state
 	const [xgEnabled, setXgEnabled] = useState(false);
@@ -178,6 +171,14 @@ function App() {
 
 				setData({ gamesList, playerList, table1Rows, table2Rows, table3Rows });
 				setError(null);
+
+				if (SIMULATE) {
+					// Run simulation once app has initialized
+					runSimulation(1000000).then((results) => {
+						console.log(JSON.stringify(results));
+					});
+					SIMULATE = false;
+				}
 			} catch (error: unknown) {
 				if (error instanceof Error && error.message === DataProcessor.NO_GAMES_ERROR) {
 					console.warn('No games found for today. Displaying empty tables.');
