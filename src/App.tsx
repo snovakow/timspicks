@@ -137,7 +137,7 @@ function App() {
 	const [data, setData] = useState<InitializedData | null>(null);
 
 	const [showPercentage, setShowPercentage] = useState(true);
-	const [deVigEnabled, setDeVigEnabled] = useState(true);
+	const [deVigEnabled, setDeVigEnabled] = useState(false);
 	const [minSportsbooks, setMinSportsbooks] = useState(3);
 	const [correlationFactor, setCorrelationFactor] = useState(1);
 	const [showCorrelate, setShowCorrelate] = useState(false);

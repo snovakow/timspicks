@@ -482,10 +482,21 @@ export function deVig(playerList: Picks.Player[]) {
 	const minProb = 0.0001;
 	const maxProb = 0.9999;
 	const minBookPlayers = 10;
+	const minSlope = 0.8;
+	const maxSlope = 1.25;
+	const maxConsensusLogitGap = 1.25;
+
+	const clampProb = (value: number): number => Math.min(maxProb, Math.max(minProb, value));
+	const logit = (value: number): number => {
+		const p = clampProb(value);
+		return Math.log(p / (1 - p));
+	};
+	const sigmoid = (value: number): number => 1 / (1 + Math.exp(-value));
 
 	interface Correction {
-		c: number;
-		alpha: number;
+		intercept: number;
+		slope: number;
+		strength: number;
 	}
 
 	const corrections: Partial<Record<typeof SportsbookKeys[number], Correction>> = {};
@@ -501,8 +512,8 @@ export function deVig(playerList: Picks.Player[]) {
 				if (player[other] !== null) { peerSum += player[other]!; peerCount++; }
 			}
 			if (peerCount === 0) continue;
-			xs.push(Math.log(peerSum / peerCount));
-			ys.push(Math.log(bookProb));
+			xs.push(logit(peerSum / peerCount));
+			ys.push(logit(bookProb));
 		}
 		if (xs.length < minBookPlayers) continue;
 
@@ -516,26 +527,109 @@ export function deVig(playerList: Picks.Player[]) {
 		}
 		const denom = n * sumXX - sumX * sumX;
 		if (Math.abs(denom) < 1e-12) continue;
-		const alpha = (n * sumXY - sumX * sumY) / denom;
-		const logC = (sumY - alpha * sumX) / n;
-		const c = Math.exp(logC);
+		const slopeRaw = (n * sumXY - sumX * sumY) / denom;
+		if (slopeRaw <= 0) continue;
+		const interceptRaw = (sumY - slopeRaw * sumX) / n;
 
-		if (alpha <= 0.5 || alpha > 2) continue;
+		let ssRes = 0;
+		let ssTot = 0;
+		const meanY = sumY / n;
+		for (let i = 0; i < n; i++) {
+			const pred = interceptRaw + slopeRaw * xs[i];
+			const err = ys[i] - pred;
+			ssRes += err * err;
+			const dy = ys[i] - meanY;
+			ssTot += dy * dy;
+		}
 
-		corrections[key] = { c, alpha };
-		// console.log(`De-vig [${key}]: c=${c.toFixed(4)}, α=${alpha.toFixed(4)} (${n} players)`);
+		const r2 = ssTot > 1e-12 ? Math.max(0, Math.min(1, 1 - ssRes / ssTot)) : 0;
+		const sampleWeight = Math.max(0, Math.min(1, (n - minBookPlayers + 1) / 30));
+		const strength = sampleWeight * r2;
+
+		const slopeUnclamped = 1 + strength * (slopeRaw - 1);
+		const slope = Math.min(maxSlope, Math.max(minSlope, slopeUnclamped));
+		const intercept = strength * interceptRaw;
+
+		corrections[key] = { intercept, slope, strength };
+		// console.log(`De-vig [${key}]: a=${intercept.toFixed(4)}, b=${slope.toFixed(4)}, fit=${strength.toFixed(4)} (${n} players)`);
 	}
 
-	// Apply all at once: fair = (book / c) ^ (1/α)
+	// Apply all at once in logit-space to keep tail behavior stable.
+	const originalByBook = new Map<typeof SportsbookKeys[number], Array<number | null>>();
+	for (const key of SportsbookKeys) {
+		originalByBook.set(key, playerList.map((player) => player[key]));
+	}
+
+	const getOriginal = (key: typeof SportsbookKeys[number], index: number): number | null => {
+		const values = originalByBook.get(key);
+		if (!values) return null;
+		return values[index] ?? null;
+	};
+
 	for (const key of SportsbookKeys) {
 		const corr = corrections[key];
 		if (corr === undefined) continue;
-		const invAlpha = 1 / corr.alpha;
-		for (const player of playerList) {
-			const playerBet = player[key];
+		const adjustedByPlayer: Array<{ index: number; raw: number; adjusted: number }> = [];
+		for (let i = 0; i < playerList.length; i++) {
+			const playerBet = getOriginal(key, i);
 			if (playerBet === null) continue;
-			const fair = Math.pow(playerBet / corr.c, invAlpha);
-			player[key] = Math.min(maxProb, Math.max(minProb, fair));
+
+			const correctedLogit = (logit(playerBet) - corr.intercept) / corr.slope;
+			let fair = sigmoid(correctedLogit);
+
+			let peerSum = 0;
+			let peerCount = 0;
+			for (const other of SportsbookKeys) {
+				if (other === key) continue;
+				const peer = getOriginal(other, i);
+				if (peer === null) continue;
+				peerSum += peer;
+				peerCount++;
+			}
+
+			if (peerCount > 0) {
+				const peerAvg = peerSum / peerCount;
+				const consensusLogit = logit(peerAvg);
+				const fairLogit = logit(fair);
+				const distance = fairLogit - consensusLogit;
+				const bounded = Math.min(maxConsensusLogitGap, Math.max(-maxConsensusLogitGap, distance));
+
+				const boundedFair = sigmoid(consensusLogit + bounded);
+				// Weak fits should stay close to consensus to avoid overreacting to one book.
+				fair = (corr.strength * boundedFair) + ((1 - corr.strength) * peerAvg);
+			}
+
+			adjustedByPlayer.push({ index: i, raw: playerBet, adjusted: clampProb(fair) });
+		}
+
+		if (adjustedByPlayer.length === 0) continue;
+
+		const rawSorted = adjustedByPlayer
+			.slice()
+			.sort((a, b) => (a.raw === b.raw ? a.index - b.index : a.raw - b.raw));
+		const adjustedSorted = adjustedByPlayer
+			.map((entry) => entry.adjusted)
+			.sort((a, b) => a - b);
+
+		// Keep each book's internal ranking identical to raw book order.
+		let start = 0;
+		while (start < rawSorted.length) {
+			let end = start + 1;
+			while (end < rawSorted.length && rawSorted[end].raw === rawSorted[start].raw) {
+				end++;
+			}
+
+			let sum = 0;
+			for (let i = start; i < end; i++) {
+				sum += adjustedSorted[i];
+			}
+			const tieValue = sum / (end - start);
+			for (let i = start; i < end; i++) {
+				const entry = rawSorted[i];
+				playerList[entry.index][key] = tieValue;
+			}
+
+			start = end;
 		}
 	}
 }
