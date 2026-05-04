@@ -96,7 +96,7 @@ const expectedGoalsFromLines = (lines: TeamGoalLine[]): number | null => {
     return mean;
 };
 
-export function expectedGoals(selections: Array<DataSelection>): number | null {
+function expectedGoals(selections: Array<DataSelection>): number | null {
     // Group selections by points
     const grouped: Record<number, { over?: number; under?: number }> = {};
     for (const sel of selections) {

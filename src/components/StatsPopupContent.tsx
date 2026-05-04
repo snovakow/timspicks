@@ -7,7 +7,7 @@ import type { LogStatsKey, SportsbookKey, LogLines } from '../sportsbookTypes';
 import './StatsPopupContent.css';
 import './sportsbook.css';
 
-export type SportsbookLog = Record<LogStatsKey, LogLines>
+type SportsbookLog = Record<LogStatsKey, LogLines>
 
 interface StatsPopupContentProps {
 	bookStats: SportsbookLog | null;
