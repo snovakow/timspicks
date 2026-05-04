@@ -1,6 +1,5 @@
 import * as Picks from './components/Table';
-import type { SimTotal, SimItem, Total } from './picksOptimizer';
-import { allStrategies, SportsbookKeys } from './sportsbookTypes';
+import { SportsbookKeys } from './sportsbookTypes';
 
 // Raw player structure from players_XXX.json
 type RawPlayerJson = {
@@ -112,40 +111,6 @@ const isSportsbookOddsItem = (value: unknown): value is SportsbookOddsItem => {
 	return typeof value.name === 'string' && typeof value.odds === 'number';
 };
 
-const isTotal = (value: unknown): value is Total => {
-	if (!isRecord(value)) return false;
-	return (
-		typeof value.least1 === 'number'
-		&& typeof value.points === 'number'
-		&& typeof value.hits === 'number'
-		&& typeof value.count === 'number'
-	);
-};
-
-const isSimTotal = (value: unknown): value is SimTotal => {
-	if (!isRecord(value)) return false;
-	if (!isTotal(value.random)) return false;
-	for (const strategy of allStrategies) {
-		if (!isTotal(value[strategy])) return false;
-	}
-	return true;
-};
-
-const isSimItem = (value: unknown): value is SimItem => {
-	if (!isRecord(value)) return false;
-	return (
-		typeof value.slotTotal === 'number'
-		&& typeof value.slotIndex === 'number'
-		&& typeof value.gameCount === 'number'
-		&& typeof value.picksCount === 'number'
-		&& isSimTotal(value.totals)
-	);
-};
-
-const isSimData = (value: unknown): value is SimItem[] => {
-	return Array.isArray(value) && value.every(isSimItem);
-};
-
 const fetchData = async (src: string) => {
 	const response = await fetch(src + "?t=" + new Date().getTime());
 	if (!response.ok) throw new Error(`Failed to load ${src}: ${response.status} ${response.statusText}`);
@@ -177,7 +142,7 @@ const loadAndValidate = async <T>(
 
 
 // Async loader/validator for games.json that merges players into each game
-export const loadGamesAndPlayers = async (processSrc: string, gamesSrc: string): Promise<[Picks.Player[], Picks.GameData[]]> => {
+const loadGamesAndPlayers = async (processSrc: string, gamesSrc: string): Promise<[Picks.Player[], Picks.GameData[]]> => {
 	let cutoff: Date | null = null;
 
 	let metaDataResponse;
@@ -281,86 +246,7 @@ function isPlayersJson(val: unknown): val is { forwards: RawPlayerJson[]; defens
 	return true;
 }
 
-type CorrelationData = Record<typeof allStrategies[number], number>;
-type BaselineKey = 'random' | 'iii';
-
-export class Correlation {
-	strategy = {
-		least1: {} as CorrelationData,
-		points: {} as CorrelationData,
-		hits: {} as CorrelationData,
-		count: {} as CorrelationData
-	}
-	baseline: Total = {
-		least1: 0,
-		points: 0,
-		hits: 0,
-		count: 0
-	};
-	baselineKey: BaselineKey;
-
-	constructor(baselineKey: BaselineKey) {
-		this.baselineKey = baselineKey;
-		for (const combo of allStrategies) {
-			this.strategy.least1[combo] = 1;
-			this.strategy.points[combo] = 1;
-			this.strategy.hits[combo] = 1;
-			this.strategy.count[combo] = 0;
-		}
-	}
-	add(result: SimTotal) {
-		for (const combo of allStrategies) {
-			this.strategy.least1[combo] += result[combo].least1;
-			this.strategy.points[combo] += result[combo].points;
-			this.strategy.hits[combo] += result[combo].hits;
-			this.strategy.count[combo] += result[combo].count;
-		}
-
-		this.baseline.least1 += result[this.baselineKey].least1;
-		this.baseline.points += result[this.baselineKey].points;
-		this.baseline.hits += result[this.baselineKey].hits;
-		this.baseline.count += result[this.baselineKey].count;
-	}
-	calculate() {
-		if (this.baseline.count === 0) return;
-
-		this.baseline.least1 /= this.baseline.count;
-		this.baseline.points /= this.baseline.count;
-		this.baseline.hits /= this.baseline.count;
-
-		for (const combo of allStrategies) {
-			const count = this.strategy.count[combo];
-			if (count === 0) continue;
-			this.strategy.least1[combo] /= count * this.baseline.least1;
-			this.strategy.points[combo] /= count * this.baseline.points;
-			this.strategy.hits[combo] /= count * this.baseline.hits;
-
-			this.strategy.least1[combo] = Math.log(this.strategy.least1[combo]) + 1;
-			this.strategy.points[combo] = Math.log(this.strategy.points[combo]) + 1;
-			this.strategy.hits[combo] = Math.log(this.strategy.hits[combo]) + 1;
-		}
-	}
-};
-
-export const correlations = {
-	"1": new Correlation('random'),
-	"2": new Correlation('random'),
-	"3+": new Correlation('iii')
-}
-const compileSimItems = (simItems: SimItem[]) => {
-	const game1 = correlations['1'];
-	const game2 = correlations['2'];
-	const game3 = correlations['3+'];
-	for (const item of simItems) {
-		const game = item.gameCount === 1 ? game1 : item.gameCount === 2 ? game2 : game3;
-		game.add(item.totals);
-	}
-	game1.calculate();
-	game2.calculate();
-	game3.calculate();
-}
-
-export interface InitialData {
+interface InitialData {
 	playerData: PlayerDataByPick;
 	playersListing: Picks.Player[];
 	gamesListing: Picks.GameData[];
@@ -378,7 +264,6 @@ export const loadInitialData = async (): Promise<InitialData> => {
 		playerOddsFanDuel,
 		playerOddsBetMGM,
 		playerOddsBetRivers,
-		simData
 	] = await Promise.all([
 		loadAndValidate('./data/helper.json', isPlayerDataByPick, 'Helper data'),
 		loadGamesAndPlayers('./data/process.json', './data/games.json'),
@@ -386,10 +271,7 @@ export const loadInitialData = async (): Promise<InitialData> => {
 		loadAndValidate('./data/bet2.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'FanDuel odds data'),
 		loadAndValidate('./data/bet3.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'BetMGM odds data'),
 		loadAndValidate('./data/bet4.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'BetRivers odds data'),
-		loadAndValidate('./sim.json', isSimData, 'Simulation data'),
 	]);
-
-	compileSimItems(simData);
 
 	return {
 		playerData,

@@ -1,7 +1,7 @@
 import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
 import type { Team } from './components/logo';
-import { Correlation, correlations } from './dataProcessor';
+import { correlations, type CorrelationResult } from './picksOptimizer';
 import { LogStatsKeys, sportsbooks } from './sportsbookTypes';
 import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog } from './sportsbookTypes';
 
@@ -17,13 +17,13 @@ export const cloneLogStats = (stats: SportsbookLog): SportsbookLog => {
 	return cache;
 };
 
-export const allStrategies = [
+const allStrategies = [
 	'iii', 'sss',
 	'iss', 'sis', 'ssi',
 	'ioo', 'oio', 'ooi',
 	'oso', 'soo', 'sos', 'oss'
 ] as const;
-export type strategyPattern = typeof allStrategies[number];
+type strategyPattern = typeof allStrategies[number];
 
 class LogHandler {
 	logSection: LogLine[];
@@ -155,12 +155,12 @@ export const calculateStats = (
 
 		// Scale correlation effect with linear interpolation:
 		// factor=0 => no effect, factor=1 => full effect, factor>1 => amplified effect.
-		correlate(strategy: strategyPattern, ref: Correlation): void {
-			const least1 = ref.strategy.least1[strategy];
+		correlate(strategy: strategyPattern, ref: CorrelationResult): void {
+			const least1 = ref.least1[strategy];
 			if (least1 !== null) this.least1 *= (least1 - 1) * factor + 1;
-			const points = ref.strategy.points[strategy];
+			const points = ref.points[strategy];
 			if (points !== null) this.points *= (points - 1) * factor + 1;
-			const hits = ref.strategy.hits[strategy];
+			const hits = ref.hits[strategy];
 			if (hits !== null) this.hits *= (hits - 1) * factor + 1;
 		}
 	}
