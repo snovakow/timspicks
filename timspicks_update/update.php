@@ -120,8 +120,8 @@ if ($processDate !== null && $gameTimes !== null) {
 
     // a. Don't update between the last game and midnight
     $lastGameTime = end($gameTimes)->getTimestamp();
-    $midnightTime = (new DateTime('tomorrow midnight', $timezone))->getTimestamp();
-    if ($nowTime >= $lastGameTime - $updateBuffer && $nowTime <= $midnightTime + $updateBuffer) {
+    $startOfDayTime = (new DateTime('today midnight', $timezone))->getTimestamp();
+    if ($nowTime >= $lastGameTime - $updateBuffer || $nowTime <= $startOfDayTime + $updateBuffer) {
         if ($minOutput) die();
         logEnd($now, "Not updating between last game and midnight");
     }
