@@ -95,6 +95,15 @@ interface InitializedData {
 	table3Rows: Picks.PickOdds[];
 }
 
+if (SIMULATE) {
+	runSimulation(1000000).then((results) => {
+		console.log(results.length);
+		console.log(results);
+		console.log(JSON.stringify(results));
+	});
+	SIMULATE = false;
+}
+
 function App() {
 	// xG (expected goals) state
 	const [xgEnabled, setXgEnabled] = useState(false);
@@ -139,13 +148,6 @@ function App() {
 				const playerList = initialData.playersListing;
 				const gamesList = initialData.gamesListing;
 				const normalizedNameMap = DataProcessor.buildNormalizedNameMap(playerList);
-
-				if (SIMULATE) {
-					runSimulation(1000000).then((results) => {
-						console.log(JSON.stringify(results));
-					});
-					SIMULATE = false;
-				}
 
 				const { table1Rows, table2Rows, table3Rows } = DataProcessor.mapPlayers(
 					playerList,
