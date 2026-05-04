@@ -268,9 +268,9 @@ export class Correlation {
 	constructor(baselineKey: BaselineKey) {
 		this.baselineKey = baselineKey;
 		for (const combo of allStrategies) {
-			this.strategy.least1[combo] = 0;
-			this.strategy.points[combo] = 0;
-			this.strategy.hits[combo] = 0;
+			this.strategy.least1[combo] = 1;
+			this.strategy.points[combo] = 1;
+			this.strategy.hits[combo] = 1;
 			this.strategy.count[combo] = 0;
 		}
 	}
@@ -288,6 +288,8 @@ export class Correlation {
 		this.baseline.count += result[this.baselineKey].count;
 	}
 	calculate() {
+		if (this.baseline.count === 0) return;
+
 		this.baseline.least1 /= this.baseline.count;
 		this.baseline.points /= this.baseline.count;
 		this.baseline.hits /= this.baseline.count;
