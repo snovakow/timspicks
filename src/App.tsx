@@ -87,6 +87,21 @@ const makeSort = (sortConfig: Picks.SortConfig) => {
 	};
 }
 
+const clearDerivedPickState = (rows: Picks.PickOdds[]) => {
+	for (const row of rows) {
+		row.highlight1 = false;
+		row.highlight2 = false;
+		row.highlight3 = false;
+		row.highlight4 = false;
+		row.highlightAvg = false;
+		row.strategy1.clear();
+		row.strategy2.clear();
+		row.strategy3.clear();
+		row.strategy4.clear();
+		row.strategyAvg.clear();
+	}
+};
+
 interface InitializedData {
 	gamesList: Picks.GameData[];
 	playerList: Picks.Player[];
@@ -276,24 +291,10 @@ function App() {
 			}
 		}
 
-		const clearArray = (array: Picks.PickOdds[]) => {
-			// Derived highlight/strategy state is recomputed every memo run.
-			for (const row of array) {
-				row.highlight1 = false;
-				row.highlight2 = false;
-				row.highlight3 = false;
-				row.highlight4 = false;
-				row.highlightAvg = false;
-				row.strategy1.clear();
-				row.strategy2.clear();
-				row.strategy3.clear();
-				row.strategy4.clear();
-				row.strategyAvg.clear();
-			}
-		};
-		clearArray(table1Rows);
-		clearArray(table2Rows);
-		clearArray(table3Rows);
+		// Derived highlight/strategy state is recomputed every memo run.
+		clearDerivedPickState(table1Rows);
+		clearDerivedPickState(table2Rows);
+		clearDerivedPickState(table3Rows);
 
 		// Build sort functions and apply sorting
 		const sortFunction1 = sortFunction(sortConfig1Ref.current);
@@ -331,6 +332,13 @@ function App() {
 	// Memoize stats calculations - expensive O(n³) combo calculations
 	const statsCache = useMemo(() => {
 		if (!memoizedDisplayData) return null;
+
+		// Stats calculation mutates row highlight/strategy fields, so reset first to avoid stale accumulation
+		// when dependencies like correlationFactor change without rebuilding memoizedDisplayData.
+		clearDerivedPickState(memoizedDisplayData.table1Rows);
+		clearDerivedPickState(memoizedDisplayData.table2Rows);
+		clearDerivedPickState(memoizedDisplayData.table3Rows);
+
 		// Precompute once per dependency change and clone on read to keep cache immutable.
 		return precalculateLogStats(
 			minSportsbooks,
