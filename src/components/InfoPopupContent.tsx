@@ -13,7 +13,7 @@ export default function InfoPopupContent() {
 				<p>
 					This app helps you make Tim Hortons Hockey Challenge picks in the Tims app.
 					It ranks candidates for Pick #1, Pick #2, and Pick #3 using implied probabilities
-					from sportsbook odds, with normalization to improve book-to-book comparability.
+					from sportsbook odds.
 				</p>
 			</section>
 
