@@ -20,7 +20,8 @@ table {
 }
 
 th {
-	padding: 0.5em;
+	--sort-pad: 0.2em;
+	padding: 0.5em var(--sort-pad);
 }
 
 th .cell-container {
@@ -30,6 +31,7 @@ th .cell-container {
 .theader-logo-bg {
 	height: 2em;
 	width: 2em;
+	padding: 0 var(--sort-pad);
 }
 
 .sortable {
@@ -42,6 +44,7 @@ th .cell-container {
 
 .theader-title {
 	text-align: center;
+	padding: 0 var(--sort-pad);
 }
 
 .theader-sort {
