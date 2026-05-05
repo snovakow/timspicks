@@ -16,7 +16,7 @@ import iconInfo from './images/info_i_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg
 import iconLegend from './images/legend_toggle_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyDark from './images/sports_hockey_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyLight from './images/sports_hockey_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
-import { runSimulation } from './picksOptimizer';
+import { comparePoolAccuracy, runSimulation } from './picksOptimizer';
 import CollapsibleSection from './components/CollapsibleSection';
 import { getTeamTotals } from './teamGoals';
 import * as Feature from './features';
@@ -25,6 +25,7 @@ import './App.css';
 
 const precision = Picks.precision;
 let SIMULATE = Feature.simulate;
+let ANALYZE = Feature.analyze;
 
 const betDisplayRounded = (chance: number | null): string => {
 	if (chance === null) return "-";
@@ -172,13 +173,18 @@ function App() {
 				setData({ gamesList, playerList, table1Rows, table2Rows, table3Rows });
 				setError(null);
 
+				// Run SIMULATE or ANALYZE once app has initialized
 				if (SIMULATE) {
-					// Run simulation once app has initialized
-					runSimulation(1000000).then((results) => {
-						console.log(JSON.stringify(results));
-					});
 					SIMULATE = false;
+					runSimulation(1000).then((results) => {
+						console.log(results);
+					});
 				}
+				if (ANALYZE) {
+					comparePoolAccuracy();
+					ANALYZE = false;
+				}
+
 			} catch (error: unknown) {
 				if (error instanceof Error && error.message === DataProcessor.NO_GAMES_ERROR) {
 					console.warn('No games found for today. Displaying empty tables.');
