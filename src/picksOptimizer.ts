@@ -256,6 +256,572 @@ function simulateCombo(set1: PlayerSet, set2: PlayerSet, set3: PlayerSet, patter
     return new Result(pick1.scored, pick2.scored, pick3.scored);
 }
 
+interface HistoryManifestItem {
+    season: string;
+    format: string;
+    start: string;
+    end: string;
+    files: string[];
+}
+
+interface SnapshotOddsRow {
+    sid: '1' | '2' | '3';
+    team: string;
+    opponent: string;
+    scored: boolean;
+    bet1: number | null;
+    bet2: number | null;
+    bet3: number | null;
+    bet4: number | null;
+    betAvg: number | null;
+}
+
+interface HistoricalAuditOptions {
+    correlationFactor?: number;
+    lookbackDays?: number;
+    snapshotDates?: string[];
+    logResults?: boolean;
+    gameCountFilter?: '1' | '2' | '3+' | 'all';
+}
+
+export interface HistoricalAuditStat {
+    tickets: number;
+    hits: number;
+    totalPicks: number;
+    hitPct: number;
+    ticketWins: number;
+    ticketWinPct: number;
+    avgPoints: number;
+    ratio: string;
+}
+
+export type HistoricalAuditResults = Record<LogStatsKey, Record<StrategyMode, HistoricalAuditStat>>;
+
+type AuditBucket = {
+    tickets: number;
+    ticketWins: number;
+    totalHits: number;
+    totalPoints: number;
+};
+
+const fetchJson = async <T>(src: string): Promise<T> => {
+    const response = await fetch(src);
+    if (!response.ok) throw new Error(`Failed to load ${src}: ${response.status} ${response.statusText}`);
+    return await response.json() as T;
+};
+
+const fetchOptionalJson = async <T>(src: string): Promise<T | null> => {
+    try {
+        const response = await fetch(src);
+        if (!response.ok) return null;
+        return await response.json() as T;
+    } catch {
+        return null;
+    }
+};
+
+const hasSnapshotDate = async (date: string): Promise<boolean> => {
+    const games = await fetchOptionalJson<unknown>(`./data/${date}/games.json`);
+    return games !== null;
+};
+
+const normalizeOddsName = (name: string): string => name
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+
+const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
+    const data = await fetchOptionalJson<{
+        gameWeek: Array<{
+            date: string;
+            games: Array<{ startTimeUTC: string; easternUTCOffset: string }>;
+        }>;
+    }>(`./data/${date}/games.json`);
+
+    if (!data) return [];
+    const timeGroups = new Set<string>();
+
+    for (const week of data.gameWeek) {
+        if (week.date !== date) continue;
+        for (const game of week.games) {
+            const utc = new Date(game.startTimeUTC);
+            const offsetMatch = game.easternUTCOffset.match(/^([+-])(\d{2}):(\d{2})$/);
+            if (!offsetMatch) continue;
+
+            const [, sign, hoursText, minutesText] = offsetMatch;
+            const offsetMinutes = (Number(hoursText) * 60) + Number(minutesText);
+            const direction = sign === '-' ? -1 : 1;
+            const local = new Date(utc.getTime() + direction * offsetMinutes * 60_000);
+            const hhmm = `${local.getUTCHours().toString().padStart(2, '0')}${local.getUTCMinutes().toString().padStart(2, '0')}`;
+            timeGroups.add(hhmm);
+        }
+    }
+
+    return Array.from(timeGroups).sort();
+};
+
+const historyDateFromFile = (fileName: string): string | null => {
+    const match = fileName.match(/_(\d{4}-\d{2}-\d{2})_/);
+    return match ? match[1] : null;
+};
+
+const auditLabels: Record<LogStatsKey, string> = {
+    bet1: 'DraftKings (bet1)',
+    bet2: 'FanDuel (bet2)',
+    bet3: 'BetMGM (bet3)',
+    bet4: 'BetRivers (bet4)',
+    betAvg: 'Average',
+};
+
+const initAuditBucket = (): AuditBucket => ({
+    tickets: 0,
+    ticketWins: 0,
+    totalHits: 0,
+    totalPoints: 0,
+});
+
+const createAuditBuckets = (): Record<LogStatsKey, Record<StrategyMode, AuditBucket>> => ({
+    bet1: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
+    bet2: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
+    bet3: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
+    bet4: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
+    betAvg: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
+});
+
+const applyAuditOutcome = (bucket: AuditBucket, hitCount: number) => {
+    bucket.tickets++;
+    if (hitCount > 0) bucket.ticketWins++;
+    bucket.totalHits += hitCount;
+    bucket.totalPoints += hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100;
+};
+
+const sameTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => left.team === right.team;
+const opponentTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => left.team === right.opponent;
+const sameGameSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => sameTeamSnapshot(left, right) || opponentTeamSnapshot(left, right);
+
+const getSnapshotStrategy = (pick1: SnapshotOddsRow, pick2: SnapshotOddsRow, pick3: SnapshotOddsRow): strategyPattern | null => {
+    if (!sameGameSnapshot(pick1, pick2) && !sameGameSnapshot(pick2, pick3) && !sameGameSnapshot(pick1, pick3)) return 'iii';
+    if (sameTeamSnapshot(pick1, pick2) && sameTeamSnapshot(pick2, pick3)) return 'sss';
+
+    if (sameTeamSnapshot(pick2, pick3) && !sameGameSnapshot(pick1, pick2)) return 'iss';
+    if (sameTeamSnapshot(pick1, pick3) && !sameGameSnapshot(pick2, pick1)) return 'sis';
+    if (sameTeamSnapshot(pick1, pick2) && !sameGameSnapshot(pick3, pick1)) return 'ssi';
+
+    if (opponentTeamSnapshot(pick2, pick3) && !sameGameSnapshot(pick1, pick2)) return 'ioo';
+    if (opponentTeamSnapshot(pick1, pick3) && !sameGameSnapshot(pick2, pick1)) return 'oio';
+    if (opponentTeamSnapshot(pick1, pick2) && !sameGameSnapshot(pick3, pick1)) return 'ooi';
+
+    if (sameTeamSnapshot(pick1, pick2) && opponentTeamSnapshot(pick3, pick1)) return 'oso';
+    if (sameTeamSnapshot(pick1, pick2) && opponentTeamSnapshot(pick3, pick2)) return 'soo';
+    if (sameTeamSnapshot(pick1, pick3) && opponentTeamSnapshot(pick1, pick2)) return 'sos';
+    if (sameTeamSnapshot(pick2, pick3) && opponentTeamSnapshot(pick1, pick2)) return 'oss';
+
+    return null;
+};
+
+type StrategyBest = {
+    prob1: number;
+    prob2: number;
+    prob3: number;
+    hitCount: number;
+};
+
+type StrategyScore = {
+    score: number;
+    hitCount: number;
+};
+
+type BookComboEvaluation = {
+    topHitCount: number;
+    bestScores: Record<Strategy, StrategyScore | null>;
+};
+
+const updateParetoBest = (existing: StrategyBest | null, candidate: StrategyBest): StrategyBest => {
+    if (!existing) return candidate;
+
+    const dominates = candidate.prob1 >= existing.prob1
+        && candidate.prob2 >= existing.prob2
+        && candidate.prob3 >= existing.prob3;
+
+    const strictlyBetter = candidate.prob1 > existing.prob1
+        || candidate.prob2 > existing.prob2
+        || candidate.prob3 > existing.prob3;
+
+    if (dominates && strictlyBetter) return candidate;
+    return existing;
+};
+
+const evaluateBookCombos = (
+    set1: SnapshotOddsRow[],
+    set2: SnapshotOddsRow[],
+    set3: SnapshotOddsRow[],
+    bookKey: LogStatsKey,
+    ref: CorrelationResult,
+    correlationFactor: number
+): BookComboEvaluation | null => {
+    let topBest: StrategyBest | null = null;
+    const strategyBestMap = new Map<strategyPattern, StrategyBest>();
+
+    for (const pick1 of set1) {
+        for (const pick2 of set2) {
+            for (const pick3 of set3) {
+                const prob1 = pick1[bookKey];
+                const prob2 = pick2[bookKey];
+                const prob3 = pick3[bookKey];
+                if (prob1 === null || prob2 === null || prob3 === null) continue;
+
+                const hitCount = (pick1.scored ? 1 : 0) + (pick2.scored ? 1 : 0) + (pick3.scored ? 1 : 0);
+                const candidate: StrategyBest = { prob1, prob2, prob3, hitCount };
+                topBest = updateParetoBest(topBest, candidate);
+
+                const strategy = getSnapshotStrategy(pick1, pick2, pick3);
+                if (!strategy) continue;
+                const existing = strategyBestMap.get(strategy) ?? null;
+                strategyBestMap.set(strategy, updateParetoBest(existing, candidate));
+            }
+        }
+    }
+
+    if (!topBest) return null;
+
+    const bestScores: Record<Strategy, StrategyScore | null> = {
+        least1: null,
+        points: null,
+        hits: null,
+    };
+
+    const scaleCorrelation = (value: number | null): number => ((value ?? 1 - 1) * correlationFactor) + 1;
+    for (const [strategy, best] of strategyBestMap) {
+        const { prob1, prob2, prob3, hitCount } = best;
+        const least1 = calcAny(prob1, prob2, prob3) * scaleCorrelation(ref.least1[strategy]);
+        const points = calcPnt(prob1, prob2, prob3) * scaleCorrelation(ref.points[strategy]);
+        const hits = calcHit(prob1, prob2, prob3) * scaleCorrelation(ref.hits[strategy]);
+
+        if (bestScores.least1 === null || least1 > bestScores.least1.score) {
+            bestScores.least1 = { score: least1, hitCount };
+        }
+        if (bestScores.points === null || points > bestScores.points.score) {
+            bestScores.points = { score: points, hitCount };
+        }
+        if (bestScores.hits === null || hits > bestScores.hits.score) {
+            bestScores.hits = { score: hits, hitCount };
+        }
+    }
+
+    if (correlationFactor === 0) {
+        bestScores.least1 = { score: calcAny(topBest.prob1, topBest.prob2, topBest.prob3), hitCount: topBest.hitCount };
+        bestScores.points = { score: calcPnt(topBest.prob1, topBest.prob2, topBest.prob3), hitCount: topBest.hitCount };
+        bestScores.hits = { score: calcHit(topBest.prob1, topBest.prob2, topBest.prob3), hitCount: topBest.hitCount };
+    }
+
+    return {
+        topHitCount: topBest.hitCount,
+        bestScores,
+    };
+};
+
+const formatAuditStat = (bucket: AuditBucket): HistoricalAuditStat => {
+    const totalPicks = bucket.tickets * 3;
+    const hitPct = totalPicks === 0 ? 0 : (100 * bucket.totalHits) / totalPicks;
+    const ticketWinPct = bucket.tickets === 0 ? 0 : (100 * bucket.ticketWins) / bucket.tickets;
+    const avgPoints = bucket.tickets === 0 ? 0 : bucket.totalPoints / bucket.tickets;
+    return {
+        tickets: bucket.tickets,
+        hits: bucket.totalHits,
+        totalPicks,
+        hitPct,
+        ticketWins: bucket.ticketWins,
+        ticketWinPct,
+        avgPoints,
+        ratio: `${bucket.totalHits}/${totalPicks}`,
+    };
+};
+
+const formatAuditPercent = (value: number): string => `${value.toFixed(2)}%`;
+const formatAuditPoints = (value: number): string => value.toFixed(2);
+const formatTicketRatio = (stat: HistoricalAuditStat): string => `${stat.ticketWins}/${stat.tickets}`;
+
+export const runHistoricalStrategyAudit = async (
+    options: HistoricalAuditOptions = {}
+): Promise<HistoricalAuditResults> => {
+    const {
+        correlationFactor = 1,
+        lookbackDays = 60,
+        snapshotDates,
+        logResults = true,
+        gameCountFilter = 'all',
+    } = options;
+
+    const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
+    const historyByDate = new Map<string, string>();
+    for (const item of historyManifest) {
+        for (const file of item.files) {
+            const date = historyDateFromFile(file);
+            if (date && !historyByDate.has(date)) historyByDate.set(date, file);
+        }
+    }
+
+    let datesToCheck = snapshotDates ?? [];
+    if (datesToCheck.length === 0) {
+        const processData = await fetchOptionalJson<{ processed: string }>('./data/process.json');
+        const latest = processData?.processed ? new Date(processData.processed) : new Date();
+        const oldest = new Date(latest);
+        oldest.setDate(oldest.getDate() - lookbackDays);
+
+        datesToCheck = Array.from(historyByDate.keys())
+            .filter((date) => {
+                const day = new Date(`${date}T00:00:00`);
+                return day >= oldest && day <= latest;
+            })
+            .sort();
+    }
+
+    const availableDates: string[] = [];
+    for (const date of datesToCheck) {
+        if (!historyByDate.has(date)) continue;
+        if (await hasSnapshotDate(date)) availableDates.push(date);
+    }
+
+    const stats = createAuditBuckets();
+
+    for (const date of availableDates) {
+        try {
+            const historyFile = historyByDate.get(date);
+            if (!historyFile) continue;
+
+            const history = await fetchJson<{
+                playerLists: Array<{ id: number; players: HistoryPlayer[] }>;
+            }>(`./history/${historyFile}`);
+
+            const playerSets = new Map<string, Map<number, HistoryPlayer>>();
+            for (const list of history.playerLists) {
+                playerSets.set(String(list.id), new Map(list.players.map((player) => [player.nhlPlayerId, player])));
+            }
+
+            const gameStartTimes = await getGameStartTimeGroups(date);
+
+            for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
+                try {
+                    const folderTime = gameStartTimes[slotIndex];
+
+                    const folder = `./data/${date}/${folderTime}`;
+                    const helper = await fetchOptionalJson<Record<'1' | '2' | '3', Picks.OddsItem[]>>(`${folder}/helper.json`);
+                    if (!helper) continue;
+
+                    const bookOdds = await Promise.all(SportsbookKeys.map(async (key) => {
+                        const items = await fetchOptionalJson<Array<{ name: string; odds: number }>>(`${folder}/${key}.json`);
+                        return items;
+                    }));
+                    if (bookOdds.some((items) => items === null)) continue;
+
+                    const oddsMaps = bookOdds.map((items) => {
+                        const oddsMap = new Map<string, number>();
+                        for (const item of items ?? []) oddsMap.set(normalizeOddsName(item.name), item.odds);
+                        return oddsMap;
+                    });
+
+                    const rows: SnapshotOddsRow[] = [];
+                    for (const sid of ['1', '2', '3'] as const) {
+                        const outcomes = playerSets.get(sid);
+                        if (!outcomes) continue;
+
+                        for (const item of helper[sid] ?? []) {
+                            const player = outcomes.get(Math.abs(item.playerId));
+                            if (!player) continue;
+
+                            const fullName = `${item.firstName} ${item.lastName}`;
+                            const candidates = [fullName, oddsNameMap.get(fullName)].filter((name): name is string => Boolean(name));
+                            const probs: Array<number | null> = [null, null, null, null];
+
+                            for (let index = 0; index < oddsMaps.length; index++) {
+                                for (const candidate of candidates) {
+                                    const odds = oddsMaps[index].get(normalizeOddsName(candidate));
+                                    if (odds !== undefined) {
+                                        probs[index] = 1 / odds;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            rows.push({
+                                sid,
+                                team: player.team,
+                                opponent: player.opponent,
+                                scored: player.scored,
+                                bet1: probs[0],
+                                bet2: probs[1],
+                                bet3: probs[2],
+                                bet4: probs[3],
+                                betAvg: null,
+                            });
+                        }
+                    }
+
+                    if (rows.length === 0) continue;
+
+                    deVig(rows as unknown as Picks.Player[]);
+                    for (const row of rows) {
+                        const values = SportsbookKeys
+                            .map((key) => row[key])
+                            .filter((value): value is number => value !== null);
+                        row.betAvg = values.length === 0
+                            ? null
+                            : values.reduce((sum, value) => sum + value, 0) / values.length;
+                    }
+
+                    // Pools are based on remaining grouped game start-times for this date.
+                    const gameCount = gameStartTimes.length - slotIndex;
+
+                    if (gameCountFilter !== 'all') {
+                        const poolKey = gameCount === 1 ? '1' : gameCount === 2 ? '2' : '3+';
+                        if (poolKey !== gameCountFilter) continue;
+                    }
+
+                    const ref = gameCount === 1 ? correlations['1'] : gameCount === 2 ? correlations['2'] : correlations['3+'];
+
+                    for (const bookKey of [...SportsbookKeys, 'betAvg'] as LogStatsKey[]) {
+                        const set1 = rows.filter((row) => row.sid === '1' && row[bookKey] !== null);
+                        const set2 = rows.filter((row) => row.sid === '2' && row[bookKey] !== null);
+                        const set3 = rows.filter((row) => row.sid === '3' && row[bookKey] !== null);
+                        if (set1.length === 0 || set2.length === 0 || set3.length === 0) continue;
+
+                        const evaluation = evaluateBookCombos(set1, set2, set3, bookKey, ref, correlationFactor);
+                        if (!evaluation) continue;
+
+                        applyAuditOutcome(stats[bookKey].top, evaluation.topHitCount);
+
+                        for (const strategy of ['least1', 'points', 'hits'] as const) {
+                            const result = evaluation.bestScores[strategy];
+                            if (result) applyAuditOutcome(stats[bookKey][strategy], result.hitCount);
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Skipping snapshot ${date} ${gameStartTimes[slotIndex]}:`, error);
+                }
+            }
+        } catch (error) {
+            console.warn(`Skipping date ${date}:`, error);
+        }
+    }
+
+    const results: HistoricalAuditResults = {
+        bet1: {
+            top: formatAuditStat(stats.bet1.top),
+            least1: formatAuditStat(stats.bet1.least1),
+            points: formatAuditStat(stats.bet1.points),
+            hits: formatAuditStat(stats.bet1.hits),
+        },
+        bet2: {
+            top: formatAuditStat(stats.bet2.top),
+            least1: formatAuditStat(stats.bet2.least1),
+            points: formatAuditStat(stats.bet2.points),
+            hits: formatAuditStat(stats.bet2.hits),
+        },
+        bet3: {
+            top: formatAuditStat(stats.bet3.top),
+            least1: formatAuditStat(stats.bet3.least1),
+            points: formatAuditStat(stats.bet3.points),
+            hits: formatAuditStat(stats.bet3.hits),
+        },
+        bet4: {
+            top: formatAuditStat(stats.bet4.top),
+            least1: formatAuditStat(stats.bet4.least1),
+            points: formatAuditStat(stats.bet4.points),
+            hits: formatAuditStat(stats.bet4.hits),
+        },
+        betAvg: {
+            top: formatAuditStat(stats.betAvg.top),
+            least1: formatAuditStat(stats.betAvg.least1),
+            points: formatAuditStat(stats.betAvg.points),
+            hits: formatAuditStat(stats.betAvg.hits),
+        },
+    };
+
+    if (logResults) {
+        const display = Object.fromEntries((Object.keys(auditLabels) as LogStatsKey[]).map((bookKey) => [
+            auditLabels[bookKey],
+            {
+                ["Streak (top)"]: `${formatAuditPercent(results[bookKey].top.ticketWinPct)} (${formatTicketRatio(results[bookKey].top)})`,
+                ["Streak (L%)"]: `${formatAuditPercent(results[bookKey].least1.ticketWinPct)} (${formatTicketRatio(results[bookKey].least1)})`,
+                ["Points (top)"]: `${formatAuditPoints(results[bookKey].top.avgPoints)} (${results[bookKey].top.tickets})`,
+                ["Points (L%)"]: `${formatAuditPoints(results[bookKey].points.avgPoints)} (${results[bookKey].points.tickets})`,
+                ["Pick % (top)"]: `${formatAuditPercent(results[bookKey].top.hitPct)} (${results[bookKey].top.ratio})`,
+                ["Pick % (L%)"]: `${formatAuditPercent(results[bookKey].hits.hitPct)} (${results[bookKey].hits.ratio})`,
+            },
+        ]));
+        console.table(display);
+        console.log(`Historical strategy audit evaluated ${results.bet1.top.tickets} tickets with correlation factor ${correlationFactor}.`);
+    }
+
+    return results;
+};
+
+export const comparePoolAccuracy = async (correlationFactor: number = 1) => {
+    console.log('Comparing top pick accuracy across game count pools and correlation factor', correlationFactor, '\n');
+
+    const pools = ['1', '2', '3+', 'all'] as const;
+    const results: Record<typeof pools[number], HistoricalAuditResults> = {
+        '1': {} as HistoricalAuditResults,
+        '2': {} as HistoricalAuditResults,
+        '3+': {} as HistoricalAuditResults,
+        'all': {} as HistoricalAuditResults,
+    };
+
+    const getTopBooksForMetric = (
+        poolResult: HistoricalAuditResults,
+        column: StrategyMode,
+        metric: (stat: HistoricalAuditStat) => number
+    ): { books: LogStatsKey[]; stat: HistoricalAuditStat } => {
+        let bestBooks: LogStatsKey[] = [LogStatsKeys[0]];
+        let bestStat = poolResult[LogStatsKeys[0]][column];
+        let bestValue = metric(bestStat);
+
+        for (let index = 1; index < LogStatsKeys.length; index++) {
+            const book = LogStatsKeys[index];
+            const stat = poolResult[book][column];
+            const value = metric(stat);
+            if (value > bestValue) {
+                bestValue = value;
+                bestBooks = [book];
+                bestStat = stat;
+            } else if (value === bestValue) {
+                bestBooks.push(book);
+            }
+        }
+
+        return { books: bestBooks, stat: bestStat };
+    };
+
+    for (const pool of pools) {
+        console.log(`\n=== Pool "${pool}" ===`);
+        const auditResult = await runHistoricalStrategyAudit({
+            correlationFactor: correlationFactor,
+            gameCountFilter: pool,
+            logResults: true,
+        });
+        results[pool] = auditResult;
+    }
+
+    console.log(`\n\n=== SUMMARY L%=${correlationFactor} ===\n`);
+    console.log('Top correlated bet by pool and summary column:');
+    for (const pool of pools) {
+        const bestTopPickPct = getTopBooksForMetric(results[pool], 'top', (stat) => stat.hitPct);
+        const bestTopPoints = getTopBooksForMetric(results[pool], 'top', (stat) => stat.avgPoints);
+        const bestTopStreak = getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct);
+
+        const bestCorrelatedStreak = getTopBooksForMetric(results[pool], 'least1', (stat) => stat.ticketWinPct);
+        const bestCorrelatedPoints = getTopBooksForMetric(results[pool], 'points', (stat) => stat.avgPoints);
+        const bestCorrelatedPickPct = getTopBooksForMetric(results[pool], 'hits', (stat) => stat.hitPct);
+
+        console.log(`  Pool "${pool}":`);
+        console.log(`    Streak: top=${bestTopStreak.books.join('/')} (${bestTopStreak.stat.ticketWinPct.toFixed(2)}%, ${formatTicketRatio(bestTopStreak.stat)}) | L%=${bestCorrelatedStreak.books.join('/')} (${bestCorrelatedStreak.stat.ticketWinPct.toFixed(2)}%, ${formatTicketRatio(bestCorrelatedStreak.stat)})`);
+        console.log(`    Points: top=${bestTopPoints.books.join('/')} (${bestTopPoints.stat.avgPoints.toFixed(2)}) | L%=${bestCorrelatedPoints.books.join('/')} (${bestCorrelatedPoints.stat.avgPoints.toFixed(2)})`);
+        console.log(`    Pick %: top=${bestTopPickPct.books.join('/')} (${bestTopPickPct.stat.hitPct.toFixed(2)}%, ${bestTopPickPct.stat.ratio}) | L%=${bestCorrelatedPickPct.books.join('/')} (${bestCorrelatedPickPct.stat.hitPct.toFixed(2)}%, ${bestCorrelatedPickPct.stat.ratio})`);
+    }
+
+    return results;
+};
+
 export const runSimulation = async (iterations: number) => {
     const response = await fetch('./history/history.json');
     const data = await response.json();
