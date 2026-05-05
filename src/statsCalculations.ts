@@ -1,7 +1,6 @@
 import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
-import type { Team } from './components/logo';
-import { calcAny, calcPnt, calcHit } from './picksOptimizer';
+import { calcAny, calcPnt, calcHit, gamesCount } from './picksOptimizer';
 import { correlations, } from './correlationData';
 import type { CorrelationResult } from './correlationData';
 import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode } from './sportsbookTypes';
@@ -358,17 +357,7 @@ const calculateStats = (
 		for (const pick of result.players3) setStrategy(pick, strategy);
 	}
 
-	// calculate available games from players, rather than use the gamesList.
-	// Some games may have started, or players may not be available from a game.
-	const gamesSet = new Set<Team>();
-	let gameCount = 0;
-	for (const pick of [...table1Rows, ...table2Rows, ...table3Rows]) {
-		if (gamesSet.has(pick.player.team.code)) continue;
-		gamesSet.add(pick.player.team.code);
-		gamesSet.add(pick.player.opponent.code);
-		gameCount++;
-	}
-
+	const gameCount = gamesCount(table1Rows, table2Rows, table3Rows);
 	if (gameCount === 0) return;
 
 	const ref = gameCount === 1 ? correlations['1'] : gameCount === 2 ? correlations['2'] : correlations['3+'];

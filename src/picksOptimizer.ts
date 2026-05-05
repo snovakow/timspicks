@@ -1,3 +1,4 @@
+import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
 import type { CorrelationData, CorrelationResult, CorrelationResults } from "./correlationData";
 import { correlations } from "./correlationData";
@@ -456,6 +457,54 @@ type BookComboEvaluation = {
     bestScores: Record<Strategy, StrategyScore | null>;
 };
 
+type PoolKey = '1' | '2' | '3+' | 'all';
+
+type BookPredictionSummary = {
+    book: LogStatsKey;
+    predicted: string;
+};
+
+type WinSummary = {
+    books: LogStatsKey[];
+    actualTicketWinPct: number;
+    predictedByBook: BookPredictionSummary[];
+    ticketRatio: string;
+    tickets: number;
+};
+
+type PointsSummary = {
+    books: LogStatsKey[];
+    actualAvgPoints: number;
+    predictedByBook: BookPredictionSummary[];
+    tickets: number;
+};
+
+type HitPctSummary = {
+    books: LogStatsKey[];
+    actualHitPct: number;
+    predictedByBook: BookPredictionSummary[];
+    ratio: string;
+};
+
+export type PoolAccuracySummary = {
+    recommendedForWins: {
+        mode: 'top' | 'least1';
+        books: LogStatsKey[];
+        actualTicketWinPct: number;
+        predictedByBook: BookPredictionSummary[];
+        ticketRatio: string;
+        tickets: number;
+    };
+    topWin: WinSummary;
+    correlatedWin: WinSummary;
+    topPoints: PointsSummary;
+    correlatedPoints: PointsSummary;
+    topPickPct: HitPctSummary;
+    correlatedPickPct: HitPctSummary;
+};
+
+export type ComparePoolAccuracySummary = Record<PoolKey, PoolAccuracySummary>;
+
 const createComboOutcome = (prob1: number, prob2: number, prob3: number, hitCount: number): ComboOutcome => ({
     hitCount,
     expectedLeast1: calcAny(prob1, prob2, prob3),
@@ -816,11 +865,11 @@ export const runHistoricalStrategyAudit = async (
     return results;
 };
 
-export const comparePoolAccuracy = async (correlationFactor: number = 1) => {
+export const comparePoolAccuracy = async (correlationFactor: number = 1): Promise<ComparePoolAccuracySummary> => {
     console.log('Comparing top pick accuracy across game count pools and correlation factor', correlationFactor, '\n');
 
-    const pools = ['1', '2', '3+', 'all'] as const;
-    const results: Record<typeof pools[number], HistoricalAuditResults> = {
+    const pools: PoolKey[] = ['1', '2', '3+', 'all'];
+    const results: Record<PoolKey, HistoricalAuditResults> = {
         '1': {} as HistoricalAuditResults,
         '2': {} as HistoricalAuditResults,
         '3+': {} as HistoricalAuditResults,
@@ -855,6 +904,16 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1) => {
         entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>,
         metric: (stat: HistoricalAuditStat) => string
     ): string => entries.map((entry) => `${entry.book}(${metric(entry.stat)})`).join('/');
+
+    const summarizeEntries = (
+        entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>,
+        metric: (stat: HistoricalAuditStat) => string
+    ) => entries.map((entry) => ({
+        book: entry.book,
+        predicted: metric(entry.stat),
+    }));
+
+    const summaryByPool = {} as ComparePoolAccuracySummary;
 
     for (const pool of pools) {
         console.log(`\n=== Pool "${pool}" ===`);
@@ -914,10 +973,225 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1) => {
             `(${bestCorrelatedPickPct.stat.ratio})`,
             `${formatBookPredictions(bestCorrelatedPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
         ].join(' '));
+
+        const recommendedForWins = bestCorrelatedStreak.stat.ticketWinPct >= bestTopStreak.stat.ticketWinPct
+            ? {
+                mode: 'least1' as const,
+                books: bestCorrelatedStreak.entries.map((entry) => entry.book),
+                actualTicketWinPct: bestCorrelatedStreak.stat.ticketWinPct,
+                predictedByBook: summarizeEntries(bestCorrelatedStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
+                ticketRatio: formatTicketRatio(bestCorrelatedStreak.stat),
+                tickets: bestCorrelatedStreak.stat.tickets,
+            }
+            : {
+                mode: 'top' as const,
+                books: bestTopStreak.entries.map((entry) => entry.book),
+                actualTicketWinPct: bestTopStreak.stat.ticketWinPct,
+                predictedByBook: summarizeEntries(bestTopStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
+                ticketRatio: formatTicketRatio(bestTopStreak.stat),
+                tickets: bestTopStreak.stat.tickets,
+            };
+
+        summaryByPool[pool] = {
+            recommendedForWins,
+            topWin: {
+                books: bestTopStreak.entries.map((entry) => entry.book),
+                actualTicketWinPct: bestTopStreak.stat.ticketWinPct,
+                predictedByBook: summarizeEntries(bestTopStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
+                ticketRatio: formatTicketRatio(bestTopStreak.stat),
+                tickets: bestTopStreak.stat.tickets,
+            },
+            correlatedWin: {
+                books: bestCorrelatedStreak.entries.map((entry) => entry.book),
+                actualTicketWinPct: bestCorrelatedStreak.stat.ticketWinPct,
+                predictedByBook: summarizeEntries(bestCorrelatedStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
+                ticketRatio: formatTicketRatio(bestCorrelatedStreak.stat),
+                tickets: bestCorrelatedStreak.stat.tickets,
+            },
+            topPoints: {
+                books: bestTopPoints.entries.map((entry) => entry.book),
+                actualAvgPoints: bestTopPoints.stat.avgPoints,
+                predictedByBook: summarizeEntries(bestTopPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2)),
+                tickets: bestTopPoints.stat.tickets,
+            },
+            correlatedPoints: {
+                books: bestCorrelatedPoints.entries.map((entry) => entry.book),
+                actualAvgPoints: bestCorrelatedPoints.stat.avgPoints,
+                predictedByBook: summarizeEntries(bestCorrelatedPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2)),
+                tickets: bestCorrelatedPoints.stat.tickets,
+            },
+            topPickPct: {
+                books: bestTopPickPct.entries.map((entry) => entry.book),
+                actualHitPct: bestTopPickPct.stat.hitPct,
+                predictedByBook: summarizeEntries(bestTopPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`),
+                ratio: bestTopPickPct.stat.ratio,
+            },
+            correlatedPickPct: {
+                books: bestCorrelatedPickPct.entries.map((entry) => entry.book),
+                actualHitPct: bestCorrelatedPickPct.stat.hitPct,
+                predictedByBook: summarizeEntries(bestCorrelatedPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`),
+                ratio: bestCorrelatedPickPct.stat.ratio,
+            },
+        };
     }
 
-    return results;
+    return summaryByPool;
 };
+
+class StrategyType {
+    strategy: Strategy;
+    title: string;
+    constructor(strategy: Strategy) {
+        this.strategy = strategy;
+        switch (strategy) {
+            case 'least1':
+                this.title = 'Streak';
+                break;
+            case 'points':
+                this.title = 'Points';
+                break;
+            case 'hits':
+                this.title = 'Pick%';
+                break;
+        }
+    }
+}
+interface BestPicksResult {
+    "1": Picks.PickOdds,
+    "2": Picks.PickOdds,
+    "3": Picks.PickOdds,
+    strategies: StrategyType[],
+}
+
+const resolvePoolKey = (gameCount: number): Exclude<PoolKey, 'all'> => gameCount <= 1 ? '1' : gameCount === 2 ? '2' : '3+';
+
+const getPlayerStrategy = (pick1: Picks.Player, pick2: Picks.Player, pick3: Picks.Player): strategyPattern | null => {
+    if (!pick1.sameGame(pick2) && !pick2.sameGame(pick3) && !pick1.sameGame(pick3)) return 'iii';
+    if (pick1.sameTeam(pick2) && pick2.sameTeam(pick3)) return 'sss';
+
+    if (pick2.sameTeam(pick3) && !pick1.sameGame(pick2)) return 'iss';
+    if (pick1.sameTeam(pick3) && !pick2.sameGame(pick1)) return 'sis';
+    if (pick1.sameTeam(pick2) && !pick3.sameGame(pick1)) return 'ssi';
+
+    if (pick2.opponentTeam(pick3) && !pick1.sameGame(pick2)) return 'ioo';
+    if (pick1.opponentTeam(pick3) && !pick2.sameGame(pick1)) return 'oio';
+    if (pick1.opponentTeam(pick2) && !pick3.sameGame(pick1)) return 'ooi';
+
+    if (pick1.sameTeam(pick2) && pick3.opponentTeam(pick1)) return 'oso';
+    if (pick1.sameTeam(pick2) && pick3.opponentTeam(pick2)) return 'soo';
+    if (pick1.sameTeam(pick3) && pick1.opponentTeam(pick2)) return 'sos';
+    if (pick2.sameTeam(pick3) && pick1.opponentTeam(pick2)) return 'oss';
+
+    return null;
+};
+
+const comboCode = (combo: Pick<BestPicksResult, "1" | "2" | "3">): string => `${combo["1"].player.playerId}:${combo["2"].player.playerId}:${combo["3"].player.playerId}`;
+
+// calculate available games from players, rather than use the gamesList.
+// Some games may have started, or players may not be available from a game.
+export const gamesCount = (picks1: Picks.PickOdds[], picks2: Picks.PickOdds[], picks3: Picks.PickOdds[]): number => {
+    const gamesSet = new Set<Team>();
+    let gameCount = 0;
+    for (const pick of [...picks1, ...picks2, ...picks3]) {
+        if (gamesSet.has(pick.player.team.code)) continue;
+        gamesSet.add(pick.player.team.code);
+        gamesSet.add(pick.player.opponent.code);
+        gameCount++;
+    }
+    return gameCount;
+}
+
+export const bestPicks = async (picks1: Picks.PickOdds[], picks2: Picks.PickOdds[], picks3: Picks.PickOdds[]): Promise<BestPicksResult[]> => {
+    const summary = await comparePoolAccuracy(1);
+    const gameCount = gamesCount(picks1, picks2, picks3);
+    if (gameCount === 0) return [];
+
+    const poolKey = resolvePoolKey(gameCount);
+    const ref = correlations[poolKey];
+    const strategyBooks: Record<Strategy, LogStatsKey[]> = {
+        least1: summary[poolKey].correlatedWin.books,
+        points: summary[poolKey].correlatedPoints.books,
+        hits: summary[poolKey].correlatedPickPct.books,
+    };
+
+    const epsilon = 1e-12;
+    const bestByStrategy: Record<Strategy, Map<string, Pick<BestPicksResult, "1" | "2" | "3">>> = {
+        least1: new Map(),
+        points: new Map(),
+        hits: new Map(),
+    };
+
+    for (const strategy of ['least1', 'points', 'hits'] as const) {
+        const candidateBooks = strategyBooks[strategy];
+        let bestScore = Number.NEGATIVE_INFINITY;
+        const bestCombos = bestByStrategy[strategy];
+
+        for (const book of candidateBooks) {
+            for (const pick1 of picks1) {
+                const prob1 = pick1.player[book];
+                if (prob1 === null) continue;
+                for (const pick2 of picks2) {
+                    const prob2 = pick2.player[book];
+                    if (prob2 === null) continue;
+                    for (const pick3 of picks3) {
+                        const prob3 = pick3.player[book];
+                        if (prob3 === null) continue;
+
+                        const combo: Pick<BestPicksResult, "1" | "2" | "3"> = { "1": pick1, "2": pick2, "3": pick3 };
+                        const strategyCode = getPlayerStrategy(pick1.player, pick2.player, pick3.player);
+                        if (!strategyCode) continue;
+
+                        const least1Scale = (((ref.least1[strategyCode] ?? 1) - 1) * 1) + 1;
+                        const pointsScale = (((ref.points[strategyCode] ?? 1) - 1) * 1) + 1;
+                        const hitsScale = (((ref.hits[strategyCode] ?? 1) - 1) * 1) + 1;
+
+                        const score = strategy === 'least1'
+                            ? calcAny(prob1, prob2, prob3) * least1Scale
+                            : strategy === 'points'
+                                ? calcPnt(prob1, prob2, prob3) * pointsScale
+                                : calcHit(prob1, prob2, prob3) * hitsScale;
+
+                        if (score > bestScore + epsilon) {
+                            bestScore = score;
+                            bestCombos.clear();
+                            bestCombos.set(comboCode(combo), combo);
+                        } else if (Math.abs(score - bestScore) <= epsilon) {
+                            bestCombos.set(comboCode(combo), combo);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    const merged = new Map<string, { combo: Pick<BestPicksResult, "1" | "2" | "3">; strategies: Set<Strategy> }>();
+    for (const strategy of ['least1', 'points', 'hits'] as const) {
+        for (const [code, combo] of bestByStrategy[strategy]) {
+            const existing = merged.get(code);
+            if (existing) {
+                existing.strategies.add(strategy);
+            } else {
+                merged.set(code, { combo, strategies: new Set<Strategy>([strategy]) });
+            }
+        }
+    }
+
+    const results: BestPicksResult[] = [];
+    for (const { combo, strategies } of merged.values()) {
+        results.push({
+            ...combo,
+            strategies: [...strategies].map((strategy) => new StrategyType(strategy)),
+        });
+    }
+
+    // Return deterministically: strongest overlap first, then stable player id code.
+    results.sort((left, right) => {
+        if (right.strategies.length !== left.strategies.length) return right.strategies.length - left.strategies.length;
+        return comboCode(left).localeCompare(comboCode(right));
+    });
+
+    return results;
+}
 
 export const runSimulation = async (iterations: number) => {
     const response = await fetch('./history/history.json');

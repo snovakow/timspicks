@@ -16,7 +16,7 @@ import iconInfo from './images/info_i_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg
 import iconLegend from './images/legend_toggle_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyDark from './images/sports_hockey_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyLight from './images/sports_hockey_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
-import { comparePoolAccuracy, runSimulation } from './picksOptimizer';
+import { bestPicks, runSimulation } from './picksOptimizer';
 import CollapsibleSection from './components/CollapsibleSection';
 import { getTeamTotals } from './teamGoals';
 import * as Feature from './features';
@@ -181,7 +181,14 @@ function App() {
 					});
 				}
 				if (ANALYZE) {
-					comparePoolAccuracy(1);
+					bestPicks(table1Rows, table2Rows, table3Rows).then((results) => {
+						for (const result of results) {
+							console.log(" ***Best picks:", result.strategies.map((s) => s.title).join('/'));
+							console.log("1:", result['1'].player.fullName);
+							console.log("2:", result['2'].player.fullName);
+							console.log("3:", result['3'].player.fullName);
+						}
+					});
 					ANALYZE = false;
 				}
 
