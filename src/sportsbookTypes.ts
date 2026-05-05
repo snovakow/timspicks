@@ -3,6 +3,9 @@ import logo2 from './sportsbook-logo/sb-logo-16-fanduel.svg';
 import logo3 from './sportsbook-logo/sb-logo-16-mgm.svg';
 import logo4 from './sportsbook-logo/sb-logo-16-betrivers.svg';
 
+export type Strategy = 'least1' | 'points' | 'hits';
+export type StrategyMode = Strategy | 'top';
+
 export const allStrategies = [
     'iii', 'sss',
     'iss', 'sis', 'ssi',

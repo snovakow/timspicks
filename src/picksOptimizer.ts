@@ -1,6 +1,6 @@
 import * as Picks from "./components/Table";
 import { deVig, oddsNameMap } from "./dataProcessor";
-import type { strategyPattern, LogStatsKey } from "./sportsbookTypes";
+import type { strategyPattern, LogStatsKey, StrategyMode, Strategy } from "./sportsbookTypes";
 import { allStrategies, SportsbookKeys, LogStatsKeys } from "./sportsbookTypes";
 
 export const calcAny = (prob1: number, prob2: number, prob3: number): number => {

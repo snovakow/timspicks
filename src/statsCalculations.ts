@@ -2,8 +2,8 @@ import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
 import type { Team } from './components/logo';
 import { correlations, type CorrelationResult, calcAny, calcPnt, calcHit } from './picksOptimizer';
+import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode } from './sportsbookTypes';
 import { LogStatsKeys, sportsbooks } from './sportsbookTypes';
-import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog } from './sportsbookTypes';
 
 const precision = Picks.precision;
 
@@ -261,14 +261,14 @@ export const calculateStats = (
 
 	const comboPrecision = 2;
 
-	const printStrategy = (strategy: Picks.Strategy, value: number): string => {
+	const printStrategy = (strategy: Strategy, value: number): string => {
 		switch (strategy) {
 			case 'least1': return `Streak: ${roundToPercent(value, comboPrecision)}`;
 			case 'points': return `Points: ${value.toFixed(comboPrecision)}`;
 			case 'hits': return `Pick %: ${roundToPercent(value / 3, comboPrecision)}`;
 		}
 	}
-	const printStrategyDiff = (strategy: Picks.Strategy, top: number, value: number): string => {
+	const printStrategyDiff = (strategy: Strategy, top: number, value: number): string => {
 		let diff = value - top;
 		let percent = "";
 		if (strategy === 'least1' || strategy === 'hits') {
@@ -342,14 +342,14 @@ export const calculateStats = (
 		logHandler.addLine("Pick %: 30%", 'left');
 	}
 
-	const setStrategy = (pick: Picks.PickOdds, mode: Picks.StrategyMode) => {
+	const setStrategy = (pick: Picks.PickOdds, mode: StrategyMode) => {
 		if (betKey === 'bet1') pick.strategy1.add(mode);
 		else if (betKey === 'bet2') pick.strategy2.add(mode);
 		else if (betKey === 'bet3') pick.strategy3.add(mode);
 		else if (betKey === 'bet4') pick.strategy4.add(mode);
 		else pick.strategyAvg.add(mode);
 	};
-	const addStrategyHighlights = (result: Result, strategy: Picks.StrategyMode) => {
+	const addStrategyHighlights = (result: Result, strategy: StrategyMode) => {
 		for (const pick of result.players1) setStrategy(pick, strategy);
 		for (const pick of result.players2) setStrategy(pick, strategy);
 		for (const pick of result.players3) setStrategy(pick, strategy);
@@ -385,7 +385,7 @@ export const calculateStats = (
 		strategy: strategyPattern;
 		result: Result;
 	}
-	const findMax = (key: Picks.Strategy): strategyGroup[] => {
+	const findMax = (key: Strategy): strategyGroup[] => {
 		let max = 0;
 		for (const result of strategyResults.values()) {
 			const value = result[key];
@@ -410,7 +410,7 @@ export const calculateStats = (
 		return true;
 	}
 
-	const processSameGroup = (groupKey: Picks.Strategy): strategyGroup[] => {
+	const processSameGroup = (groupKey: Strategy): strategyGroup[] => {
 		const groups = findMax(groupKey);
 		for (const group of groups) {
 			logHighlights(group.result);
@@ -432,14 +432,14 @@ export const calculateStats = (
 	class GroupedPlayer {
 		result: Result;
 		strategy: strategyPattern;
-		strategyCombos: Map<Picks.Strategy, LogLine>;
-		constructor(result: Result, strategy: strategyPattern, key: Picks.Strategy) {
+		strategyCombos: Map<Strategy, LogLine>;
+		constructor(result: Result, strategy: strategyPattern, key: Strategy) {
 			this.result = result;
 			this.strategy = strategy;
 			this.strategyCombos = new Map();
 			this.addStrategyStat(key, result[key]);
 		}
-		getLogStat(strategy: Picks.Strategy, value: number, max: boolean = true): LogLine {
+		getLogStat(strategy: Strategy, value: number, max: boolean = true): LogLine {
 			const diff = printStrategyDiff(strategy, topResult[strategy], value);
 			return {
 				text: printStrategy(strategy, value) + diff,
@@ -448,10 +448,10 @@ export const calculateStats = (
 				title: false
 			}
 		}
-		addStrategyStat(strategy: Picks.Strategy, value: number, max: boolean = true) {
+		addStrategyStat(strategy: Strategy, value: number, max: boolean = true) {
 			this.strategyCombos.set(strategy, this.getLogStat(strategy, value, max));
 		}
-		logStrategyStat(strategy: Picks.Strategy) {
+		logStrategyStat(strategy: Strategy) {
 			const logLine = this.strategyCombos.get(strategy);
 			if (logLine) logHandler.addLogLine(logLine);
 			else logHandler.addLogLine(this.getLogStat(strategy, this.result[strategy], false));
@@ -459,7 +459,7 @@ export const calculateStats = (
 	}
 
 	const groupedMap: Map<Set<Picks.PickOdds>, GroupedPlayer> = new Map();
-	const mergeSameResults = (groups: strategyGroup[], key: Picks.Strategy): void => {
+	const mergeSameResults = (groups: strategyGroup[], key: Strategy): void => {
 		for (const group of groups) {
 			let same = false;
 			const combined = new Set<Picks.PickOdds>();

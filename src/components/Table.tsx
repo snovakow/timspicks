@@ -1,5 +1,5 @@
 import type { LogStatsKey } from "../sportsbookTypes";
-import { type Team } from "./logo";
+import type { Team } from "./logo";
 
 import "./Table.css";
 import "./sportsbook.css";
@@ -207,8 +207,6 @@ export interface OddsItem {
 	goals: number;
 }
 
-export type Strategy = 'least1' | 'points' | 'hits';
-export type StrategyMode = Strategy | 'top';
 export class PickOdds {
 	player: Player;
 
