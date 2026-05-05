@@ -1,4 +1,4 @@
-import type { LogStatsKey } from "../sportsbookTypes";
+import type { LogStatsKey, StrategyMode } from "../sportsbookTypes";
 import type { Team } from "./logo";
 
 import "./Table.css";

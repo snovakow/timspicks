@@ -1,4 +1,4 @@
-import type { StrategyMode } from './Table';
+import type { StrategyMode } from '../sportsbookTypes';
 import * as Feature from '../features';
 import './Settings.css';
 

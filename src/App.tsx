@@ -4,7 +4,7 @@ import * as Picks from './components/Table';
 import Popup from './components/Popup';
 import InfoPopupContent, { LegendPopupContent } from './components/InfoPopupContent';
 import StatsPopupContent from './components/StatsPopupContent';
-import type { SportsbookLog, LogStatsKey } from './sportsbookTypes';
+import type { SportsbookLog, LogStatsKey, StrategyMode } from './sportsbookTypes';
 import { sportsbooks } from './sportsbookTypes';
 import SettingsPanel from './components/Settings';
 import { roundToPercent, probabilityToAmerican, getEntries } from './utility';
@@ -135,7 +135,7 @@ function App() {
 	const [minSportsbooks, setMinSportsbooks] = useState(3);
 	const [correlationFactor, setCorrelationFactor] = useState(1);
 	const [showCorrelate, setShowCorrelate] = useState(false);
-	const [enabledStrategies, setEnabledStrategies] = useState<Record<Picks.StrategyMode, boolean>>({
+	const [enabledStrategies, setEnabledStrategies] = useState<Record<StrategyMode, boolean>>({
 		least1: true,
 		points: true,
 		hits: true,
@@ -211,7 +211,7 @@ function App() {
 	const requestSort2: Picks.RequestSort = useCallback((key) => setNeedsSort2(key), []);
 	const requestSort3: Picks.RequestSort = useCallback((key) => setNeedsSort3(key), []);
 	const requestSortPlayer: Picks.RequestSort = useCallback((key) => setNeedsSortPlayer(key), []);
-	const handleStrategyEnabledChange = useCallback((strategy: Picks.StrategyMode, value: boolean) => {
+	const handleStrategyEnabledChange = useCallback((strategy: StrategyMode, value: boolean) => {
 		setEnabledStrategies((prev) => ({ ...prev, [strategy]: value }));
 	}, []);
 
