@@ -72,7 +72,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					Show sportsbook odds as implied probability percentages, otherwise as American odds.
 				</div>
 			</div>
-			{Feature.normalize && (
+			{Feature.normalizeSportsbooks && (
 				<div className="settings-group">
 					<label className={labelClassNames}>
 						<input

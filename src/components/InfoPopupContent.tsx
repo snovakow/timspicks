@@ -37,12 +37,13 @@ export default function InfoPopupContent() {
 					less tied together than when multiple picks come from the same game.
 				</p>
 				<p>
-					Once games start, available pick quality can shift. Listing all players helps judge
+					Once games start, available pick quality can shift.
+					Listing all players with game start times helps judge
 					whether to lock picks early or wait for later opportunities.
 				</p>
 			</section>
 
-			{Feature.normalize && (
+			{Feature.normalizeSportsbooks && (
 				<section className="info-popup-section">
 					<h3>How Odds Are Balanced</h3>
 					<p>

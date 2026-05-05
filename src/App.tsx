@@ -254,7 +254,7 @@ function App() {
 		const key3 = deVigEnabled ? 'bet3' : 'betRaw3';
 		const key4 = deVigEnabled ? 'bet4' : 'betRaw4';
 
-		if (Feature.normalize) {
+		if (Feature.normalizeSportsbooks) {
 			// Reset to raw values before reapplying de-vig to avoid compounding transformations.
 			for (const player of playerList) {
 				player.bet1 = player.betRaw1;
