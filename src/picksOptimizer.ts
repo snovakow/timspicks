@@ -1,4 +1,25 @@
-import { allStrategies, type strategyPattern } from "./sportsbookTypes";
+import * as Picks from "./components/Table";
+import { deVig, oddsNameMap } from "./dataProcessor";
+import type { strategyPattern, LogStatsKey } from "./sportsbookTypes";
+import { allStrategies, SportsbookKeys, LogStatsKeys } from "./sportsbookTypes";
+
+export const calcAny = (prob1: number, prob2: number, prob3: number): number => {
+    return 1 - (1 - prob1) * (1 - prob2) * (1 - prob3);
+};
+
+export const calcPnt = (prob1: number, prob2: number, prob3: number): number => {
+    const not1 = 1 - prob1;
+    const not2 = 1 - prob2;
+    const not3 = 1 - prob3;
+    const p1 = prob1 * not2 * not3 + not1 * prob2 * not3 + not1 * not2 * prob3;
+    const p2 = prob1 * prob2 * not3 + prob1 * not2 * prob3 + not1 * prob2 * prob3;
+    const p3 = prob1 * prob2 * prob3;
+    return p1 * 25 + p2 * 50 + p3 * 100;
+};
+
+export const calcHit = (prob1: number, prob2: number, prob3: number): number => {
+    return prob1 + prob2 + prob3;
+};
 
 interface HistoryPlayer {
     "nhlPlayerId": number;

@@ -1,13 +1,11 @@
 import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
 import type { Team } from './components/logo';
-import { correlations, type CorrelationResult } from './picksOptimizer';
+import { correlations, type CorrelationResult, calcAny, calcPnt, calcHit } from './picksOptimizer';
 import { LogStatsKeys, sportsbooks } from './sportsbookTypes';
 import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog } from './sportsbookTypes';
 
-
 const precision = Picks.precision;
-
 
 export const cloneLogStats = (stats: SportsbookLog): SportsbookLog => {
 	const cache = {} as SportsbookLog;
@@ -108,21 +106,7 @@ export const calculateStats = (
 		pick3: Choice;
 	}
 
-	const calcAny = (prob1: number, prob2: number, prob3: number): number => {
-		return 1 - (1 - prob1) * (1 - prob2) * (1 - prob3);
-	}
-	const calcPnt = (prob1: number, prob2: number, prob3: number): number => {
-		const not1 = 1 - prob1;
-		const not2 = 1 - prob2;
-		const not3 = 1 - prob3;
-		const p1 = prob1 * not2 * not3 + not1 * prob2 * not3 + not1 * not2 * prob3;
-		const p2 = prob1 * prob2 * not3 + prob1 * not2 * prob3 + not1 * prob2 * prob3;
-		const p3 = prob1 * prob2 * prob3;
-		return p1 * 25 + p2 * 50 + p3 * 100;
-	}
-	const calcHit = (prob1: number, prob2: number, prob3: number): number => {
-		return prob1 + prob2 + prob3;
-	}
+
 	class Result {
 		players1: Set<Picks.PickOdds>;
 		players2: Set<Picks.PickOdds>;
