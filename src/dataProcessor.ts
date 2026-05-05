@@ -297,6 +297,7 @@ oddsNameMap.set("Ben Kindel", "Benjamin Kindel"); // BetRivers
 oddsNameMap.set("Bo Groulx", "Benoit-Olivier Groulx"); // BetMGM
 oddsNameMap.set("Carl Grundstrom", "Carl Grundström"); // BetRivers (lang)
 oddsNameMap.set("Charle-Edouard D'Astous", "Charles-Edouard D'Astous"); // BetRivers
+oddsNameMap.set("Danila Yurov", "Yurov Danila"); // BetMGM
 oddsNameMap.set("Dmitry Orlov", "Dimitri Orlov"); // BetRivers
 oddsNameMap.set("Egor Chinakhov", "Yegor Chinakhov"); // DraftKings BetRivers
 oddsNameMap.set("Ethan Del Mastro", "Ethan del Mastro"); // FanDuel
