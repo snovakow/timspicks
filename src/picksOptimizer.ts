@@ -738,17 +738,21 @@ export const runHistoricalStrategyAudit = async (
     };
 
     if (logResults) {
-        const display = Object.fromEntries((Object.keys(auditLabels) as LogStatsKey[]).map((bookKey) => [
-            auditLabels[bookKey],
-            {
-                ["Streak (top)"]: `${formatAuditPercent(results[bookKey].top.ticketWinPct)} (${formatTicketRatio(results[bookKey].top)})`,
-                ["Streak (L%)"]: `${formatAuditPercent(results[bookKey].least1.ticketWinPct)} (${formatTicketRatio(results[bookKey].least1)})`,
-                ["Points (top)"]: `${formatAuditPoints(results[bookKey].top.avgPoints)} (${results[bookKey].top.tickets})`,
-                ["Points (L%)"]: `${formatAuditPoints(results[bookKey].points.avgPoints)} (${results[bookKey].points.tickets})`,
-                ["Pick % (top)"]: `${formatAuditPercent(results[bookKey].top.hitPct)} (${results[bookKey].top.ratio})`,
-                ["Pick % (L%)"]: `${formatAuditPercent(results[bookKey].hits.hitPct)} (${results[bookKey].hits.ratio})`,
-            },
-        ]));
+        const display = Object.fromEntries((Object.keys(auditLabels) as LogStatsKey[]).map((bookKey) => {
+            const tickets = results[bookKey].top.tickets;
+            const picks = results[bookKey].top.totalPicks;
+            return [
+                auditLabels[bookKey],
+                {
+                    [`Streak Top (${tickets})`]: `${formatAuditPercent(results[bookKey].top.ticketWinPct)} (${results[bookKey].top.ticketWins})`,
+                    [`Streak L% (${tickets})`]: `${formatAuditPercent(results[bookKey].least1.ticketWinPct)} (${results[bookKey].least1.ticketWins})`,
+                    [`Points Top (${tickets})`]: `${formatAuditPoints(results[bookKey].top.avgPoints)}`,
+                    [`Points L% (${tickets})`]: `${formatAuditPoints(results[bookKey].points.avgPoints)}`,
+                    [`Pick % Top (${picks})`]: `${formatAuditPercent(results[bookKey].top.hitPct)} (${results[bookKey].top.hits})`,
+                    [`Pick % L% (${picks})`]: `${formatAuditPercent(results[bookKey].hits.hitPct)} (${results[bookKey].hits.hits})`,
+                },
+            ];
+        }));
         console.table(display);
         console.log(`Historical strategy audit evaluated ${results.bet1.top.tickets} tickets with correlation factor ${correlationFactor}.`);
     }
