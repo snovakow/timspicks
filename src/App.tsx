@@ -176,7 +176,7 @@ function App() {
 				// Run SIMULATE or ANALYZE once app has initialized
 				if (SIMULATE) {
 					SIMULATE = false;
-					runSimulation(1000).then((results) => {
+					runSimulation(1000000).then((results) => {
 						console.log(results);
 					});
 				}
