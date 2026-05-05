@@ -1,2 +1,2 @@
-export const normalize = true;
+export const normalize = false;
 export const simulate = false;
