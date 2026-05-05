@@ -101,28 +101,30 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 				</div>
 			</div>
 
-			<div className="settings-group">
-				<div className="settings-label">Pick Strategies</div>
-				<div className="settings-checkbox-group" role="group" aria-label="Pick strategies">
-					{strategyOptions.map((option) => (
-						<label
-							key={option.key}
-							className={`settings-checkbox-item settings-checkbox settings-strategy-${option.key} settings-checkbox-hoverable`}
-						>
-							<input
-								type="checkbox"
-								checked={enabledStrategies[option.key]}
-								onChange={(e) => onStrategyEnabledChange(option.key, e.target.checked)}
-								tabIndex={0}
-							/>
-							{option.label}
-						</label>
-					))}
+			{Feature.correlation && (
+				<div className="settings-group">
+					<div className="settings-label">Pick Strategies</div>
+					<div className="settings-checkbox-group" role="group" aria-label="Pick strategies">
+						{strategyOptions.map((option) => (
+							<label
+								key={option.key}
+								className={`settings-checkbox-item settings-checkbox settings-strategy-${option.key} settings-checkbox-hoverable`}
+							>
+								<input
+									type="checkbox"
+									checked={enabledStrategies[option.key]}
+									onChange={(e) => onStrategyEnabledChange(option.key, e.target.checked)}
+									tabIndex={0}
+								/>
+								{option.label}
+							</label>
+						))}
+					</div>
+					<div className="settings-description">
+						Select which strategies to display.
+					</div>
 				</div>
-				<div className="settings-description">
-					Select which strategies to display.
-				</div>
-			</div>
+			)}
 		</div>
 	);
 }

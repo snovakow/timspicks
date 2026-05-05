@@ -6,6 +6,7 @@ import { correlations, } from './correlationData';
 import type { CorrelationResult } from './correlationData';
 import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode } from './sportsbookTypes';
 import { LogStatsKeys, sportsbooks } from './sportsbookTypes';
+import * as Feature from './features';
 
 const precision = Picks.precision;
 
@@ -50,7 +51,7 @@ class LogHandler {
 		this.logSection.push(line);
 	}
 }
-export const calculateStats = (
+const calculateStats = (
 	betKey: LogStatsKey,
 	minSportsbooks: number,
 	table1Rows: Picks.PickOdds[],
@@ -431,72 +432,74 @@ export const calculateStats = (
 	logHighlights(topResult);
 	addStrategyHighlights(topResult, 'top');
 
-	class GroupedPlayer {
-		result: Result;
-		strategy: strategyPattern;
-		strategyCombos: Map<Strategy, LogLine>;
-		constructor(result: Result, strategy: strategyPattern, key: Strategy) {
-			this.result = result;
-			this.strategy = strategy;
-			this.strategyCombos = new Map();
-			this.addStrategyStat(key, result[key]);
-		}
-		getLogStat(strategy: Strategy, value: number, max: boolean = true): LogLine {
-			const diff = printStrategyDiff(strategy, topResult[strategy], value);
-			return {
-				text: printStrategy(strategy, value) + diff,
-				align: 'left',
-				bold: max,
-				title: false
+	if (Feature.correlation) {
+		class GroupedPlayer {
+			result: Result;
+			strategy: strategyPattern;
+			strategyCombos: Map<Strategy, LogLine>;
+			constructor(result: Result, strategy: strategyPattern, key: Strategy) {
+				this.result = result;
+				this.strategy = strategy;
+				this.strategyCombos = new Map();
+				this.addStrategyStat(key, result[key]);
+			}
+			getLogStat(strategy: Strategy, value: number, max: boolean = true): LogLine {
+				const diff = printStrategyDiff(strategy, topResult[strategy], value);
+				return {
+					text: printStrategy(strategy, value) + diff,
+					align: 'left',
+					bold: max,
+					title: false
+				}
+			}
+			addStrategyStat(strategy: Strategy, value: number, max: boolean = true) {
+				this.strategyCombos.set(strategy, this.getLogStat(strategy, value, max));
+			}
+			logStrategyStat(strategy: Strategy) {
+				const logLine = this.strategyCombos.get(strategy);
+				if (logLine) logHandler.addLogLine(logLine);
+				else logHandler.addLogLine(this.getLogStat(strategy, this.result[strategy], false));
 			}
 		}
-		addStrategyStat(strategy: Strategy, value: number, max: boolean = true) {
-			this.strategyCombos.set(strategy, this.getLogStat(strategy, value, max));
-		}
-		logStrategyStat(strategy: Strategy) {
-			const logLine = this.strategyCombos.get(strategy);
-			if (logLine) logHandler.addLogLine(logLine);
-			else logHandler.addLogLine(this.getLogStat(strategy, this.result[strategy], false));
-		}
-	}
 
-	const groupedMap: Map<Set<Picks.PickOdds>, GroupedPlayer> = new Map();
-	const mergeSameResults = (groups: strategyGroup[], key: Strategy): void => {
-		for (const group of groups) {
-			let same = false;
-			const combined = new Set<Picks.PickOdds>();
-			for (const pick of group.result.players1) combined.add(pick);
-			for (const pick of group.result.players2) combined.add(pick);
-			for (const pick of group.result.players3) combined.add(pick);
-			for (const [set, groupedPlayer] of groupedMap) {
-				if (isSameSet(combined, set)) {
-					groupedPlayer.addStrategyStat(key, group.result[key]);
-					same = true;
-					break;
-				};
-			}
-			if (!same) {
-				const groupedPlayer = new GroupedPlayer(group.result, group.strategy, key);
-				groupedMap.set(combined, groupedPlayer);
+		const groupedMap: Map<Set<Picks.PickOdds>, GroupedPlayer> = new Map();
+		const mergeSameResults = (groups: strategyGroup[], key: Strategy): void => {
+			for (const group of groups) {
+				let same = false;
+				const combined = new Set<Picks.PickOdds>();
+				for (const pick of group.result.players1) combined.add(pick);
+				for (const pick of group.result.players2) combined.add(pick);
+				for (const pick of group.result.players3) combined.add(pick);
+				for (const [set, groupedPlayer] of groupedMap) {
+					if (isSameSet(combined, set)) {
+						groupedPlayer.addStrategyStat(key, group.result[key]);
+						same = true;
+						break;
+					};
+				}
+				if (!same) {
+					const groupedPlayer = new GroupedPlayer(group.result, group.strategy, key);
+					groupedMap.set(combined, groupedPlayer);
+				}
 			}
 		}
-	}
 
-	if (least1) mergeSameResults(least1, 'least1');
-	if (points) mergeSameResults(points, 'points');
-	if (hits) mergeSameResults(hits, 'hits');
+		if (least1) mergeSameResults(least1, 'least1');
+		if (points) mergeSameResults(points, 'points');
+		if (hits) mergeSameResults(hits, 'hits');
 
-	if (groupedMap.size > 0) {
-		logHandler.addTitle("Correlated");
-		for (const groupedPlayer of groupedMap.values()) {
-			logReduced(groupedPlayer.result, topResult, groupedPlayer.strategy);
-			logHandler.addSection();
+		if (groupedMap.size > 0) {
+			logHandler.addTitle("Correlated");
+			for (const groupedPlayer of groupedMap.values()) {
+				logReduced(groupedPlayer.result, topResult, groupedPlayer.strategy);
+				logHandler.addSection();
 
-			groupedPlayer.logStrategyStat('least1');
-			groupedPlayer.logStrategyStat('points');
-			groupedPlayer.logStrategyStat('hits');
+				groupedPlayer.logStrategyStat('least1');
+				groupedPlayer.logStrategyStat('points');
+				groupedPlayer.logStrategyStat('hits');
 
-			logHandler.addSection();
+				logHandler.addSection();
+			}
 		}
 	}
 

@@ -1,5 +1,6 @@
 import type { LogStatsKey, StrategyMode } from "../sportsbookTypes";
 import type { Team } from "./logo";
+import * as Feature from '../features';
 
 import "./Table.css";
 import "./sportsbook.css";
@@ -277,10 +278,11 @@ export function Table(props: {
 		const classes = [highlight && strategy ? cellClass(highlight) : undefined, strategy ? 'cell-bet-with-dots' : undefined]
 			.filter(Boolean)
 			.join(' ');
+		const show = strategy && Feature.correlation;
 		return (
-			<td className={classes || undefined} title={strategy ? strategyTitle(strategy) : undefined}>
+			<td className={classes || undefined} title={show ? strategyTitle(strategy) : undefined}>
 				<span className='cell-bet-value'>{value}</span>
-				{strategy && renderStrategyDots(strategy)}
+				{show && renderStrategyDots(strategy)}
 			</td>
 		);
 	};

@@ -133,7 +133,7 @@ function App() {
 	const [showPercentage, setShowPercentage] = useState(true);
 	const [deVigEnabled, setDeVigEnabled] = useState(false);
 	const [minSportsbooks, setMinSportsbooks] = useState(3);
-	const [correlationFactor, setCorrelationFactor] = useState(1);
+	const [correlationFactor, setCorrelationFactor] = useState(Feature.correlation ? 1 : 0);
 	const [showCorrelate, setShowCorrelate] = useState(false);
 	const [enabledStrategies, setEnabledStrategies] = useState<Record<StrategyMode, boolean>>({
 		least1: true,
@@ -467,15 +467,17 @@ function App() {
 					</span>
 				</span>
 				<div className='toolBar toolbar-end'>
-					<button className="button" title="Legend" aria-label="Legend"
-						onClick={
-							() => {
-								if (showPopup.visible && popupView === 'legend') closePopup();
-								else openLegendPopup();
-							}
-						}>
-						<img src={iconLegend} alt="ℹ️" aria-hidden="true" />
-					</button>
+					{Feature.correlation && (
+						<button className="button" title="Legend" aria-label="Legend"
+							onClick={
+								() => {
+									if (showPopup.visible && popupView === 'legend') closePopup();
+									else openLegendPopup();
+								}
+							}>
+							<img src={iconLegend} alt="ℹ️" aria-hidden="true" />
+						</button>
+					)}
 					<button className="button" title="Info" aria-label="Info"
 						onClick={
 							() => {
@@ -543,21 +545,22 @@ function App() {
 					</CollapsibleSection>
 				)}
 
-				{showCorrelate ? (
-					<Correlate
-						value={correlationFactor}
-						setValue={setCorrelationFactor}
-						onClose={() => setShowCorrelate(false)}
-					/>
-				) : (
-					<button className="correlate-button"
-						title="Show Correlation Slider"
-						aria-label="Show Correlation Slider"
-						onClick={() => setShowCorrelate(true)}
-					>
-						<i>𝑳%</i>
-					</button>
-				)}
+				{Feature.correlation && (
+					showCorrelate ? (
+						<Correlate
+							value={correlationFactor}
+							setValue={setCorrelationFactor}
+							onClose={() => setShowCorrelate(false)}
+						/>
+					) : (
+						<button className="correlate-button"
+							title="Show Correlation Slider"
+							aria-label="Show Correlation Slider"
+							onClick={() => setShowCorrelate(true)}
+						>
+							<i>𝑳%</i>
+						</button>
+					))}
 			</main>
 		</>
 	)

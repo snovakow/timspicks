@@ -75,22 +75,24 @@ export default function InfoPopupContent() {
 				</p>
 			</section>
 
-			<section className="info-popup-section">
-				<h3>Log Points (<i>𝑳%</i>) Correlation</h3>
-				<p>
-					Log points: Used to denote logarithmic changes scaled to act like percentages,
-					used as a baseline for relative change.
-				</p>
-				<p>
-					A log-ratio baseline correlation is used to estimate how much picks from the same game,
-					whether on opposing teams or the same team,
-					are correlated relative to a baseline of independent picks from different games.
-				</p>
-				<p>
-					With 2 or less games where all three picks cannot be independent from different games,
-					correlation is based on random results.
-				</p>
-			</section>
+			{Feature.correlation && (
+				<section className="info-popup-section">
+					<h3>Log Points (<i>𝑳%</i>) Correlation</h3>
+					<p>
+						Log points: Used to denote logarithmic changes scaled to act like percentages,
+						used as a baseline for relative change.
+					</p>
+					<p>
+						A log-ratio baseline correlation is used to estimate how much picks from the same game,
+						whether on opposing teams or the same team,
+						are correlated relative to a baseline of independent picks from different games.
+					</p>
+					<p>
+						With 2 or less games where all three picks cannot be independent from different games,
+						correlation is based on random results.
+					</p>
+				</section>
+			)}
 
 			<section className="info-popup-section info-popup-contact">
 				<h3>Contact</h3>
