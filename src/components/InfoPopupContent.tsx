@@ -29,19 +29,16 @@ export default function InfoPopupContent() {
 				</div>
 			</section>
 
-			<section className="info-popup-section">
-				<h3>Features</h3>
-				<p>
-					Selecting picks from different games can improve total hit probability by reducing
-					correlation between picks. When picks come from independent games, outcomes are
-					less tied together than when multiple picks come from the same game.
-				</p>
-				<p>
-					Once games start, available pick quality can shift.
-					Listing all players with game start times helps judge
-					whether to lock picks early or wait for later opportunities.
-				</p>
-			</section>
+			{Feature.allPlayersTable && (
+				<section className="info-popup-section">
+					<h3>Features</h3>
+					<p>
+						Once games start, available pick quality can shift.
+						Listing all players with game start times helps judge
+						whether to lock picks early or wait for later opportunities.
+					</p>
+				</section>
+			)}
 
 			{Feature.normalizeSportsbooks && (
 				<section className="info-popup-section">

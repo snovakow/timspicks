@@ -535,11 +535,13 @@ function App() {
 						<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
 					</div>
 				</CollapsibleSection>
-				<CollapsibleSection title="Players">
-					<div className="scrollable-table-wrapper section-container">
-						<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
-					</div>
-				</CollapsibleSection>
+				{Feature.allPlayersTable && (
+					<CollapsibleSection title="Players">
+						<div className="scrollable-table-wrapper section-container">
+							<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
+						</div>
+					</CollapsibleSection>
+				)}
 
 				{showCorrelate ? (
 					<Correlate
