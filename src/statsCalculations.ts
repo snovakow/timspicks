@@ -1,7 +1,9 @@
 import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
 import type { Team } from './components/logo';
-import { correlations, type CorrelationResult, calcAny, calcPnt, calcHit } from './picksOptimizer';
+import { calcAny, calcPnt, calcHit } from './picksOptimizer';
+import { correlations, } from './correlationData';
+import type { CorrelationResult } from './correlationData';
 import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode } from './sportsbookTypes';
 import { LogStatsKeys, sportsbooks } from './sportsbookTypes';
 

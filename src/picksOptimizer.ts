@@ -1,4 +1,6 @@
 import * as Picks from "./components/Table";
+import type { CorrelationData, CorrelationResult, CorrelationResults } from "./correlationData";
+import { correlations } from "./correlationData";
 import { deVig, oddsNameMap } from "./dataProcessor";
 import type { strategyPattern, LogStatsKey, StrategyMode, Strategy } from "./sportsbookTypes";
 import { allStrategies, SportsbookKeys, LogStatsKeys } from "./sportsbookTypes";
@@ -31,20 +33,8 @@ interface HistoryPlayer {
     "availableTimes": string[];
 }
 
-type CorrelationData = Record<typeof allStrategies[number], number | null>;
 type CorrelationCount = Record<typeof allStrategies[number], number>;
 type BaselineKey = 'random' | 'iii';
-
-export interface CorrelationResult {
-    least1: CorrelationData,
-    points: CorrelationData,
-    hits: CorrelationData,
-};
-export interface CorrelationResults {
-    "1": CorrelationResult,
-    "2": CorrelationResult,
-    "3+": CorrelationResult,
-};
 
 class Correlation {
     strategy = {
@@ -115,141 +105,6 @@ class Correlation {
             points: this.strategy.points,
             hits: this.strategy.hits,
         };
-    }
-};
-
-export const correlations: CorrelationResults = {
-    "1": {
-        "least1": {
-            "iii": null,
-            "sss": 0.9952713158639847,
-            "iss": null,
-            "sis": null,
-            "ssi": null,
-            "ioo": null,
-            "oio": null,
-            "ooi": null,
-            "oso": 0.9968607563202877,
-            "soo": 0.9969121953573922,
-            "sos": 1.0059792518125776,
-            "oss": 0.9997726237454385
-        },
-        "points": {
-            "iii": null,
-            "sss": 0.9997978427155497,
-            "iss": null,
-            "sis": null,
-            "ssi": null,
-            "ioo": null,
-            "oio": null,
-            "ooi": null,
-            "oso": 0.9971823234010139,
-            "soo": 0.9971987740128077,
-            "sos": 1.0000712909238518,
-            "oss": 0.9973695978613997
-        },
-        "hits": {
-            "iii": null,
-            "sss": 0.999968929041933,
-            "iss": null,
-            "sis": null,
-            "ssi": null,
-            "ioo": null,
-            "oio": null,
-            "ooi": null,
-            "oso": 0.9975397876871234,
-            "soo": 0.9975579491369438,
-            "sos": 1.0005667332202108,
-            "oss": 0.9972716940625876
-        }
-    },
-    "2": {
-        "least1": {
-            "iii": null,
-            "sss": 0.9973448161970763,
-            "iss": 0.9921977481686849,
-            "sis": 0.9993338302714749,
-            "ssi": 0.9909350603221198,
-            "ioo": 0.9948792912454089,
-            "oio": 0.9962420831136969,
-            "ooi": 1.003054032608402,
-            "oso": 0.9948468300614502,
-            "soo": 0.9950155756606656,
-            "sos": 1.0098922630200091,
-            "oss": 1.0072746083288473
-        },
-        "points": {
-            "iii": null,
-            "sss": 1.0022054557129827,
-            "iss": 0.9903528781670692,
-            "sis": 1.0014856102087932,
-            "ssi": 0.9947364827952582,
-            "ioo": 0.991629746725105,
-            "oio": 0.9929677992007679,
-            "ooi": 0.9997323304641367,
-            "oso": 0.9936284242630419,
-            "soo": 0.9938176988628169,
-            "sos": 1.0076513852596651,
-            "oss": 0.9986698842838014
-        },
-        "hits": {
-            "iii": null,
-            "sss": 1.002139630047202,
-            "iss": 0.9907664328274415,
-            "sis": 1.0009545768086936,
-            "ssi": 0.9946145620678143,
-            "ioo": 0.9921487939596133,
-            "oio": 0.9935466952380083,
-            "ooi": 0.9997048809293316,
-            "oso": 0.9947255162839707,
-            "soo": 0.9949080132486099,
-            "sos": 1.0074308684184743,
-            "oss": 0.9994532747892344
-        }
-    },
-    "3+": {
-        "least1": {
-            "iii": 1,
-            "sss": 0.9960442243285105,
-            "iss": 0.996558654369376,
-            "sis": 0.995749417682109,
-            "ssi": 0.9990153773210311,
-            "ioo": 0.9969392003938472,
-            "oio": 1.000493366280597,
-            "ooi": 1.0096913487194108,
-            "oso": 0.9990090518694602,
-            "soo": 0.9990320844204282,
-            "sos": 1.0084083707057592,
-            "oss": 1.0053358022751429
-        },
-        "points": {
-            "iii": 1,
-            "sss": 0.9888477956814133,
-            "iss": 0.9932110174050741,
-            "sis": 0.9951795511787667,
-            "ssi": 0.9958330458710244,
-            "ioo": 0.9943741406469522,
-            "oio": 0.9984557414025668,
-            "ooi": 1.0092641355316305,
-            "oso": 0.9949787437725824,
-            "soo": 0.9950500015590041,
-            "sos": 1.0039262025113742,
-            "oss": 1.0002450562658138
-        },
-        "hits": {
-            "iii": 1,
-            "sss": 0.989614754632695,
-            "iss": 0.9938478050344842,
-            "sis": 0.9951753385519866,
-            "ssi": 0.9961345472347511,
-            "ioo": 0.9948314987127403,
-            "oio": 0.9988696652027286,
-            "ooi": 1.0089822759829932,
-            "oso": 0.996092929834147,
-            "soo": 0.9961612620668687,
-            "sos": 1.00436597135487,
-            "oss": 1.0010637691458937
-        }
     }
 };
 
