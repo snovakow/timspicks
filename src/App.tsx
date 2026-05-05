@@ -181,7 +181,7 @@ function App() {
 					});
 				}
 				if (ANALYZE) {
-					comparePoolAccuracy();
+					comparePoolAccuracy(1);
 					ANALYZE = false;
 				}
 

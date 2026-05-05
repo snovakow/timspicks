@@ -289,9 +289,12 @@ export interface HistoricalAuditStat {
     hits: number;
     totalPicks: number;
     hitPct: number;
+    predictedHitPct: number;
     ticketWins: number;
     ticketWinPct: number;
+    predictedTicketWinPct: number;
     avgPoints: number;
+    predictedAvgPoints: number;
     ratio: string;
 }
 
@@ -302,6 +305,9 @@ type AuditBucket = {
     ticketWins: number;
     totalHits: number;
     totalPoints: number;
+    expectedTicketWins: number;
+    expectedHits: number;
+    expectedPoints: number;
 };
 
 const fetchJson = async <T>(src: string): Promise<T> => {
@@ -378,6 +384,9 @@ const initAuditBucket = (): AuditBucket => ({
     ticketWins: 0,
     totalHits: 0,
     totalPoints: 0,
+    expectedTicketWins: 0,
+    expectedHits: 0,
+    expectedPoints: 0,
 });
 
 const createAuditBuckets = (): Record<LogStatsKey, Record<StrategyMode, AuditBucket>> => ({
@@ -388,11 +397,22 @@ const createAuditBuckets = (): Record<LogStatsKey, Record<StrategyMode, AuditBuc
     betAvg: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
 });
 
-const applyAuditOutcome = (bucket: AuditBucket, hitCount: number) => {
+type ComboOutcome = {
+    hitCount: number;
+    expectedLeast1: number;
+    expectedHits: number;
+    expectedPoints: number;
+};
+
+const applyAuditOutcome = (bucket: AuditBucket, outcome: ComboOutcome) => {
+    const { hitCount, expectedLeast1, expectedHits, expectedPoints } = outcome;
     bucket.tickets++;
     if (hitCount > 0) bucket.ticketWins++;
     bucket.totalHits += hitCount;
     bucket.totalPoints += hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100;
+    bucket.expectedTicketWins += expectedLeast1;
+    bucket.expectedHits += expectedHits;
+    bucket.expectedPoints += expectedPoints;
 };
 
 const sameTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => left.team === right.team;
@@ -428,13 +448,20 @@ type StrategyBest = {
 
 type StrategyScore = {
     score: number;
-    hitCount: number;
+    outcome: ComboOutcome;
 };
 
 type BookComboEvaluation = {
-    topHitCount: number;
+    topOutcome: ComboOutcome;
     bestScores: Record<Strategy, StrategyScore | null>;
 };
+
+const createComboOutcome = (prob1: number, prob2: number, prob3: number, hitCount: number): ComboOutcome => ({
+    hitCount,
+    expectedLeast1: calcAny(prob1, prob2, prob3),
+    expectedHits: calcHit(prob1, prob2, prob3),
+    expectedPoints: calcPnt(prob1, prob2, prob3),
+});
 
 const updateParetoBest = (existing: StrategyBest | null, candidate: StrategyBest): StrategyBest => {
     if (!existing) return candidate;
@@ -483,6 +510,7 @@ const evaluateBookCombos = (
     }
 
     if (!topBest) return null;
+    const topOutcome = createComboOutcome(topBest.prob1, topBest.prob2, topBest.prob3, topBest.hitCount);
 
     const bestScores: Record<Strategy, StrategyScore | null> = {
         least1: null,
@@ -490,32 +518,38 @@ const evaluateBookCombos = (
         hits: null,
     };
 
-    const scaleCorrelation = (value: number | null): number => ((value ?? 1 - 1) * correlationFactor) + 1;
+    const scaleCorrelation = (value: number | null): number => (((value ?? 1) - 1) * correlationFactor) + 1;
     for (const [strategy, best] of strategyBestMap) {
         const { prob1, prob2, prob3, hitCount } = best;
-        const least1 = calcAny(prob1, prob2, prob3) * scaleCorrelation(ref.least1[strategy]);
-        const points = calcPnt(prob1, prob2, prob3) * scaleCorrelation(ref.points[strategy]);
-        const hits = calcHit(prob1, prob2, prob3) * scaleCorrelation(ref.hits[strategy]);
+        const outcome = createComboOutcome(prob1, prob2, prob3, hitCount);
+        const least1Scaled = scaleCorrelation(ref.least1[strategy]);
+        const pointsScaled = scaleCorrelation(ref.points[strategy]);
+        const hitsScaled = scaleCorrelation(ref.hits[strategy]);
+        const least1 = calcAny(prob1, prob2, prob3) * least1Scaled;
+        const points = calcPnt(prob1, prob2, prob3) * pointsScaled;
+        const hits = calcHit(prob1, prob2, prob3) * hitsScaled;
+
+        // Match calculateStats: correlation scales each metric independently.
+        const correlatedOutcome: ComboOutcome = {
+            hitCount,
+            expectedLeast1: outcome.expectedLeast1 * least1Scaled,
+            expectedHits: outcome.expectedHits * hitsScaled,
+            expectedPoints: outcome.expectedPoints * pointsScaled,
+        };
 
         if (bestScores.least1 === null || least1 > bestScores.least1.score) {
-            bestScores.least1 = { score: least1, hitCount };
+            bestScores.least1 = { score: least1, outcome: correlatedOutcome };
         }
         if (bestScores.points === null || points > bestScores.points.score) {
-            bestScores.points = { score: points, hitCount };
+            bestScores.points = { score: points, outcome: correlatedOutcome };
         }
         if (bestScores.hits === null || hits > bestScores.hits.score) {
-            bestScores.hits = { score: hits, hitCount };
+            bestScores.hits = { score: hits, outcome: correlatedOutcome };
         }
-    }
-
-    if (correlationFactor === 0) {
-        bestScores.least1 = { score: calcAny(topBest.prob1, topBest.prob2, topBest.prob3), hitCount: topBest.hitCount };
-        bestScores.points = { score: calcPnt(topBest.prob1, topBest.prob2, topBest.prob3), hitCount: topBest.hitCount };
-        bestScores.hits = { score: calcHit(topBest.prob1, topBest.prob2, topBest.prob3), hitCount: topBest.hitCount };
     }
 
     return {
-        topHitCount: topBest.hitCount,
+        topOutcome,
         bestScores,
     };
 };
@@ -523,16 +557,22 @@ const evaluateBookCombos = (
 const formatAuditStat = (bucket: AuditBucket): HistoricalAuditStat => {
     const totalPicks = bucket.tickets * 3;
     const hitPct = totalPicks === 0 ? 0 : (100 * bucket.totalHits) / totalPicks;
+    const predictedHitPct = totalPicks === 0 ? 0 : (100 * bucket.expectedHits) / totalPicks;
     const ticketWinPct = bucket.tickets === 0 ? 0 : (100 * bucket.ticketWins) / bucket.tickets;
+    const predictedTicketWinPct = bucket.tickets === 0 ? 0 : (100 * bucket.expectedTicketWins) / bucket.tickets;
     const avgPoints = bucket.tickets === 0 ? 0 : bucket.totalPoints / bucket.tickets;
+    const predictedAvgPoints = bucket.tickets === 0 ? 0 : bucket.expectedPoints / bucket.tickets;
     return {
         tickets: bucket.tickets,
         hits: bucket.totalHits,
         totalPicks,
         hitPct,
+        predictedHitPct,
         ticketWins: bucket.ticketWins,
         ticketWinPct,
+        predictedTicketWinPct,
         avgPoints,
+        predictedAvgPoints,
         ratio: `${bucket.totalHits}/${totalPicks}`,
     };
 };
@@ -688,11 +728,11 @@ export const runHistoricalStrategyAudit = async (
                         const evaluation = evaluateBookCombos(set1, set2, set3, bookKey, ref, correlationFactor);
                         if (!evaluation) continue;
 
-                        applyAuditOutcome(stats[bookKey].top, evaluation.topHitCount);
+                        applyAuditOutcome(stats[bookKey].top, evaluation.topOutcome);
 
                         for (const strategy of ['least1', 'points', 'hits'] as const) {
                             const result = evaluation.bestScores[strategy];
-                            if (result) applyAuditOutcome(stats[bookKey][strategy], result.hitCount);
+                            if (result) applyAuditOutcome(stats[bookKey][strategy], result.outcome);
                         }
                     }
                 } catch (error) {
@@ -744,12 +784,28 @@ export const runHistoricalStrategyAudit = async (
             return [
                 auditLabels[bookKey],
                 {
-                    [`Streak Top (${tickets})`]: `${formatAuditPercent(results[bookKey].top.ticketWinPct)} (${results[bookKey].top.ticketWins})`,
-                    [`Streak L% (${tickets})`]: `${formatAuditPercent(results[bookKey].least1.ticketWinPct)} (${results[bookKey].least1.ticketWins})`,
-                    [`Points Top (${tickets})`]: `${formatAuditPoints(results[bookKey].top.avgPoints)}`,
-                    [`Points L% (${tickets})`]: `${formatAuditPoints(results[bookKey].points.avgPoints)}`,
-                    [`Pick % Top (${picks})`]: `${formatAuditPercent(results[bookKey].top.hitPct)} (${results[bookKey].top.hits})`,
-                    [`Pick % L% (${picks})`]: `${formatAuditPercent(results[bookKey].hits.hitPct)} (${results[bookKey].hits.hits})`,
+                    [`Streak Top (${tickets}) Pred`]:
+                        `${formatAuditPercent(results[bookKey].top.ticketWinPct)} ` +
+                        `(${results[bookKey].top.ticketWins}) ` +
+                        `${formatAuditPercent(results[bookKey].top.predictedTicketWinPct)}`,
+                    [`Streak L% (${tickets}) Pred`]:
+                        `${formatAuditPercent(results[bookKey].least1.ticketWinPct)} ` +
+                        `(${results[bookKey].least1.ticketWins}) ` +
+                        `${formatAuditPercent(results[bookKey].least1.predictedTicketWinPct)}`,
+                    [`Points Top (${tickets}) Pred`]:
+                        `${formatAuditPoints(results[bookKey].top.avgPoints)} ` +
+                        `${formatAuditPoints(results[bookKey].top.predictedAvgPoints)}`,
+                    [`Points L% (${tickets}) Pred`]:
+                        `${formatAuditPoints(results[bookKey].points.avgPoints)} ` +
+                        `${formatAuditPoints(results[bookKey].points.predictedAvgPoints)}`,
+                    [`Pick % Top (${picks}) Pred`]:
+                        `${formatAuditPercent(results[bookKey].top.hitPct)} ` +
+                        `(${results[bookKey].top.hits}) ` +
+                        `${formatAuditPercent(results[bookKey].top.predictedHitPct)}`,
+                    [`Pick % L% (${picks}) Pred`]:
+                        `${formatAuditPercent(results[bookKey].hits.hitPct)} ` +
+                        `(${results[bookKey].hits.hits}) ` +
+                        `${formatAuditPercent(results[bookKey].hits.predictedHitPct)}`,
                 },
             ];
         }));
@@ -775,10 +831,9 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1) => {
         poolResult: HistoricalAuditResults,
         column: StrategyMode,
         metric: (stat: HistoricalAuditStat) => number
-    ): { books: LogStatsKey[]; stat: HistoricalAuditStat } => {
+    ): { entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>; stat: HistoricalAuditStat } => {
         let bestBooks: LogStatsKey[] = [LogStatsKeys[0]];
-        let bestStat = poolResult[LogStatsKeys[0]][column];
-        let bestValue = metric(bestStat);
+        let bestValue = metric(poolResult[LogStatsKeys[0]][column]);
 
         for (let index = 1; index < LogStatsKeys.length; index++) {
             const book = LogStatsKeys[index];
@@ -787,14 +842,19 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1) => {
             if (value > bestValue) {
                 bestValue = value;
                 bestBooks = [book];
-                bestStat = stat;
             } else if (value === bestValue) {
                 bestBooks.push(book);
             }
         }
 
-        return { books: bestBooks, stat: bestStat };
+        const entries = bestBooks.map((book) => ({ book, stat: poolResult[book][column] }));
+        return { entries, stat: entries[0].stat };
     };
+
+    const formatBookPredictions = (
+        entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>,
+        metric: (stat: HistoricalAuditStat) => string
+    ): string => entries.map((entry) => `${entry.book}(${metric(entry.stat)})`).join('/');
 
     for (const pool of pools) {
         console.log(`\n=== Pool "${pool}" ===`);
@@ -818,9 +878,42 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1) => {
         const bestCorrelatedPickPct = getTopBooksForMetric(results[pool], 'hits', (stat) => stat.hitPct);
 
         console.log(`  Pool "${pool}":`);
-        console.log(`    Streak: top=${bestTopStreak.books.join('/')} (${bestTopStreak.stat.ticketWinPct.toFixed(2)}%, ${formatTicketRatio(bestTopStreak.stat)}) | L%=${bestCorrelatedStreak.books.join('/')} (${bestCorrelatedStreak.stat.ticketWinPct.toFixed(2)}%, ${formatTicketRatio(bestCorrelatedStreak.stat)})`);
-        console.log(`    Points: top=${bestTopPoints.books.join('/')} (${bestTopPoints.stat.avgPoints.toFixed(2)}) | L%=${bestCorrelatedPoints.books.join('/')} (${bestCorrelatedPoints.stat.avgPoints.toFixed(2)})`);
-        console.log(`    Pick %: top=${bestTopPickPct.books.join('/')} (${bestTopPickPct.stat.hitPct.toFixed(2)}%, ${bestTopPickPct.stat.ratio}) | L%=${bestCorrelatedPickPct.books.join('/')} (${bestCorrelatedPickPct.stat.hitPct.toFixed(2)}%, ${bestCorrelatedPickPct.stat.ratio})`);
+        console.log([
+            `    Streak Top:`,
+            `${bestTopStreak.stat.ticketWinPct.toFixed(2)}%`,
+            `(${formatTicketRatio(bestTopStreak.stat)})`,
+            `${formatBookPredictions(bestTopStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
+        ].join(' '));
+        console.log([
+            `    Streak L%: `,
+            `${bestCorrelatedStreak.stat.ticketWinPct.toFixed(2)}%`,
+            `(${formatTicketRatio(bestCorrelatedStreak.stat)})`,
+            `${formatBookPredictions(bestCorrelatedStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
+        ].join(' '));
+        console.log([
+            `    Points Top:`,
+            `${bestTopPoints.stat.avgPoints.toFixed(2)}`,
+            `(${bestTopPoints.stat.tickets})`,
+            `${formatBookPredictions(bestTopPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
+        ].join(' '));
+        console.log([
+            `    Points L%: `,
+            `${bestCorrelatedPoints.stat.avgPoints.toFixed(2)}`,
+            `(${bestCorrelatedPoints.stat.tickets})`,
+            `${formatBookPredictions(bestCorrelatedPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
+        ].join(' '));
+        console.log([
+            `    Pick % Top:`,
+            `${bestTopPickPct.stat.hitPct.toFixed(2)}%`,
+            `(${bestTopPickPct.stat.ratio})`,
+            `${formatBookPredictions(bestTopPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
+        ].join(' '));
+        console.log([
+            `    Pick % L%: `,
+            `${bestCorrelatedPickPct.stat.hitPct.toFixed(2)}%`,
+            `(${bestCorrelatedPickPct.stat.ratio})`,
+            `${formatBookPredictions(bestCorrelatedPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
+        ].join(' '));
     }
 
     return results;
