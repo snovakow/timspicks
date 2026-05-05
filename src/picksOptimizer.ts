@@ -31,7 +31,8 @@ interface HistoryPlayer {
     "availableTimes": string[];
 }
 
-type CorrelationData = Record<typeof allStrategies[number], number>;
+type CorrelationData = Record<typeof allStrategies[number], number | null>;
+type CorrelationCount = Record<typeof allStrategies[number], number>;
 type BaselineKey = 'random' | 'iii';
 
 export interface CorrelationResult {
@@ -50,7 +51,7 @@ class Correlation {
         least1: {} as CorrelationData,
         points: {} as CorrelationData,
         hits: {} as CorrelationData,
-        count: {} as CorrelationData
+        count: {} as CorrelationCount
     }
     baseline: Total = {
         least1: 0,
@@ -63,14 +64,18 @@ class Correlation {
     constructor(baselineKey: BaselineKey) {
         this.baselineKey = baselineKey;
         for (const combo of allStrategies) {
-            this.strategy.least1[combo] = 0;
-            this.strategy.points[combo] = 0;
-            this.strategy.hits[combo] = 0;
+            this.strategy.least1[combo] = null;
+            this.strategy.points[combo] = null;
+            this.strategy.hits[combo] = null;
             this.strategy.count[combo] = 0;
         }
     }
     add(result: SimTotal) {
         for (const combo of allStrategies) {
+            if (result[combo].count === 0) continue;
+            if (this.strategy.least1[combo] === null) this.strategy.least1[combo] = 0;
+            if (this.strategy.points[combo] === null) this.strategy.points[combo] = 0;
+            if (this.strategy.hits[combo] === null) this.strategy.hits[combo] = 0;
             this.strategy.least1[combo] += result[combo].least1;
             this.strategy.points[combo] += result[combo].points;
             this.strategy.hits[combo] += result[combo].hits;
@@ -92,6 +97,9 @@ class Correlation {
         for (const combo of allStrategies) {
             const count = this.strategy.count[combo];
             if (count === 0) continue;
+            if (this.strategy.least1[combo] === null) this.strategy.least1[combo] = 0;
+            if (this.strategy.points[combo] === null) this.strategy.points[combo] = 0;
+            if (this.strategy.hits[combo] === null) this.strategy.hits[combo] = 0;
             this.strategy.least1[combo] /= count * this.baseline.least1;
             this.strategy.points[combo] /= count * this.baseline.points;
             this.strategy.hits[combo] /= count * this.baseline.hits;
