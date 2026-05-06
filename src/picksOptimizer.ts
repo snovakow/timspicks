@@ -4,7 +4,7 @@ import type { CorrelationData, CorrelationResult, CorrelationResults } from "./c
 import { correlations } from "./correlationData";
 import { deVig, oddsNameMap } from "./dataProcessor";
 import type { ComboPattern, LogStatsKey, StrategyMode, Strategy } from "./dataTypes";
-import { AllCombos, SportsbookKeys, LogStatsKeys, Sportsbooks } from "./dataTypes";
+import { AllCombos, SportsbookKeys, LogStatsKeys, Sportsbooks, StrategyLabels } from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
 import { selectStrategyCombos } from "./strategySelection";
 
@@ -939,25 +939,25 @@ export const runHistoricalStrategyAudit = async (
             return [
                 auditLabels[bookKey],
                 {
-                    [`Streak Top (${tickets}) Pred`]:
+                    [`${StrategyLabels.least1} Top (${tickets}) Pred`]:
                         `${formatAuditPercent(results[bookKey].top.ticketWinPct)} ` +
                         `(${results[bookKey].top.ticketWins}) ` +
                         `${formatAuditPercent(results[bookKey].top.predictedTicketWinPct)}`,
-                    [`Streak L% (${tickets}) Pred`]:
+                    [`${StrategyLabels.least1} L% (${tickets}) Pred`]:
                         `${formatAuditPercent(results[bookKey].least1.ticketWinPct)} ` +
                         `(${results[bookKey].least1.ticketWins}) ` +
                         `${formatAuditPercent(results[bookKey].least1.predictedTicketWinPct)}`,
-                    [`Points Top (${tickets}) Pred`]:
+                    [`${StrategyLabels.points} Top (${tickets}) Pred`]:
                         `${formatAuditPoints(results[bookKey].top.avgPoints)} ` +
                         `${formatAuditPoints(results[bookKey].top.predictedAvgPoints)}`,
-                    [`Points L% (${tickets}) Pred`]:
+                    [`${StrategyLabels.points} L% (${tickets}) Pred`]:
                         `${formatAuditPoints(results[bookKey].points.avgPoints)} ` +
                         `${formatAuditPoints(results[bookKey].points.predictedAvgPoints)}`,
-                    [`Pick % Top (${picks}) Pred`]:
+                    [`${StrategyLabels.hits} Top (${picks}) Pred`]:
                         `${formatAuditPercent(results[bookKey].top.hitPct)} ` +
                         `(${results[bookKey].top.hits}) ` +
                         `${formatAuditPercent(results[bookKey].top.predictedHitPct)}`,
-                    [`Pick % L% (${picks}) Pred`]:
+                    [`${StrategyLabels.hits} L% (${picks}) Pred`]:
                         `${formatAuditPercent(results[bookKey].hits.hitPct)} ` +
                         `(${results[bookKey].hits.hits}) ` +
                         `${formatAuditPercent(results[bookKey].hits.predictedHitPct)}`,
@@ -1054,37 +1054,37 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1): Promis
 
         console.log(`  Pool "${pool}":`);
         console.log([
-            `    Streak Top:`,
+            `    ${StrategyLabels.least1} Top:`,
             `${bestTopStreak.stat.ticketWinPct.toFixed(2)}%`,
             `(${formatTicketRatio(bestTopStreak.stat)})`,
             `${formatBookPredictions(bestTopStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
         ].join(' '));
         console.log([
-            `    Streak L%: `,
+            `    ${StrategyLabels.least1} L%: `,
             `${bestCorrelatedStreak.stat.ticketWinPct.toFixed(2)}%`,
             `(${formatTicketRatio(bestCorrelatedStreak.stat)})`,
             `${formatBookPredictions(bestCorrelatedStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
         ].join(' '));
         console.log([
-            `    Points Top:`,
+            `    ${StrategyLabels.points} Top:`,
             `${bestTopPoints.stat.avgPoints.toFixed(2)}`,
             `(${bestTopPoints.stat.tickets})`,
             `${formatBookPredictions(bestTopPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
         ].join(' '));
         console.log([
-            `    Points L%: `,
+            `    ${StrategyLabels.points} L%: `,
             `${bestCorrelatedPoints.stat.avgPoints.toFixed(2)}`,
             `(${bestCorrelatedPoints.stat.tickets})`,
             `${formatBookPredictions(bestCorrelatedPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
         ].join(' '));
         console.log([
-            `    Pick % Top:`,
+            `    ${StrategyLabels.hits} Top:`,
             `${bestTopPickPct.stat.hitPct.toFixed(2)}%`,
             `(${bestTopPickPct.stat.ratio})`,
             `${formatBookPredictions(bestTopPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
         ].join(' '));
         console.log([
-            `    Pick % L%: `,
+            `    ${StrategyLabels.hits} L%: `,
             `${bestCorrelatedPickPct.stat.hitPct.toFixed(2)}%`,
             `(${bestCorrelatedPickPct.stat.ratio})`,
             `${formatBookPredictions(bestCorrelatedPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
@@ -1146,30 +1146,13 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1): Promis
 };
 
 class StrategyType {
-    strategy: Strategy;
+    key: Strategy;
     correlationRatio: number;
     books: LogStatsKey[];
-    bookTitles: string[];
-    strategyTitle: string;
     constructor(strategy: Strategy, correlationRatio: number = 1, books: LogStatsKey[] = []) {
-        this.strategy = strategy;
+        this.key = strategy;
         this.correlationRatio = correlationRatio;
         this.books = books;
-        this.bookTitles = books.map((book) => {
-            if (book === 'betAvg') return 'Average';
-            return Sportsbooks[book].title;
-        });
-        switch (strategy) {
-            case 'least1':
-                this.strategyTitle = 'Streak';
-                break;
-            case 'points':
-                this.strategyTitle = 'Points';
-                break;
-            case 'hits':
-                this.strategyTitle = 'Pick%';
-                break;
-        }
     }
 }
 interface BestPicksResult {
