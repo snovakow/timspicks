@@ -518,17 +518,15 @@ function App() {
 					</span>
 				</span>
 				<div className='toolBar toolbar-end'>
-					{Feature.correlation && (
-						<button className="button" title="Legend" aria-label="Legend"
-							onClick={
-								() => {
-									if (showPopup.visible && popupView === 'legend') closePopup();
-									else openLegendPopup();
-								}
-							}>
-							<img src={iconLegend} alt="ℹ️" aria-hidden="true" />
-						</button>
-					)}
+					<button className={`button${Feature.correlation ? '' : ' button-disabled'}`} title="Legend" aria-label="Legend"
+						onClick={
+							() => {
+								if (showPopup.visible && popupView === 'legend') closePopup();
+								else openLegendPopup();
+							}
+						}>
+						<img src={iconLegend} alt="ℹ️" aria-hidden="true" />
+					</button>
 					<button className="button" title="Info" aria-label="Info"
 						onClick={
 							() => {
