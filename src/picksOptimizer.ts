@@ -1349,7 +1349,7 @@ export const bestPicks = async (picks1: Picks.PickOdds[], picks2: Picks.PickOdds
     for (const strategy of AllStrategies) {
         const config = strategyConfig[strategy];
         if (!config) continue;
-        for (const [_, { combo, ratio }] of bestByStrategyAndBooks[strategy]) {
+        for (const { combo, ratio } of bestByStrategyAndBooks[strategy].values()) {
             const code = comboCode(combo);
             const existing = merged.get(code);
             if (existing) {

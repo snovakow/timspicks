@@ -4,7 +4,7 @@ import * as Picks from './components/Table';
 import Popup from './components/Popup';
 import InfoPopupContent, { LegendPopupContent } from './components/InfoPopupContent';
 import StatsPopupContent from './components/StatsPopupContent';
-import type { SportsbookLog, LogStatsKey, StrategyMode, SportsbookKey, Strategy } from './dataTypes';
+import type { SportsbookLog, LogStatsKey, StrategyMode, Strategy } from './dataTypes';
 import { Sportsbooks, StrategyLabels } from './dataTypes';
 import SettingsPanel from './components/Settings';
 import { roundToPercent, probabilityToAmerican, getEntries } from './utility';
