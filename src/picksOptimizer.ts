@@ -4,7 +4,7 @@ import type { CorrelationData, CorrelationResult, CorrelationResults } from "./c
 import { correlations } from "./correlationData";
 import { deVig, oddsNameMap } from "./dataProcessor";
 import type { ComboPattern, LogStatsKey, StrategyMode, Strategy } from "./dataTypes";
-import { AllCombos, SportsbookKeys, LogStatsKeys, Sportsbooks, StrategyLabels } from "./dataTypes";
+import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies } from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
 import { selectStrategyCombos } from "./strategySelection";
 
@@ -671,7 +671,7 @@ const evaluateBookCombos = (
             hits: correlatedOutcome.expectedHits,
         };
 
-        for (const metric of ['least1', 'points', 'hits'] as const) {
+        for (const metric of AllStrategies) {
             const score = scores[metric];
             const current = bestSelections[metric];
             const scoredSelection = { selection, outcome: correlatedOutcome };
@@ -688,7 +688,7 @@ const evaluateBookCombos = (
         points: null,
         hits: null,
     };
-    for (const metric of ['least1', 'points', 'hits'] as const) {
+    for (const metric of AllStrategies) {
         const best = bestSelections[metric];
         if (!best) continue;
         // For actual outcomes, use only the first (representative) tied selection.
@@ -885,7 +885,7 @@ export const runHistoricalStrategyAudit = async (
 
                         applyAuditOutcome(stats[bookKey].top, evaluation.topOutcome);
 
-                        for (const strategy of ['least1', 'points', 'hits'] as const) {
+                        for (const strategy of AllStrategies) {
                             const result = evaluation.bestScores[strategy];
                             if (result) applyAuditOutcome(stats[bookKey][strategy], result.outcome);
                         }
@@ -1042,7 +1042,7 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1): Promis
         const bestCorrelatedPoints = getTopBooksForMetric(results[pool], 'points', (stat) => stat.avgPoints);
         const bestCorrelatedPickPct = getTopBooksForMetric(results[pool], 'hits', (stat) => stat.hitPct);
 
-        const bestModeForWins = [
+        const bestModeForWins: { mode: StrategyMode; result: { entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>; stat: HistoricalAuditStat } } = [
             { mode: 'top' as const, result: getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct) },
             { mode: 'least1' as const, result: getTopBooksForMetric(results[pool], 'least1', (stat) => stat.ticketWinPct) },
             { mode: 'points' as const, result: getTopBooksForMetric(results[pool], 'points', (stat) => stat.ticketWinPct) },
@@ -1223,7 +1223,7 @@ export const bestPicks = async (picks1: Picks.PickOdds[], picks2: Picks.PickOdds
     };
 
     // Compare and decide for each strategy
-    for (const strategy of ['least1', 'points', 'hits'] as const) {
+    for (const strategy of AllStrategies) {
         let topBooks: LogStatsKey[];
         let topScore: number;
         let corrBooks: LogStatsKey[];
@@ -1270,7 +1270,7 @@ export const bestPicks = async (picks1: Picks.PickOdds[], picks2: Picks.PickOdds
     };
 
     // Find best combos for each strategy using its decided configuration
-    for (const strategy of ['least1', 'points', 'hits'] as const) {
+    for (const strategy of AllStrategies) {
         const config = strategyConfig[strategy];
         if (!config) continue;
         const candidateBooks = config.books;
@@ -1346,7 +1346,7 @@ export const bestPicks = async (picks1: Picks.PickOdds[], picks2: Picks.PickOdds
 
     // Merge results: same combo might work for multiple strategies with different books/ratios
     const merged = new Map<string, { combo: Pick<BestPicksResult, "1" | "2" | "3">; strategies: Map<Strategy, { ratio: number; books: LogStatsKey[] }> }>();
-    for (const strategy of ['least1', 'points', 'hits'] as const) {
+    for (const strategy of AllStrategies) {
         const config = strategyConfig[strategy];
         if (!config) continue;
         for (const [_, { combo, ratio }] of bestByStrategyAndBooks[strategy]) {
