@@ -425,6 +425,93 @@ const sameTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolea
 const opponentTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => left.team === right.opponent;
 const sameGameSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => sameTeamSnapshot(left, right) || opponentTeamSnapshot(left, right);
 
+const countSnapshotGames = (rows: SnapshotOddsRow[]): number => {
+    const games = new Set<string>();
+    for (const row of rows) {
+        const [left, right] = [row.team, row.opponent].sort();
+        games.add(`${left}|${right}`);
+    }
+    return games.size;
+};
+
+const countGamesForSlot = (playerSets: Map<string, Map<number, HistoryPlayer>>, slotTime: string): number => {
+    const teams = new Set<string>();
+    let gameCount = 0;
+    for (const set of playerSets.values()) {
+        for (const player of set.values()) {
+            if (!Array.isArray(player.availableTimes)) continue;
+            if (!player.availableTimes.includes(slotTime)) continue;
+            if (teams.has(player.team)) continue;
+            teams.add(player.team);
+            teams.add(player.opponent);
+            gameCount++;
+        }
+    }
+    return gameCount;
+};
+
+const countGamesFromHelper = (
+    helper: Record<'1' | '2' | '3', Picks.OddsItem[]>,
+    playerSets: Map<string, Map<number, HistoryPlayer>>
+): number => {
+    const teams = new Set<string>();
+    let gameCount = 0;
+
+    for (const sid of ['1', '2', '3'] as const) {
+        const outcomes = playerSets.get(sid);
+        if (!outcomes) continue;
+
+        for (const item of helper[sid] ?? []) {
+            const player = outcomes.get(Math.abs(item.playerId));
+            if (!player) continue;
+            if (teams.has(player.team)) continue;
+
+            teams.add(player.team);
+            teams.add(player.opponent);
+            gameCount++;
+        }
+    }
+
+    return gameCount;
+};
+
+const getRemainingGamesBySlot = async (date: string): Promise<Map<string, number>> => {
+    const data = await fetchOptionalJson<{
+        gameWeek: Array<{
+            date: string;
+            games: Array<{ startTimeUTC: string; easternUTCOffset: string }>;
+        }>;
+    }>(`./data/${date}/games.json`);
+
+    if (!data) return new Map();
+
+    const startTimes: string[] = [];
+    for (const week of data.gameWeek) {
+        if (week.date !== date) continue;
+        for (const game of week.games) {
+            const utc = new Date(game.startTimeUTC);
+            const offsetMatch = game.easternUTCOffset.match(/^([+-])(\d{2}):(\d{2})$/);
+            if (!offsetMatch) continue;
+
+            const [, sign, hoursText, minutesText] = offsetMatch;
+            const offsetMinutes = (Number(hoursText) * 60) + Number(minutesText);
+            const direction = sign === '-' ? -1 : 1;
+            const local = new Date(utc.getTime() + direction * offsetMinutes * 60_000);
+            const hhmm = `${local.getUTCHours().toString().padStart(2, '0')}${local.getUTCMinutes().toString().padStart(2, '0')}`;
+            startTimes.push(hhmm);
+        }
+    }
+
+    const uniqueSlots = Array.from(new Set(startTimes)).sort();
+    const remainingBySlot = new Map<string, number>();
+    for (const slot of uniqueSlots) {
+        const remaining = startTimes.reduce((count, time) => count + (time >= slot ? 1 : 0), 0);
+        remainingBySlot.set(slot, remaining);
+    }
+
+    return remainingBySlot;
+};
+
 const getSnapshotStrategy = (pick1: SnapshotOddsRow, pick2: SnapshotOddsRow, pick3: SnapshotOddsRow): ComboPattern | null => {
     if (!sameGameSnapshot(pick1, pick2) && !sameGameSnapshot(pick2, pick3) && !sameGameSnapshot(pick1, pick3)) return 'iii';
     if (sameTeamSnapshot(pick1, pick2) && sameTeamSnapshot(pick2, pick3)) return 'sss';
@@ -486,7 +573,7 @@ type HitPctSummary = {
 
 export type PoolAccuracySummary = {
     recommendedForWins: {
-        mode: 'top' | 'least1';
+        mode: StrategyMode;
         books: LogStatsKey[];
         actualTicketWinPct: number;
         predictedByBook: BookPredictionSummary[];
@@ -766,6 +853,7 @@ export const runHistoricalStrategyAudit = async (
             }
 
             const gameStartTimes = await getGameStartTimeGroups(date);
+            const remainingGamesBySlot = await getRemainingGamesBySlot(date);
 
             for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
                 try {
@@ -836,8 +924,18 @@ export const runHistoricalStrategyAudit = async (
                             : values.reduce((sum, value) => sum + value, 0) / values.length;
                     }
 
-                    // Pools are based on remaining grouped game start-times for this date.
-                    const gameCount = gameStartTimes.length - slotIndex;
+                    // Pool game count mirrors app logic (gamesCount-like) using slot helper picks.
+                    // Use games.json as day-level slot progression/remaining-games reference.
+                    const helperGameCount = countGamesFromHelper(helper, playerSets);
+                    const remainingGameCount = remainingGamesBySlot.get(folderTime) ?? 0;
+                    const slotGameCount = countGamesForSlot(playerSets, folderTime);
+                    const gameCount = helperGameCount > 0
+                        ? helperGameCount
+                        : slotGameCount > 0
+                            ? slotGameCount
+                            : remainingGameCount > 0
+                                ? remainingGameCount
+                                : countSnapshotGames(rows);
 
                     if (gameCountFilter !== 'all') {
                         const poolKey = gameCount === 1 ? '1' : gameCount === 2 ? '2' : '3+';
@@ -1014,6 +1112,16 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1): Promis
         const bestCorrelatedPoints = getTopBooksForMetric(results[pool], 'points', (stat) => stat.avgPoints);
         const bestCorrelatedPickPct = getTopBooksForMetric(results[pool], 'hits', (stat) => stat.hitPct);
 
+        const bestModeForWins = [
+            { mode: 'top' as const, result: getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct) },
+            { mode: 'least1' as const, result: getTopBooksForMetric(results[pool], 'least1', (stat) => stat.ticketWinPct) },
+            { mode: 'points' as const, result: getTopBooksForMetric(results[pool], 'points', (stat) => stat.ticketWinPct) },
+            { mode: 'hits' as const, result: getTopBooksForMetric(results[pool], 'hits', (stat) => stat.ticketWinPct) },
+        ].reduce((best, current) => {
+            if (current.result.stat.ticketWinPct > best.result.stat.ticketWinPct) return current;
+            return best;
+        });
+
         console.log(`  Pool "${pool}":`);
         console.log([
             `    Streak Top:`,
@@ -1052,23 +1160,14 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1): Promis
             `${formatBookPredictions(bestCorrelatedPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
         ].join(' '));
 
-        const recommendedForWins = bestCorrelatedStreak.stat.ticketWinPct >= bestTopStreak.stat.ticketWinPct
-            ? {
-                mode: 'least1' as const,
-                books: bestCorrelatedStreak.entries.map((entry) => entry.book),
-                actualTicketWinPct: bestCorrelatedStreak.stat.ticketWinPct,
-                predictedByBook: summarizeEntries(bestCorrelatedStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
-                ticketRatio: formatTicketRatio(bestCorrelatedStreak.stat),
-                tickets: bestCorrelatedStreak.stat.tickets,
-            }
-            : {
-                mode: 'top' as const,
-                books: bestTopStreak.entries.map((entry) => entry.book),
-                actualTicketWinPct: bestTopStreak.stat.ticketWinPct,
-                predictedByBook: summarizeEntries(bestTopStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
-                ticketRatio: formatTicketRatio(bestTopStreak.stat),
-                tickets: bestTopStreak.stat.tickets,
-            };
+        const recommendedForWins = {
+            mode: bestModeForWins.mode,
+            books: bestModeForWins.result.entries.map((entry) => entry.book),
+            actualTicketWinPct: bestModeForWins.result.stat.ticketWinPct,
+            predictedByBook: summarizeEntries(bestModeForWins.result.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
+            ticketRatio: formatTicketRatio(bestModeForWins.result.stat),
+            tickets: bestModeForWins.result.stat.tickets,
+        };
 
         summaryByPool[pool] = {
             recommendedForWins,
