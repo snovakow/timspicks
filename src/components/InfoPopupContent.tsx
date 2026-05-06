@@ -1,5 +1,5 @@
 import * as Feature from '../features';
-import { sportsbooks } from '../sportsbookTypes';
+import { Sportsbooks } from '../sportsbookTypes';
 import { getEntries } from '../utility';
 
 import './InfoPopupContent.css';
@@ -20,7 +20,7 @@ export default function InfoPopupContent() {
 			<section className="info-popup-section">
 				<h3>Sportsbooks</h3>
 				<div className="sportsbook-list" >
-					{getEntries(sportsbooks).map(([key, book]) => (
+					{getEntries(Sportsbooks).map(([key, book]) => (
 						<div key={key} className="sportsbook-item">
 							<img className="sportsbook-logo sportsbook-logo-rounded" src={book.logo} alt={`${book.title} logo`} />
 							<span>{book.title}</span>

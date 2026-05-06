@@ -3,8 +3,8 @@ import { roundToPercent } from './utility';
 import { calcAny, calcPnt, calcHit, gamesCount } from './picksOptimizer';
 import { correlations, } from './correlationData';
 import type { CorrelationResult } from './correlationData';
-import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode, strategyPattern } from './sportsbookTypes';
-import { LogStatsKeys, sportsbooks } from './sportsbookTypes';
+import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode, ComboPattern } from './sportsbookTypes';
+import { LogStatsKeys, Sportsbooks } from './sportsbookTypes';
 import type { MergedSelection, SelectionCandidate } from './strategySelection';
 import { selectStrategyCombos } from './strategySelection';
 import * as Feature from './features';
@@ -124,7 +124,7 @@ const calculateStats = (
 
 		// Scale correlation effect with linear interpolation:
 		// factor=0 => no effect, factor=1 => full effect, factor>1 => amplified effect.
-		correlate(strategy: strategyPattern, ref: CorrelationResult): void {
+		correlate(strategy: ComboPattern, ref: CorrelationResult): void {
 			const least1 = ref.least1[strategy];
 			if (least1 !== null) this.least1 *= (least1 - 1) * factor + 1;
 			const points = ref.points[strategy];
@@ -149,7 +149,7 @@ const calculateStats = (
 		oss = oo + s as 2
 	*/
 
-	const strategyTitle = (strategy: strategyPattern): string => {
+	const strategyTitle = (strategy: ComboPattern): string => {
 		if (strategy === 'iii') return "All Independent";
 		if (strategy === 'sss') return "All Stacked";
 		if (strategy === 'iss') return "2-3 Stacked, 1 Independent";
@@ -165,7 +165,7 @@ const calculateStats = (
 		return strategy;
 	}
 
-	const getStrategy = (pick1: Picks.Player, pick2: Picks.Player, pick3: Picks.Player): strategyPattern | null => {
+	const getStrategy = (pick1: Picks.Player, pick2: Picks.Player, pick3: Picks.Player): ComboPattern | null => {
 		if (!pick1.sameGame(pick2) && !pick2.sameGame(pick3) && !pick1.sameGame(pick3)) return 'iii';
 		if (pick1.sameTeam(pick2) && pick2.sameTeam(pick3)) return 'sss';
 
@@ -252,7 +252,7 @@ const calculateStats = (
 		logCalcStats(avgResult);
 	}
 
-	const logReduced = (avgResult: Result, topResult: Result, strategy: strategyPattern): void => {
+	const logReduced = (avgResult: Result, topResult: Result, strategy: ComboPattern): void => {
 		let line1 = `1: ${names(avgResult.players1, true)}`;
 		let reducedCount = 0;
 		if (avgResult.prob1 !== topResult.prob1) {
@@ -314,14 +314,14 @@ const calculateStats = (
 	if (topSelection === null) return;
 	const topResult = new Result(topSelection);
 
-	const strategyResults: Map<strategyPattern, Result> = new Map();
+	const strategyResults: Map<ComboPattern, Result> = new Map();
 	for (const [strategy, combos] of strategies) {
 		const selection = combos.merge();
 		if (selection !== null) strategyResults.set(strategy, new Result(selection));
 	}
 
 	type strategyGroup = {
-		strategy: strategyPattern;
+		strategy: ComboPattern;
 		result: Result;
 	}
 	const findMax = (key: Strategy): strategyGroup[] => {
@@ -362,7 +362,7 @@ const calculateStats = (
 	const points = processSameGroup('points');
 	const hits = processSameGroup('hits');
 
-	const header = betKey === 'betAvg' ? "Average" : `${sportsbooks[betKey].title}`;
+	const header = betKey === 'betAvg' ? "Average" : `${Sportsbooks[betKey].title}`;
 	logHandler.addTitle(header + " Top Picks");
 	logTopPicks(topResult);
 	logHighlights(topResult);
@@ -371,9 +371,9 @@ const calculateStats = (
 	if (Feature.correlation) {
 		class GroupedPlayer {
 			result: Result;
-			strategy: strategyPattern;
+			strategy: ComboPattern;
 			strategyCombos: Map<Strategy, LogLine>;
-			constructor(result: Result, strategy: strategyPattern, key: Strategy) {
+			constructor(result: Result, strategy: ComboPattern, key: Strategy) {
 				this.result = result;
 				this.strategy = strategy;
 				this.strategyCombos = new Map();

@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { getEntries } from '../utility';
 import type { LogStatsKey, SportsbookKey, LogLines } from '../sportsbookTypes';
-import { sportsbooks } from '../sportsbookTypes';
+import { Sportsbooks } from '../sportsbookTypes';
 
 import './StatsPopupContent.css';
 import './sportsbook.css';
@@ -29,7 +29,7 @@ export default function StatsPopupContent({ bookStats }: StatsPopupContentProps)
 	return (
 		<>
 			{(bookStats && <div className="sportsbook-list">
-				{getEntries(sportsbooks).map(([key, book]) => (
+				{getEntries(Sportsbooks).map(([key, book]) => (
 					<button
 						key={key}
 						type="button"

@@ -1,5 +1,5 @@
-import type { strategyPattern } from './sportsbookTypes';
-import { allStrategies } from './sportsbookTypes';
+import type { ComboPattern } from './sportsbookTypes';
+import { AllCombos } from './sportsbookTypes';
 
 export type SelectionCandidate<T> = {
     pick1: T;
@@ -8,7 +8,7 @@ export type SelectionCandidate<T> = {
     prob1: number;
     prob2: number;
     prob3: number;
-    strategy: strategyPattern | null;
+    strategy: ComboPattern | null;
 };
 
 export type MergedSelection<T> = {
@@ -73,11 +73,11 @@ export class ComboGroup<T> {
 
 export const selectStrategyCombos = <T>(candidates: Iterable<SelectionCandidate<T>>): {
     top: ComboGroup<T>;
-    strategies: Map<strategyPattern, ComboGroup<T>>;
+    strategies: Map<ComboPattern, ComboGroup<T>>;
 } => {
     const top = new ComboGroup<T>();
-    const strategies = new Map<strategyPattern, ComboGroup<T>>();
-    for (const strategy of allStrategies) strategies.set(strategy, new ComboGroup<T>());
+    const strategies = new Map<ComboPattern, ComboGroup<T>>();
+    for (const strategy of AllCombos) strategies.set(strategy, new ComboGroup<T>());
 
     for (const candidate of candidates) {
         top.add(candidate);

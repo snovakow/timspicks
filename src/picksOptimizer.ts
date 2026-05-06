@@ -3,8 +3,8 @@ import * as Picks from "./components/Table";
 import type { CorrelationData, CorrelationResult, CorrelationResults } from "./correlationData";
 import { correlations } from "./correlationData";
 import { deVig, oddsNameMap } from "./dataProcessor";
-import type { strategyPattern, LogStatsKey, StrategyMode, Strategy } from "./sportsbookTypes";
-import { allStrategies, SportsbookKeys, LogStatsKeys, sportsbooks } from "./sportsbookTypes";
+import type { ComboPattern, LogStatsKey, StrategyMode, Strategy } from "./sportsbookTypes";
+import { AllCombos, SportsbookKeys, LogStatsKeys, Sportsbooks } from "./sportsbookTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
 import { selectStrategyCombos } from "./strategySelection";
 
@@ -36,7 +36,7 @@ interface HistoryPlayer {
     "availableTimes": string[];
 }
 
-type CorrelationCount = Record<typeof allStrategies[number], number>;
+type CorrelationCount = Record<typeof AllCombos[number], number>;
 type BaselineKey = 'random' | 'iii';
 
 class Correlation {
@@ -56,7 +56,7 @@ class Correlation {
 
     constructor(baselineKey: BaselineKey) {
         this.baselineKey = baselineKey;
-        for (const combo of allStrategies) {
+        for (const combo of AllCombos) {
             this.strategy.least1[combo] = null;
             this.strategy.points[combo] = null;
             this.strategy.hits[combo] = null;
@@ -64,7 +64,7 @@ class Correlation {
         }
     }
     add(result: SimTotal) {
-        for (const combo of allStrategies) {
+        for (const combo of AllCombos) {
             if (result[combo].count === 0) continue;
             if (this.strategy.least1[combo] === null) this.strategy.least1[combo] = 0;
             if (this.strategy.points[combo] === null) this.strategy.points[combo] = 0;
@@ -87,7 +87,7 @@ class Correlation {
         this.baseline.points /= this.baseline.count;
         this.baseline.hits /= this.baseline.count;
 
-        for (const combo of allStrategies) {
+        for (const combo of AllCombos) {
             const count = this.strategy.count[combo];
             if (count === 0) continue;
             if (this.strategy.least1[combo] === null) this.strategy.least1[combo] = 0;
@@ -173,7 +173,7 @@ class ResultTotal implements Total {
     }
 }
 
-export type SimTotal = Record<strategyPattern | 'random', Total>;
+export type SimTotal = Record<ComboPattern | 'random', Total>;
 interface SimItem {
     slotTotal: number;
     slotIndex: number;
@@ -212,7 +212,7 @@ function oSet(player: HistoryPlayer, set: PlayerSet): PlayerSet {
  * @param pattern strategyPattern string
  * @returns Result or null if a valid combo can't be formed
  */
-function simulateCombo(set1: PlayerSet, set2: PlayerSet, set3: PlayerSet, pattern: strategyPattern): Result | null {
+function simulateCombo(set1: PlayerSet, set2: PlayerSet, set3: PlayerSet, pattern: ComboPattern): Result | null {
     const pick1 = getRandomEntry(set1);
     if (!pick1) return null;
     let pick2: HistoryPlayer | undefined;
@@ -424,7 +424,7 @@ const sameTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolea
 const opponentTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => left.team === right.opponent;
 const sameGameSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => sameTeamSnapshot(left, right) || opponentTeamSnapshot(left, right);
 
-const getSnapshotStrategy = (pick1: SnapshotOddsRow, pick2: SnapshotOddsRow, pick3: SnapshotOddsRow): strategyPattern | null => {
+const getSnapshotStrategy = (pick1: SnapshotOddsRow, pick2: SnapshotOddsRow, pick3: SnapshotOddsRow): ComboPattern | null => {
     if (!sameGameSnapshot(pick1, pick2) && !sameGameSnapshot(pick2, pick3) && !sameGameSnapshot(pick1, pick3)) return 'iii';
     if (sameTeamSnapshot(pick1, pick2) && sameTeamSnapshot(pick2, pick3)) return 'sss';
 
@@ -1127,7 +1127,7 @@ class StrategyType {
         this.books = books;
         this.bookTitles = books.map((book) => {
             if (book === 'betAvg') return 'Average';
-            return sportsbooks[book].title;
+            return Sportsbooks[book].title;
         });
         switch (strategy) {
             case 'least1':
@@ -1151,7 +1151,7 @@ interface BestPicksResult {
 
 const resolvePoolKey = (gameCount: number): Exclude<PoolKey, 'all'> => gameCount <= 1 ? '1' : gameCount === 2 ? '2' : '3+';
 
-const getPlayerStrategy = (pick1: Picks.Player, pick2: Picks.Player, pick3: Picks.Player): strategyPattern | null => {
+const getPlayerStrategy = (pick1: Picks.Player, pick2: Picks.Player, pick3: Picks.Player): ComboPattern | null => {
     if (!pick1.sameGame(pick2) && !pick2.sameGame(pick3) && !pick1.sameGame(pick3)) return 'iii';
     if (pick1.sameTeam(pick2) && pick2.sameTeam(pick3)) return 'sss';
 
@@ -1387,12 +1387,12 @@ export const runSimulation = async (iterations: number) => {
 
     class GameResult {
         randomResults = new ResultTotal();
-        strategyResults: Map<strategyPattern, ResultTotal> = new Map();
+        strategyResults: Map<ComboPattern, ResultTotal> = new Map();
 
         picksCount = 0;
 
         constructor() {
-            for (const strategy of allStrategies) {
+            for (const strategy of AllCombos) {
                 this.strategyResults.set(strategy, new ResultTotal());
             }
         }

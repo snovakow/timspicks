@@ -5,7 +5,7 @@ import Popup from './components/Popup';
 import InfoPopupContent, { LegendPopupContent } from './components/InfoPopupContent';
 import StatsPopupContent from './components/StatsPopupContent';
 import type { SportsbookLog, LogStatsKey, StrategyMode } from './sportsbookTypes';
-import { sportsbooks } from './sportsbookTypes';
+import { Sportsbooks } from './sportsbookTypes';
 import SettingsPanel from './components/Settings';
 import { roundToPercent, probabilityToAmerican, getEntries } from './utility';
 import * as DataProcessor from './dataProcessor';
@@ -431,7 +431,7 @@ function App() {
 
 	const { gamesList, table1Rows, table2Rows, table3Rows, playerList: displayPlayerList } = memoizedDisplayData;
 
-	const oddsColumns: Picks.ColumnData[] = getEntries(sportsbooks).map(([key, book]) => ({
+	const oddsColumns: Picks.ColumnData[] = getEntries(Sportsbooks).map(([key, book]) => ({
 		key: key,
 		title: book.title,
 		sort: true,
