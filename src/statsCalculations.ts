@@ -3,8 +3,10 @@ import { roundToPercent } from './utility';
 import { calcAny, calcPnt, calcHit, gamesCount } from './picksOptimizer';
 import { correlations, } from './correlationData';
 import type { CorrelationResult } from './correlationData';
-import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode } from './sportsbookTypes';
+import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode, strategyPattern } from './sportsbookTypes';
 import { LogStatsKeys, sportsbooks } from './sportsbookTypes';
+import type { MergedSelection, SelectionCandidate } from './strategySelection';
+import { selectStrategyCombos } from './strategySelection';
 import * as Feature from './features';
 
 const precision = Picks.precision;
@@ -16,14 +18,6 @@ export const cloneLogStats = (stats: SportsbookLog): SportsbookLog => {
 	}
 	return cache;
 };
-
-const allStrategies = [
-	'iii', 'sss',
-	'iss', 'sis', 'ssi',
-	'ioo', 'oio', 'ooi',
-	'oso', 'soo', 'sos', 'oss'
-] as const;
-type strategyPattern = typeof allStrategies[number];
 
 class LogHandler {
 	logSection: LogLine[];
@@ -50,6 +44,7 @@ class LogHandler {
 		this.logSection.push(line);
 	}
 }
+
 const calculateStats = (
 	betKey: LogStatsKey,
 	minSportsbooks: number,
@@ -102,13 +97,6 @@ const calculateStats = (
 	const choices2: Choice[] = makeChoices(table2Rows);
 	const choices3: Choice[] = makeChoices(table3Rows);
 
-	interface BestCombo {
-		pick1: Choice;
-		pick2: Choice;
-		pick3: Choice;
-	}
-
-
 	class Result {
 		players1: Set<Picks.PickOdds>;
 		players2: Set<Picks.PickOdds>;
@@ -121,22 +109,17 @@ const calculateStats = (
 		points: number;
 		hits: number;
 
-		constructor(combo: BestCombo) {
-			this.players1 = new Set([combo.pick1.pick]);
-			this.players2 = new Set([combo.pick2.pick]);
-			this.players3 = new Set([combo.pick3.pick]);
-			this.prob1 = combo.pick1.prob;
-			this.prob2 = combo.pick2.prob;
-			this.prob3 = combo.pick3.prob;
+		constructor(selection: MergedSelection<Picks.PickOdds>) {
+			this.players1 = selection.picks1;
+			this.players2 = selection.picks2;
+			this.players3 = selection.picks3;
+			this.prob1 = selection.prob1;
+			this.prob2 = selection.prob2;
+			this.prob3 = selection.prob3;
 
 			this.least1 = calcAny(this.prob1, this.prob2, this.prob3);
 			this.points = calcPnt(this.prob1, this.prob2, this.prob3);
 			this.hits = calcHit(this.prob1, this.prob2, this.prob3);
-		}
-		merge(combo: BestCombo): void {
-			this.players1.add(combo.pick1.pick);
-			this.players2.add(combo.pick2.pick);
-			this.players3.add(combo.pick3.pick);
 		}
 
 		// Scale correlation effect with linear interpolation:
@@ -148,37 +131,6 @@ const calculateStats = (
 			if (points !== null) this.points *= (points - 1) * factor + 1;
 			const hits = ref.hits[strategy];
 			if (hits !== null) this.hits *= (hits - 1) * factor + 1;
-		}
-	}
-
-	class ComboGroup {
-		combos: BestCombo[] = [];
-		prob1: number = 0;
-		prob2: number = 0;
-		prob3: number = 0;
-		add(pick1: Choice, pick2: Choice, pick3: Choice) {
-			const max1 = pick1.prob >= this.prob1;
-			if (!max1) return;
-			const max2 = pick2.prob >= this.prob2;
-			if (!max2) return;
-			const max3 = pick3.prob >= this.prob3;
-			if (!max3) return;
-			if (pick1.prob > this.prob1 || pick2.prob > this.prob2 || pick3.prob > this.prob3) {
-				this.combos.splice(0, this.combos.length, { pick1, pick2, pick3 });
-				this.prob1 = pick1.prob;
-				this.prob2 = pick2.prob;
-				this.prob3 = pick3.prob;
-				return;
-			}
-			this.combos.push({ pick1, pick2, pick3 });
-		}
-		merge(): Result | null {
-			let prev: Result | null = null;
-			for (const combo of this.combos) {
-				if (prev) prev.merge(combo);
-				else prev = new Result(combo);
-			}
-			return prev;
 		}
 	}
 
@@ -232,33 +184,28 @@ const calculateStats = (
 
 		return null;
 	}
-	type strategyMap = Map<strategyPattern, ComboGroup>;
-	const addStrategy = (strategies: strategyMap, pick1: Choice, pick2: Choice, pick3: Choice) => {
-		const strategy = getStrategy(pick1.pick.player, pick2.pick.player, pick3.pick.player);
-		if (!strategy) return;
-		const combo = strategies.get(strategy);
-		if (combo) combo.add(pick1, pick2, pick3);
-	}
 	const calcCombos = (): {
-		top: ComboGroup,
-		strategies: strategyMap
+		top: ReturnType<typeof selectStrategyCombos<Picks.PickOdds>>['top'],
+		strategies: ReturnType<typeof selectStrategyCombos<Picks.PickOdds>>['strategies']
 	} => {
-		const top = new ComboGroup();
-		const strategies = new Map<strategyPattern, ComboGroup>();
-		for (const strategy of allStrategies) strategies.set(strategy, new ComboGroup());
+		const candidates: SelectionCandidate<Picks.PickOdds>[] = [];
 
 		for (const pick1 of choices1) {
 			for (const pick2 of choices2) {
 				for (const pick3 of choices3) {
-					top.add(pick1, pick2, pick3);
-					addStrategy(strategies, pick1, pick2, pick3);
+					candidates.push({
+						pick1: pick1.pick,
+						pick2: pick2.pick,
+						pick3: pick3.pick,
+						prob1: pick1.prob,
+						prob2: pick2.prob,
+						prob3: pick3.prob,
+						strategy: getStrategy(pick1.pick.player, pick2.pick.player, pick3.pick.player),
+					});
 				}
 			}
 		}
-		return {
-			top,
-			strategies
-		};
+		return selectStrategyCombos(candidates);
 	}
 
 	const comboPrecision = 2;
@@ -363,14 +310,14 @@ const calculateStats = (
 	const ref = gameCount === 1 ? correlations['1'] : gameCount === 2 ? correlations['2'] : correlations['3+'];
 
 	const { top, strategies } = calcCombos();
-	const topResultRaw = top.merge();
-	if (topResultRaw === null) return;
-	const topResult: Result = topResultRaw;
+	const topSelection = top.merge();
+	if (topSelection === null) return;
+	const topResult = new Result(topSelection);
 
 	const strategyResults: Map<strategyPattern, Result> = new Map();
 	for (const [strategy, combos] of strategies) {
-		const combo = combos.merge();
-		if (combo !== null) strategyResults.set(strategy, combo);
+		const selection = combos.merge();
+		if (selection !== null) strategyResults.set(strategy, new Result(selection));
 	}
 
 	type strategyGroup = {

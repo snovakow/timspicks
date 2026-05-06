@@ -181,15 +181,23 @@ function App() {
 					});
 				}
 				if (ANALYZE) {
+					ANALYZE = false;
 					bestPicks(table1Rows, table2Rows, table3Rows).then((results) => {
 						for (const result of results) {
-							console.log(" ***Best picks:", result.strategies.map((s) => s.title).join('/'));
+							const books = result.strategies.map((s) => {
+								const bracketed = [];
+								s.correlationRatio = 1.33333333;
+								s.bookTitles = ['DraftKings', 'FanDuel'];
+								bracketed.push(s.bookTitles.join('/'));
+								if(s.correlationRatio !== 1) bracketed.push(`${(s.correlationRatio * 100).toFixed(2)}%`);
+								return s.strategyTitle + (bracketed.length ? ` (${bracketed.join(', ')})` : '');
+							});
+							console.log(" ***Best picks:", books.join(' / '));
 							console.log("1:", result['1'].player.fullName);
 							console.log("2:", result['2'].player.fullName);
 							console.log("3:", result['3'].player.fullName);
 						}
 					});
-					ANALYZE = false;
 				}
 
 			} catch (error: unknown) {
