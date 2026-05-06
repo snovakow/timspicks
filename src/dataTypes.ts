@@ -25,9 +25,9 @@ export const AllCombos = [
 export type ComboPattern = typeof AllCombos[number];
 
 export const SportsbookKeys = ['bet1', 'bet2', 'bet3', 'bet4'] as const;
-export const LogStatsKeys = [...SportsbookKeys, 'betAvg'] as const;
-
 export type SportsbookKey = typeof SportsbookKeys[number];
+
+export const LogStatsKeys = [...SportsbookKeys, 'betAvg'] as const;
 export type LogStatsKey = typeof LogStatsKeys[number];
 
 export type LogStatAlign = 'left' | 'center';
