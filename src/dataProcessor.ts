@@ -1,5 +1,5 @@
 import * as Picks from './components/Table';
-import { SportsbookKeys } from './sportsbookTypes';
+import { SportsbookKeys } from './dataTypes';
 
 // Raw player structure from players_XXX.json
 type RawPlayerJson = {

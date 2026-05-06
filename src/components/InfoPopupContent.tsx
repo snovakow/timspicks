@@ -1,5 +1,5 @@
 import * as Feature from '../features';
-import { Sportsbooks } from '../sportsbookTypes';
+import { Sportsbooks, StrategyLabels } from '../dataTypes';
 import { getEntries } from '../utility';
 
 import './InfoPopupContent.css';
@@ -121,22 +121,22 @@ export function LegendPopupContent() {
 			<section className="info-popup-section">
 				<h3>Strategy</h3>
 				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-least1-left-dot" aria-hidden="true" />
-					<span className="legend-strategy-text"><strong>Streak (Green): </strong>
+					<span className="legend-strategy-text"><strong>{StrategyLabels.least1} (Green): </strong>
 						Best picks for streaks. Getting at least one pick correct for 7 straight days earns free coffee for a week.
 					</span>
 				</p>
 				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-points-left-dot" aria-hidden="true" />
-					<span className="legend-strategy-text"><strong>Points (Blue): </strong>
+					<span className="legend-strategy-text"><strong>{StrategyLabels.points} (Blue): </strong>
 						Best picks for maximum points. 1 correct = 25 points, 2 correct = 50 points, 3 correct = 100 points.
 					</span>
 				</p>
 				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-hits-left-dot" aria-hidden="true" />
-					<span className="legend-strategy-text"><strong>Pick % (Amber): </strong>
+					<span className="legend-strategy-text"><strong>{StrategyLabels.hits} (Amber): </strong>
 						Best picks for competing on the leaderboard.
 					</span>
 				</p>
 				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-top-left-dot" aria-hidden="true" />
-					<span className="legend-strategy-text"><strong>Top (Navy): </strong>
+					<span className="legend-strategy-text"><strong>{StrategyLabels.top} (Navy): </strong>
 						Highest-probability picks.
 					</span>
 				</p>

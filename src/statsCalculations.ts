@@ -3,8 +3,8 @@ import { roundToPercent } from './utility';
 import { calcAny, calcPnt, calcHit, gamesCount } from './picksOptimizer';
 import { correlations, } from './correlationData';
 import type { CorrelationResult } from './correlationData';
-import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode, ComboPattern } from './sportsbookTypes';
-import { LogStatsKeys, Sportsbooks } from './sportsbookTypes';
+import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode, ComboPattern } from './dataTypes';
+import { LogStatsKeys, Sportsbooks, StrategyLabels } from './dataTypes';
 import type { MergedSelection, SelectionCandidate } from './strategySelection';
 import { selectStrategyCombos } from './strategySelection';
 import * as Feature from './features';
@@ -211,10 +211,11 @@ const calculateStats = (
 	const comboPrecision = 2;
 
 	const printStrategy = (strategy: Strategy, value: number): string => {
+		const label = StrategyLabels[strategy];
 		switch (strategy) {
-			case 'least1': return `Streak: ${roundToPercent(value, comboPrecision)}`;
-			case 'points': return `Points: ${value.toFixed(comboPrecision)}`;
-			case 'hits': return `Pick %: ${roundToPercent(value / 3, comboPrecision)}`;
+			case 'least1': return `${label}: ${roundToPercent(value, comboPrecision)}`;
+			case 'points': return `${label}: ${value.toFixed(comboPrecision)}`;
+			case 'hits': return `${label}: ${roundToPercent(value / 3, comboPrecision)}`;
 		}
 	}
 	const printStrategyDiff = (strategy: Strategy, top: number, value: number): string => {
@@ -286,9 +287,9 @@ const calculateStats = (
 	const logFooter = () => {
 		logHandler.addTitle("Good Values");
 		logHandler.addSection();
-		logHandler.addLine("Streak: 66% ", 'left');
-		logHandler.addLine("Points: 23", 'left');
-		logHandler.addLine("Pick %: 30%", 'left');
+		logHandler.addLine(StrategyLabels.least1 + ": 66% ", 'left');
+		logHandler.addLine(StrategyLabels.points + ": 23", 'left');
+		logHandler.addLine(StrategyLabels.hits + ": 30%", 'left');
 	}
 
 	const setStrategy = (pick: Picks.PickOdds, mode: StrategyMode) => {

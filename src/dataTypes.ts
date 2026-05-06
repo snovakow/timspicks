@@ -4,9 +4,9 @@ import logo3 from './sportsbook-logo/sb-logo-16-mgm.svg';
 import logo4 from './sportsbook-logo/sb-logo-16-betrivers.svg';
 
 export const AllStrategies = ['least1', 'points', 'hits'] as const;
-export const AllStrategyModes = [...AllStrategies, 'top'] as const;
-
 export type Strategy = typeof AllStrategies[number];
+
+export const AllStrategyModes = [...AllStrategies, 'top'] as const;
 export type StrategyMode = typeof AllStrategyModes[number];
 
 export const StrategyLabels: Record<StrategyMode, string> = {

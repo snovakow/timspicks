@@ -1,4 +1,4 @@
-import type { LogStatsKey, StrategyMode } from "../sportsbookTypes";
+import { AllStrategyModes, StrategyLabels, type LogStatsKey, type StrategyMode } from "../dataTypes";
 import type { Team } from "./logo";
 import * as Feature from '../features';
 
@@ -241,14 +241,8 @@ export function Table(props: {
 	enabledStrategies: Record<StrategyMode, boolean>
 }) {
 	const { columns, sortedRows, requestSort, sortConfig, darkTheme, enabledStrategies } = props;
-	const orderedModes: StrategyMode[] = ['least1', 'points', 'hits', 'top'];
-	const enabledModes = orderedModes.filter((mode) => enabledStrategies[mode]);
-	const strategyLabel = (mode: StrategyMode): string => {
-		if (mode === 'least1') return 'Streak';
-		if (mode === 'points') return 'Points';
-		if (mode === 'hits') return 'Pick %';
-		return 'Top';
-	};
+	const enabledModes = AllStrategyModes.filter((mode) => enabledStrategies[mode]);
+	const strategyLabel = (mode: StrategyMode): string => StrategyLabels[mode];
 	const strategyTitle = (strategy: Set<StrategyMode>): string => {
 		const active = enabledModes.filter((mode) => strategy.has(mode));
 		if (active.length === 0) return 'No strategy tags';

@@ -3,8 +3,8 @@ import * as Picks from "./components/Table";
 import type { CorrelationData, CorrelationResult, CorrelationResults } from "./correlationData";
 import { correlations } from "./correlationData";
 import { deVig, oddsNameMap } from "./dataProcessor";
-import type { ComboPattern, LogStatsKey, StrategyMode, Strategy } from "./sportsbookTypes";
-import { AllCombos, SportsbookKeys, LogStatsKeys, Sportsbooks } from "./sportsbookTypes";
+import type { ComboPattern, LogStatsKey, StrategyMode, Strategy } from "./dataTypes";
+import { AllCombos, SportsbookKeys, LogStatsKeys, Sportsbooks } from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
 import { selectStrategyCombos } from "./strategySelection";
 
@@ -38,6 +38,13 @@ interface HistoryPlayer {
 
 type CorrelationCount = Record<typeof AllCombos[number], number>;
 type BaselineKey = 'random' | 'iii';
+
+export interface Total {
+    least1: number;
+    points: number;
+    hits: number;
+    count: number;
+}
 
 class Correlation {
     strategy = {
@@ -148,12 +155,6 @@ class Result {
     }
 }
 
-export interface Total {
-    least1: number;
-    points: number;
-    hits: number;
-    count: number;
-}
 class ResultTotal implements Total {
     least1: number
     points: number

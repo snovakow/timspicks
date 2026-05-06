@@ -1,11 +1,7 @@
-import type { AllCombos } from "./sportsbookTypes";
+import type { AllCombos, Strategy } from "./dataTypes";
 
 export type CorrelationData = Record<typeof AllCombos[number], number | null>;
-export interface CorrelationResult {
-    least1: CorrelationData,
-    points: CorrelationData,
-    hits: CorrelationData,
-};
+export type CorrelationResult = Record<Strategy, CorrelationData>;
 export interface CorrelationResults {
     "1": CorrelationResult,
     "2": CorrelationResult,

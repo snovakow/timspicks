@@ -1,8 +1,8 @@
 import { useState } from 'react';
 
 import { getEntries } from '../utility';
-import type { LogStatsKey, SportsbookKey, LogLines } from '../sportsbookTypes';
-import { Sportsbooks } from '../sportsbookTypes';
+import type { LogStatsKey, SportsbookKey, LogLines } from '../dataTypes';
+import { Sportsbooks } from '../dataTypes';
 
 import './StatsPopupContent.css';
 import './sportsbook.css';

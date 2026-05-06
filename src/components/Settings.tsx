@@ -1,4 +1,4 @@
-import type { StrategyMode } from '../sportsbookTypes';
+import { StrategyLabels, type StrategyMode } from '../dataTypes';
 import * as Feature from '../features';
 import './Settings.css';
 
@@ -28,13 +28,6 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 		xgEnabled,
 		onXgEnabledChange,
 	} = props;
-
-	const strategyOptions: Array<{ key: StrategyMode; label: string }> = [
-		{ key: 'least1', label: 'Streak' },
-		{ key: 'points', label: 'Points' },
-		{ key: 'hits', label: 'Pick %' },
-		{ key: 'top', label: 'Top' },
-	];
 
 	const labelClassNames = "settings-checkbox-item settings-checkbox settings-strategy-checkbox settings-label-single settings-checkbox-hoverable";
 	return (
@@ -105,18 +98,18 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 				<div className="settings-group">
 					<div className="settings-label">Pick Strategies</div>
 					<div className="settings-checkbox-group" role="group" aria-label="Pick strategies">
-						{strategyOptions.map((option) => (
+						{Object.entries(StrategyLabels).map(([key, label]) => (
 							<label
-								key={option.key}
-								className={`settings-checkbox-item settings-checkbox settings-strategy-${option.key} settings-checkbox-hoverable`}
+								key={key}
+								className={`settings-checkbox-item settings-checkbox settings-strategy-${key} settings-checkbox-hoverable`}
 							>
 								<input
 									type="checkbox"
-									checked={enabledStrategies[option.key]}
-									onChange={(e) => onStrategyEnabledChange(option.key, e.target.checked)}
+									checked={enabledStrategies[key as StrategyMode]}
+									onChange={(e) => onStrategyEnabledChange(key as StrategyMode, e.target.checked)}
 									tabIndex={0}
 								/>
-								{option.label}
+								{label}
 							</label>
 						))}
 					</div>

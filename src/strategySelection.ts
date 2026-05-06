@@ -1,5 +1,5 @@
-import type { ComboPattern } from './sportsbookTypes';
-import { AllCombos } from './sportsbookTypes';
+import type { ComboPattern } from './dataTypes';
+import { AllCombos } from './dataTypes';
 
 export type SelectionCandidate<T> = {
     pick1: T;
