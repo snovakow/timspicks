@@ -6,6 +6,7 @@ import "./Table.css";
 import "./sportsbook.css";
 
 export const precision = 1;
+export const comboPrecision = 2;
 
 export interface LocalizedText {
 	default: string;

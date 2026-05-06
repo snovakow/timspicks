@@ -4,8 +4,8 @@ import * as Picks from './components/Table';
 import Popup from './components/Popup';
 import InfoPopupContent, { LegendPopupContent } from './components/InfoPopupContent';
 import StatsPopupContent from './components/StatsPopupContent';
-import type { SportsbookLog, LogStatsKey, StrategyMode } from './dataTypes';
-import { Sportsbooks } from './dataTypes';
+import type { SportsbookLog, LogStatsKey, StrategyMode, SportsbookKey, Strategy } from './dataTypes';
+import { Sportsbooks, StrategyLabels } from './dataTypes';
 import SettingsPanel from './components/Settings';
 import { roundToPercent, probabilityToAmerican, getEntries } from './utility';
 import * as DataProcessor from './dataProcessor';
@@ -16,7 +16,7 @@ import iconInfo from './images/info_i_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg
 import iconLegend from './images/legend_toggle_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyDark from './images/sports_hockey_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyLight from './images/sports_hockey_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
-import { bestPicks, runSimulation } from './picksOptimizer';
+import { bestPicks, calcAny, calcHit, calcPnt, runSimulation } from './picksOptimizer';
 import CollapsibleSection from './components/CollapsibleSection';
 import { getTeamTotals } from './teamGoals';
 import * as Feature from './features';
@@ -24,6 +24,8 @@ import * as Feature from './features';
 import './App.css';
 
 const precision = Picks.precision;
+const comboPrecision = Picks.comboPrecision;
+
 let SIMULATE = Feature.simulate;
 let ANALYZE = Feature.analyze;
 
@@ -182,20 +184,54 @@ function App() {
 				}
 				if (ANALYZE) {
 					ANALYZE = false;
+					const format = (pick: Picks.PickOdds, betKey: LogStatsKey) => {
+						const player = pick.player;
+						const bet = player[betKey];
+						const odds = bet === null ? '' : `${roundToPercent(bet, precision)} - `;
+						return `${odds}${player.fullName} (${player.team.code})`;
+					};
+					const makeTitle = (text: string) => `\n${text}\n${"-".repeat(text.length)}`;
+					const bookName = (book: LogStatsKey) => {
+						const name = book === 'betAvg' ? 'Average' : Sportsbooks[book].title;
+						if (book === 'betAvg') return 'Average';
+						return makeTitle(name);
+					}
+
 					bestPicks(table1Rows, table2Rows, table3Rows).then((results) => {
+						console.log(`${makeTitle("*** Best picks ***")}`);
 						for (const result of results) {
-							const books = result.strategies.map((s) => {
-								const bracketed = [];
-								s.correlationRatio = 1.33333333;
-								s.bookTitles = ['DraftKings', 'FanDuel'];
-								bracketed.push(s.bookTitles.join('/'));
-								if(s.correlationRatio !== 1) bracketed.push(`${(s.correlationRatio * 100).toFixed(2)}%`);
-								return s.strategyTitle + (bracketed.length ? ` (${bracketed.join(', ')})` : '');
-							});
-							console.log(" ***Best picks:", books.join(' / '));
-							console.log("1:", result['1'].player.fullName);
-							console.log("2:", result['2'].player.fullName);
-							console.log("3:", result['3'].player.fullName);
+							const bets: Set<LogStatsKey> = new Set();
+							const strategies: Set<Strategy> = new Set();
+							for (const strategy of result.strategies) {
+								for (const book of strategy.books) bets.add(book);
+								strategies.add(strategy.key);
+							}
+
+							for (const bet of bets) {
+								console.log(bookName(bet));
+								console.log(`1: ${format(result['1'], bet)}`);
+								console.log(`2: ${format(result['2'], bet)}`);
+								console.log(`3: ${format(result['3'], bet)}`);
+
+								const odd1 = result['1'].player[bet];
+								if (odd1 === null) continue;
+								const odd2 = result['2'].player[bet];
+								if (odd2 === null) continue;
+								const odd3 = result['3'].player[bet];
+								if (odd3 === null) continue;
+
+								const any = roundToPercent(calcAny(odd1, odd2, odd3), comboPrecision);
+								const pnt = calcPnt(odd1, odd2, odd3).toFixed(comboPrecision);
+								const hit = roundToPercent(calcHit(odd1, odd2, odd3) / 3, comboPrecision);
+
+								const anyBold = strategies.has('least1') ? '*' : '';
+								const pntBold = strategies.has('points') ? '*' : '';
+								const hitBold = strategies.has('hits') ? '*' : '';
+
+								console.log(`${anyBold}${StrategyLabels.least1}: ${any}`);
+								console.log(`${pntBold}${StrategyLabels.points}: ${pnt}`);
+								console.log(`${hitBold}${StrategyLabels.hits}: ${hit}`);
+							}
 						}
 					});
 				}

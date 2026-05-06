@@ -10,6 +10,7 @@ import { selectStrategyCombos } from './strategySelection';
 import * as Feature from './features';
 
 const precision = Picks.precision;
+const comboPrecision = Picks.comboPrecision;
 
 export const cloneLogStats = (stats: SportsbookLog): SportsbookLog => {
 	const cache = {} as SportsbookLog;
@@ -207,8 +208,6 @@ const calculateStats = (
 		}
 		return selectStrategyCombos(candidates);
 	}
-
-	const comboPrecision = 2;
 
 	const printStrategy = (strategy: Strategy, value: number): string => {
 		const label = StrategyLabels[strategy];

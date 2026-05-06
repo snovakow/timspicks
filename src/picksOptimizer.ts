@@ -1159,7 +1159,7 @@ interface BestPicksResult {
     "1": Picks.PickOdds,
     "2": Picks.PickOdds,
     "3": Picks.PickOdds,
-    strategies: StrategyType[],
+    strategies: Set<StrategyType>,
 }
 
 const resolvePoolKey = (gameCount: number): Exclude<PoolKey, 'all'> => gameCount <= 1 ? '1' : gameCount === 2 ? '2' : '3+';
@@ -1366,13 +1366,13 @@ export const bestPicks = async (picks1: Picks.PickOdds[], picks2: Picks.PickOdds
     for (const { combo, strategies } of merged.values()) {
         results.push({
             ...combo,
-            strategies: [...strategies.entries()].map(([strat, { ratio, books }]) => new StrategyType(strat, ratio, books)),
+            strategies: new Set([...strategies.entries()].map(([strat, { ratio, books }]) => new StrategyType(strat, ratio, books))),
         });
     }
 
     // Return deterministically: strongest overlap first, then stable player id code.
     results.sort((left, right) => {
-        if (right.strategies.length !== left.strategies.length) return right.strategies.length - left.strategies.length;
+        if (right.strategies.size !== left.strategies.size) return right.strategies.size - left.strategies.size;
         return comboCode(left).localeCompare(comboCode(right));
     });
 
