@@ -10,7 +10,7 @@
 Delete all crontabs: crontab -r
 */
 
-$codeRoot = isset($_GET['lib']) ? $_GET['lib'] : 'public';
+$codeRoot = $_GET['lib'] ?? 'public';
 require_once "../{$codeRoot}/fetch_lib.php";
 
 function process(string $basePath)
@@ -63,11 +63,13 @@ function processGames(DateTime $now, string $basePath)
     $gameTimes = [];
 
     foreach ($games as $game) {
-        $gameTime = $game["startTimeUTC"];
-        if (!isset($gameTime)) continue;
+        if (!isset($game["startTimeUTC"])) continue;
 
-        $gameTime = DateTime::createFromFormat('Y-m-d\TH:i:se', $gameTime);
-        if ($gameTime === false) continue;
+        try {
+            $gameTime = new DateTime((string)$game["startTimeUTC"]);
+        } catch (Exception $e) {
+            continue;
+        }
 
         $gameTimes[] = $gameTime;
     }
