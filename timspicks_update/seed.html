@@ -29,6 +29,11 @@
 				body: JSON.stringify(data) // Converts JavaScript object to a JSON string
 			});
 
+			if (!response.ok) {
+				const errorText = await response.text();
+				throw new Error(`HTTP ${response.status}: ${errorText}`);
+			}
+
 			// Handle the response from the server
 			return await response.text();
 		};
@@ -56,13 +61,16 @@
 		button.addEventListener('click', async () => {
 			const responseElement = document.getElementById('response');
 			responseElement.replaceChildren();
-			responseElement.textContent = "";
 			responseElement.scrollTop = 0;
 
-			const result = await sendRequest('update');
-			if (result) responseElement.replaceChildren();
-			if (result) {
-				responseElement.insertAdjacentHTML('beforeend', result);
+			try {
+				const result = await sendRequest('update');
+				if (result) {
+					responseElement.textContent = result;
+					scrollResponseToBottom(responseElement);
+				}
+			} catch (error) {
+				responseElement.textContent = `Request failed: ${error.message}`;
 				scrollResponseToBottom(responseElement);
 			}
 		});
