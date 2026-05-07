@@ -191,24 +191,25 @@ function App() {
 						return `${odds}${player.fullName} (${player.team.code})`;
 					};
 					const makeTitle = (text: string) => `\n${text}\n${"-".repeat(text.length)}`;
-					const bookName = (book: LogStatsKey) => {
+
+					const bookName = (book: LogStatsKey, correlation: number) => {
 						const name = book === 'betAvg' ? 'Average' : Sportsbooks[book].title;
 						if (book === 'betAvg') return 'Average';
-						return makeTitle(name);
+						return makeTitle(`${name} (${correlation.toFixed(3)})`);
 					}
 
 					bestPicks(table1Rows, table2Rows, table3Rows).then((results) => {
 						console.log(`${makeTitle("*** Best picks ***")}`);
 						for (const result of results) {
-							const bets: Set<LogStatsKey> = new Set();
+							const bets: Map<LogStatsKey, number> = new Map();
 							const strategies: Set<Strategy> = new Set();
 							for (const strategy of result.strategies) {
-								for (const book of strategy.books) bets.add(book);
+								for (const book of strategy.books) bets.set(book, strategy.correlationRatio);
 								strategies.add(strategy.key);
 							}
 
-							for (const bet of bets) {
-								console.log(bookName(bet));
+							for (const [bet, correlation] of bets) {
+								console.log(`${bookName(bet, correlation)}`);
 								console.log(`1: ${format(result['1'], bet)}`);
 								console.log(`2: ${format(result['2'], bet)}`);
 								console.log(`3: ${format(result['3'], bet)}`);

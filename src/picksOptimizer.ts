@@ -776,6 +776,7 @@ export const runHistoricalStrategyAudit = async (
     }
 
     const stats = createAuditBuckets();
+    const daysWithSlots = new Set<string>();
 
     for (const date of availableDates) {
         try {
@@ -873,6 +874,7 @@ export const runHistoricalStrategyAudit = async (
                     }
 
                     const ref = gameCount === 1 ? correlations['1'] : gameCount === 2 ? correlations['2'] : correlations['3+'];
+                    daysWithSlots.add(date);
 
                     for (const bookKey of [...SportsbookKeys, 'betAvg'] as LogStatsKey[]) {
                         const set1 = rows.filter((row) => row.sid === '1' && row[bookKey] !== null);
@@ -965,7 +967,7 @@ export const runHistoricalStrategyAudit = async (
             ];
         }));
         console.table(display);
-        console.log(`Historical strategy audit evaluated ${results.bet1.top.tickets} tickets with correlation factor ${correlationFactor}.`);
+        console.log(`Historical strategy audit: ${daysWithSlots.size} days, ${results.betAvg.top.tickets} tickets (factor ${correlationFactor}).`);
     }
 
     return results;
@@ -1031,7 +1033,7 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1): Promis
         results[pool] = auditResult;
     }
 
-    console.log(`\n\n=== SUMMARY L%=${correlationFactor} ===\n`);
+    console.log(`\n\n=== SUMMARY L%=${correlationFactor} ===`);
     console.log('Top correlated bet by pool and summary column:');
     for (const pool of pools) {
         const bestTopPickPct = getTopBooksForMetric(results[pool], 'top', (stat) => stat.hitPct);
