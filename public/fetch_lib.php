@@ -68,6 +68,10 @@ function updatePicks(CurlHandle $ch, string $basePath, bool $savesrc = false)
 		$output['error'] = "Error decoding JSON from $helper: " . json_last_error_msg();
 		return $output;
 	}
+	if (!isset($json->playerLists)) {
+		$output['error'] = "Missing playerLists in response from $helper";
+		return $output;
+	}
 	$json = $json->playerLists;
 	$data = [];
 	$data["1"] = [];
@@ -125,6 +129,10 @@ function updateBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
 	$data = json_decode($response, false);
 	if (json_last_error() !== JSON_ERROR_NONE) {
 		$output['error'] = "Error decoding JSON from $draftkings: " . json_last_error_msg();
+		return $output;
+	}
+	if (!isset($data->selections)) {
+		$output['error'] = "Missing selections in response from $draftkings";
 		return $output;
 	}
 	$data = $data->selections;
@@ -203,6 +211,10 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 		if ($market->marketName !== 'Any Time Goal Scorer') continue;
 
 		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $market->marketTime);
+		if (!$closingTime) {
+			$output['error'] = "Invalid date format in response: " . $market->marketTime;
+			return $output;
+		}
 		if ($closingTime > $endOfDay) continue;
 
 		foreach ($market->runners as $runner) {
@@ -280,12 +292,20 @@ function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 		$output['error'] = "Error decoding JSON from $remote_url: " . json_last_error_msg();
 		return $output;
 	}
+	if (!isset($json_data->fixtures)) {
+		$output['error'] = "Missing fixtures in response from $remote_url";
+		return $output;
+	}
 
 	$ids = [];
 	foreach ($json_data->fixtures as $fixture) {
 		if ($fixture->competition->name->value !== 'NHL') continue;
 
 		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:se', $fixture->startDate);
+		if (!$closingTime) {
+			$output['error'] = "Invalid date format in response: " . $fixture->startDate;
+			return $output;
+		}
 		if ($closingTime > $endOfDay) continue;
 
 		$ids[] = $fixture->id;
@@ -399,8 +419,17 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 
 		if ($savesrc) $items = [$data_array->items];
 
+		if (!isset($data_array->items)) {
+			$output['error'] = "Missing items in response from page 1 of $remote_url_base";
+			return $output;
+		}
+
 		foreach ($data_array->items as $item) {
 			$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $item->closingTime);
+			if (!$closingTime) {
+				$output['error'] = "Invalid date format in response: " . $item->closingTime;
+				return $output;
+			}
 			if ($closingTime > $endOfDay) continue;
 
 			$map[] = [
@@ -409,6 +438,10 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 			];
 		}
 
+		if (!isset($data_array->paging->totalPages)) {
+			$output['error'] = "Missing paging info in response from page 1 of $remote_url_base";
+			return $output;
+		}
 		$pages = $data_array->paging->totalPages;
 
 		for ($i = 2; $i <= $pages; $i++) {
@@ -432,6 +465,10 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 
 			foreach ($data_array->items as $item) {
 				$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $item->closingTime);
+				if (!$closingTime) {
+					$output['error'] = "Invalid date format in response: " . $item->closingTime;
+					return $output;
+				}
 				if ($closingTime > $endOfDay) continue;
 
 				$map[] = [
@@ -518,12 +555,14 @@ function backup(DateTime $now, DateTimeZone $timezone, string $basePath)
 		$bet4file = '/bet4.json';
 		$gamesfile = '/games.json';
 		$helperfile = '/helper.json';
-		copy($basePath . $gamesfile, $backupPath . $gamesfile);
-		copy($basePath . $bet1file, $backupSubPath . $bet1file);
-		copy($basePath . $bet2file, $backupSubPath . $bet2file);
-		copy($basePath . $bet3file, $backupSubPath . $bet3file);
-		copy($basePath . $bet4file, $backupSubPath . $bet4file);
-		copy($basePath . $helperfile, $backupSubPath . $helperfile);
+		$copyErrors = [];
+		if (!copy($basePath . $gamesfile, $backupPath . $gamesfile)) $copyErrors[] = $gamesfile;
+		if (!copy($basePath . $bet1file, $backupSubPath . $bet1file)) $copyErrors[] = $bet1file;
+		if (!copy($basePath . $bet2file, $backupSubPath . $bet2file)) $copyErrors[] = $bet2file;
+		if (!copy($basePath . $bet3file, $backupSubPath . $bet3file)) $copyErrors[] = $bet3file;
+		if (!copy($basePath . $bet4file, $backupSubPath . $bet4file)) $copyErrors[] = $bet4file;
+		if (!copy($basePath . $helperfile, $backupSubPath . $helperfile)) $copyErrors[] = $helperfile;
+		if (!empty($copyErrors)) $output['error'] = "Failed to copy: " . implode(", ", $copyErrors);
 
 		$output['title'] = "Backup";
 		$output['content'] = "$backupSubPath";
