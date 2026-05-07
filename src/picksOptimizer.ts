@@ -2,7 +2,7 @@ import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
 import type { CorrelationData, CorrelationResult, CorrelationResults } from "./correlationData";
 import { correlations } from "./correlationData";
-import { deVig, oddsNameMap } from "./dataProcessor";
+import { deVig, oddsNameMap, removeAccentsNormalize } from "./dataProcessor";
 import type { ComboPattern, LogStatsKey, StrategyMode, Strategy } from "./dataTypes";
 import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies } from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
@@ -334,11 +334,6 @@ const hasSnapshotDate = async (date: string): Promise<boolean> => {
     const games = await fetchOptionalJson<unknown>(`./data/${date}/games.json`);
     return games !== null;
 };
-
-const normalizeOddsName = (name: string): string => name
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase();
 
 const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
     const data = await fetchOptionalJson<{
@@ -810,7 +805,7 @@ export const runHistoricalStrategyAudit = async (
 
                     const oddsMaps = bookOdds.map((items) => {
                         const oddsMap = new Map<string, number>();
-                        for (const item of items ?? []) oddsMap.set(normalizeOddsName(item.name), item.odds);
+                        for (const item of items ?? []) oddsMap.set(removeAccentsNormalize(item.name), item.odds);
                         return oddsMap;
                     });
 
@@ -829,7 +824,7 @@ export const runHistoricalStrategyAudit = async (
 
                             for (let index = 0; index < oddsMaps.length; index++) {
                                 for (const candidate of candidates) {
-                                    const odds = oddsMaps[index].get(normalizeOddsName(candidate));
+                                    const odds = oddsMaps[index].get(removeAccentsNormalize(candidate));
                                     if (odds !== undefined) {
                                         probs[index] = 1 / odds;
                                         break;

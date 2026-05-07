@@ -332,8 +332,8 @@ oddsNameMap.set("Trevor van Riemsdyk", "Trevor Van Riemsdyk"); // BetRivers
 oddsNameMap.set("Vasily Podkolzin", "Vasili Podkolzin"); // BetRivers (lang)
 oddsNameMap.set("Zachary Bolduc", "Zack Bolduc"); // DraftKings
 
-const removeAccentsNormalize = (name: string): string => {
-	return name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase();
+export const removeAccentsNormalize = (name: string): string => {
+	return name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 }
 
 // Build a normalized name map once for fast lookups
