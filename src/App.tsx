@@ -221,9 +221,13 @@ function App() {
 								const odd3 = result['3'].player[bet];
 								if (odd3 === null) continue;
 
-								const any = roundToPercent(calcAny(odd1, odd2, odd3), comboPrecision);
-								const pnt = calcPnt(odd1, odd2, odd3).toFixed(comboPrecision);
-								const hit = roundToPercent(calcHit(odd1, odd2, odd3) / 3, comboPrecision);
+								const anyValue = calcAny(odd1, odd2, odd3) * correlation;
+								const pntValue = calcPnt(odd1, odd2, odd3) * correlation;
+								const hitValue = calcHit(odd1, odd2, odd3) / 3 * correlation;
+
+								const any = roundToPercent(anyValue, comboPrecision);
+								const pnt = pntValue.toFixed(comboPrecision);
+								const hit = roundToPercent(hitValue, comboPrecision);
 
 								const anyBold = strategies.has('least1') ? '*' : '';
 								const pntBold = strategies.has('points') ? '*' : '';
