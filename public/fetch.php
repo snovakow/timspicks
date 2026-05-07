@@ -54,6 +54,12 @@ $csrfToken = $_SESSION['csrf_token'];
 				body: JSON.stringify(data) // Converts JavaScript object to a JSON string
 			});
 
+			// Check for HTTP errors
+			if (!response.ok) {
+				const errorText = await response.text();
+				throw new Error(`HTTP ${response.status}: ${errorText}`);
+			}
+
 			// Handle the response from the server
 			return await response.text();
 		};
@@ -87,17 +93,27 @@ $csrfToken = $_SESSION['csrf_token'];
 
 			const responseElement = document.getElementById('response');
 			responseElement.replaceChildren();
-			responseElement.textContent = "";
 			responseElement.scrollTop = 0;
 
 			if (options === "players") {
 				let teamIndex = 0;
 				const processTeam = async () => {
 					if (runId !== activeRunId) return;
-					const result = await sendRequest("players&team=" + teams[teamIndex]);
-					if (runId !== activeRunId) return;
-					if (result) {
-						responseElement.insertAdjacentHTML('beforeend', result);
+					try {
+						const result = await sendRequest("players&team=" + teams[teamIndex]);
+						if (runId !== activeRunId) return;
+						if (result) {
+							const tempDiv = document.createElement('div');
+							tempDiv.innerHTML = result;
+							responseElement.appendChild(tempDiv);
+							scrollResponseToBottom(responseElement);
+						}
+					} catch (error) {
+						if (runId !== activeRunId) return;
+						const errorDiv = document.createElement('div');
+						errorDiv.style.color = 'red';
+						errorDiv.textContent = `Error fetching ${teams[teamIndex]}: ${error.message}`;
+						responseElement.appendChild(errorDiv);
 						scrollResponseToBottom(responseElement);
 					}
 
@@ -118,9 +134,10 @@ $csrfToken = $_SESSION['csrf_token'];
 
 			const result = await sendRequest(options.split(",").join("&"));
 			if (runId !== activeRunId) return;
-			if (result) responseElement.replaceChildren();
 			if (result) {
-				responseElement.insertAdjacentHTML('beforeend', result);
+				const tempDiv = document.createElement('div');
+				tempDiv.innerHTML = result;
+				responseElement.appendChild(tempDiv);
 				scrollResponseToBottom(responseElement);
 			}
 		});
