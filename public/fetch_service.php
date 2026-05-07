@@ -115,7 +115,7 @@ if ($live && isset($_GET['history'])) {
 		if (json_last_error() === JSON_ERROR_NONE) {
 			$datesProcess = [];
 			$datesStoredCount = count($datesStored);
-			$startIndex = $datesStoredCount;
+			$startIndex = min($datesStoredCount, count($datesTotal));
 
 			// Preserve files from already-processed entries.
 			for ($i = 0; $i < $datesStoredCount && $i < count($datesTotal); $i++) {
