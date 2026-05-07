@@ -116,10 +116,6 @@ $csrfToken = $_SESSION['csrf_token'];
 				return;
 			}
 
-			// button.disabled = true; // Disable the button to prevent multiple clicks
-			// button.parentElement.removeChild(button); // Remove the button from the DOM
-			// input.parentElement.removeChild(input); // Remove the input from the DOM
-
 			const result = await sendRequest(options.split(",").join("&"));
 			if (runId !== activeRunId) return;
 			if (result) responseElement.replaceChildren();
