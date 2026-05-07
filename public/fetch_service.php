@@ -97,70 +97,108 @@ if ($live && isset($_GET['history'])) {
 	$baseHistoryPath = './history';
 	if (!is_dir($baseHistoryPath)) mkdir($baseHistoryPath, 0755, true);
 
-	$dates = [
+	$datesTotal = [
 		['season' => '2023-2024', 'format' => 'regular', 'start' => '2023-10-10', 'end' => '2024-04-18'],
 		['season' => '2023-2024', 'format' => 'playoff', 'start' => '2024-04-20', 'end' => '2024-06-24'],
 		['season' => '2024-2025', 'format' => 'regular', 'start' => '2024-10-04', 'end' => '2025-04-17'],
 		['season' => '2024-2025', 'format' => 'playoff', 'start' => '2025-04-19', 'end' => '2025-06-17'],
 		['season' => '2025-2026', 'format' => 'regular', 'start' => '2025-10-07', 'end' => '2026-04-16'],
-		// ['season' => '2025-2026', 'format' => 'playoff', 'start' => '2026-04-18', 'end' => ''],
+		['season' => '2025-2026', 'format' => 'playoff', 'start' => '2026-04-18', 'end' => '2026-05-06'],
 	];
 
-	$baseURL = 'https://api.hockeychallengehelper.com/api/history?datetime=';
-	$format = 'Y-m-d';
-	$interval = new DateInterval('P1D'); // 1 day interval
+	$local_file = $baseHistoryPath . '/history.json';
+	$data = file_get_contents($local_file);
+	if ($data === false) {
+		$datesProcess = &$datesTotal;
+	} else {
+		$datesStored = json_decode($data, true);
+		if (json_last_error() === JSON_ERROR_NONE) {
+			$datesProcess = [];
+			$datesStoredCount = count($datesStored);
+			$startIndex = $datesStoredCount;
 
-	$index = [];
-	foreach ($dates as &$dateRange) {
-		echo "Season: {$dateRange['season']}<br>";
-		echo "Format: {$dateRange['format']}<br>";
-		echo "Start: {$dateRange['start']}<br>";
-		echo "End: {$dateRange['end']}<br>";
-		echo "<br>";
-
-		$season = $dateRange['season'];
-		$part = $dateRange['format'];
-		$start = $dateRange['start'];
-		$end = $dateRange['end'];
-
-		$realEnd = new DateTime($end);
-		$realEnd->add($interval); // Include the end date in the range
-
-		$period = new DatePeriod(new DateTime($start), $interval, $realEnd);
-
-		$files = [];
-		foreach ($period as $date) {
-			$date = $date->format($format);
-			curl_setopt($ch, CURLOPT_URL, $baseURL . $date);
-
-			$response = curl_exec($ch);
-			if ($response === false) die('cURL Error: ' . curl_error($ch));
-
-			$data = json_decode($response, false);
-			if (json_last_error() !== JSON_ERROR_NONE) die('Error decoding JSON: ' . json_last_error_msg());
-
-			if ($data->status === 404) {
-				echo "No data for {$date}<br>";
-				continue;
+			if ($datesStoredCount > 0) {
+				$lastStoredEntry = $datesStored[$datesStoredCount - 1];
+				// Check if the last stored entry is complete (has files array with entries)
+				if (!isset($lastStoredEntry['files']) || count($lastStoredEntry['files']) === 0) {
+					// Last entry is incomplete, include it in processing
+					$startIndex = $datesStoredCount - 1;
+				}
 			}
 
-			$filename = "{$season}_{$date}_{$part}.json";
-			$files[] = $filename;
-			$local_file = $baseHistoryPath . '/' . $filename;
-			file_put_contents($local_file, $response);
-			echo "$filename<br>";
+			// Add entries to process (new ones and any incomplete last entry)
+			for ($i = $startIndex; $i < count($datesTotal); $i++) {
+				$datesProcess[] = &$datesTotal[$i];
+			}
+
+			// Preserve files from already-processed entries
+			if (count($datesProcess) > 0) {
+				for ($i = 0; $i < $startIndex; $i++) {
+					if (isset($datesStored[$i]['files'])) {
+						$datesTotal[$i]['files'] = $datesStored[$i]['files'];
+					}
+				}
+			}
+		} else {
+			$datesProcess = &$datesTotal;
 		}
-		echo "<br>";
-		$dateRange["files"] = $files;
 	}
 
-	$json_string = json_encode($dates, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+	if (count($datesProcess) > 0) {
+		$baseURL = 'https://api.hockeychallengehelper.com/api/history?datetime=';
+		$format = 'Y-m-d';
+		$interval = new DateInterval('P1D'); // 1 day interval
 
-	$local_file = $baseHistoryPath . '/history.json';
-	if (file_put_contents($local_file, $json_string) === false) {
-		die('Error saving local JSON file.');
+		foreach ($datesProcess as &$dateRange) {
+			echo "Season: {$dateRange['season']}<br>";
+			echo "Format: {$dateRange['format']}<br>";
+			echo "Start: {$dateRange['start']}<br>";
+			echo "End: {$dateRange['end']}<br>";
+			echo "<br>";
+
+			$season = $dateRange['season'];
+			$part = $dateRange['format'];
+			$start = $dateRange['start'];
+			$end = $dateRange['end'];
+
+			$realEnd = new DateTime($end);
+			$realEnd->add($interval); // Include the end date in the range
+
+			$period = new DatePeriod(new DateTime($start), $interval, $realEnd);
+
+			$files = [];
+			foreach ($period as $date) {
+				$date = $date->format($format);
+				curl_setopt($ch, CURLOPT_URL, $baseURL . $date);
+
+				$response = curl_exec($ch);
+				if ($response === false) die('cURL Error: ' . curl_error($ch));
+
+				$data = json_decode($response, false);
+				if (json_last_error() !== JSON_ERROR_NONE) die('Error decoding JSON: ' . json_last_error_msg());
+
+				if ($data->status === 404) {
+					echo "No data for {$date}<br>";
+					continue;
+				}
+
+				$filename = "{$season}_{$date}_{$part}.json";
+				$files[] = $filename;
+				$local_file = $baseHistoryPath . '/' . $filename;
+				file_put_contents($local_file, $response);
+				echo "$filename<br>";
+			}
+			echo "<br>";
+			$dateRange["files"] = $files;
+		}
+
+		$json_string = json_encode($datesTotal, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+
+		if (file_put_contents($local_file, $json_string) === false) {
+			die('Error saving local JSON file.');
+		}
+		echo "Index has been written to $local_file";
 	}
-	echo "Index has been written to $local_file";
 
 	die("<h2>Complete</h2>");
 }
