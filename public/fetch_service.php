@@ -170,6 +170,8 @@ if ($live && isset($_GET['history'])) {
 			$start = isset($dateRange['process_start']) ? $dateRange['process_start'] : $dateRange['start'];
 			$end = $dateRange['end'];
 
+			echo "Fetching from: $start<br>";
+
 			$realEnd = new DateTime($end);
 			$realEnd->add($interval); // Include the end date in the range
 
