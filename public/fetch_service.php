@@ -18,6 +18,7 @@ if ($live && $secure) {
 	$json_data = file_get_contents('php://input');
 
 	$data = json_decode($json_data, true);
+	if (!is_array($data) || !isset($data['csrf_token'])) die("Invalid request format.");
 
 	if (!hash_equals($csrf_token, $data['csrf_token'])) die("Session expired.");
 	if (!isset($data['code']) || !isset($data['name'])) die("Missing required parameters.");
