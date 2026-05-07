@@ -106,8 +106,8 @@ if ($live && isset($_GET['history'])) {
 		['season' => '2025-2026', 'format' => 'playoff', 'start' => '2026-04-18', 'end' => '2026-05-06'],
 	];
 
-	$local_file = $baseHistoryPath . '/history.json';
-	$data = file_get_contents($local_file);
+	$index_file = $baseHistoryPath . '/history.json';
+	$data = file_get_contents($index_file);
 	if ($data === false) {
 		$datesProcess = &$datesTotal;
 	} else {
@@ -117,12 +117,28 @@ if ($live && isset($_GET['history'])) {
 			$datesStoredCount = count($datesStored);
 			$startIndex = $datesStoredCount;
 
-			if ($datesStoredCount > 0) {
-				$lastStoredEntry = $datesStored[$datesStoredCount - 1];
-				// Check if the last stored entry is complete (has files array with entries)
-				if (!isset($lastStoredEntry['files']) || count($lastStoredEntry['files']) === 0) {
-					// Last entry is incomplete, include it in processing
-					$startIndex = $datesStoredCount - 1;
+			// Preserve files from already-processed entries.
+			for ($i = 0; $i < $datesStoredCount && $i < count($datesTotal); $i++) {
+				if (isset($datesStored[$i]['files']) && is_array($datesStored[$i]['files'])) {
+					$datesTotal[$i]['files'] = &$datesStored[$i]['files'];
+				}
+			}
+
+			// Check only the last stored range and extend from its end date if needed.
+			if ($datesStoredCount > 0 && $datesStoredCount <= count($datesTotal)) {
+				$lastIndex = $datesStoredCount - 1;
+				$lastStoredEntry = &$datesStored[$lastIndex];
+				$lastTotalEntry = &$datesTotal[$lastIndex];
+
+				$storedEnd = isset($lastStoredEntry['end']) ? $lastStoredEntry['end'] : null;
+				$totalEnd = $lastTotalEntry['end'];
+
+				if ($storedEnd !== null && $storedEnd !== $totalEnd) {
+					$extendStart = (new DateTime($storedEnd))->add(new DateInterval('P1D'))->format('Y-m-d');
+					if ($extendStart <= $totalEnd) {
+						$startIndex = $lastIndex;
+						$lastTotalEntry['process_start'] = $extendStart;
+					}
 				}
 			}
 
@@ -130,21 +146,14 @@ if ($live && isset($_GET['history'])) {
 			for ($i = $startIndex; $i < count($datesTotal); $i++) {
 				$datesProcess[] = &$datesTotal[$i];
 			}
-
-			// Preserve files from already-processed entries
-			if (count($datesProcess) > 0) {
-				for ($i = 0; $i < $startIndex; $i++) {
-					if (isset($datesStored[$i]['files'])) {
-						$datesTotal[$i]['files'] = $datesStored[$i]['files'];
-					}
-				}
-			}
 		} else {
 			$datesProcess = &$datesTotal;
 		}
 	}
 
-	if (count($datesProcess) > 0) {
+	if (count($datesProcess) === 0) {
+		die("No new data to fetch. Index is up to date.");
+	} else {
 		$baseURL = 'https://api.hockeychallengehelper.com/api/history?datetime=';
 		$format = 'Y-m-d';
 		$interval = new DateInterval('P1D'); // 1 day interval
@@ -158,7 +167,7 @@ if ($live && isset($_GET['history'])) {
 
 			$season = $dateRange['season'];
 			$part = $dateRange['format'];
-			$start = $dateRange['start'];
+			$start = isset($dateRange['process_start']) ? $dateRange['process_start'] : $dateRange['start'];
 			$end = $dateRange['end'];
 
 			$realEnd = new DateTime($end);
@@ -166,9 +175,17 @@ if ($live && isset($_GET['history'])) {
 
 			$period = new DatePeriod(new DateTime($start), $interval, $realEnd);
 
-			$files = [];
-			foreach ($period as $date) {
-				$date = $date->format($format);
+			if (!isset($dateRange['files']) || !is_array($dateRange['files'])) {
+				$dateRange['files'] = [];
+			}
+			$files = &$dateRange['files'];
+
+			$datesToFetch = [];
+			foreach ($period as $dateObj) {
+				$datesToFetch[] = $dateObj->format($format);
+			}
+
+			foreach ($datesToFetch as $date) {
 				curl_setopt($ch, CURLOPT_URL, $baseURL . $date);
 
 				$response = curl_exec($ch);
@@ -184,20 +201,20 @@ if ($live && isset($_GET['history'])) {
 
 				$filename = "{$season}_{$date}_{$part}.json";
 				$files[] = $filename;
-				$local_file = $baseHistoryPath . '/' . $filename;
-				file_put_contents($local_file, $response);
+				$daily_file = $baseHistoryPath . '/' . $filename;
+				file_put_contents($daily_file, $response);
 				echo "$filename<br>";
 			}
 			echo "<br>";
-			$dateRange["files"] = $files;
+			unset($dateRange['process_start']);
 		}
 
 		$json_string = json_encode($datesTotal, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 
-		if (file_put_contents($local_file, $json_string) === false) {
+		if (file_put_contents($index_file, $json_string) === false) {
 			die('Error saving local JSON file.');
 		}
-		echo "Index has been written to $local_file";
+		echo "Index has been written to $index_file";
 	}
 
 	die("<h2>Complete</h2>");
