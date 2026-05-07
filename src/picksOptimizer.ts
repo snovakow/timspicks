@@ -282,8 +282,6 @@ interface SnapshotOddsRow {
 
 interface HistoricalAuditOptions {
     correlationFactor?: number;
-    lookbackDays?: number;
-    snapshotDates?: string[];
     logResults?: boolean;
     gameCountFilter?: '1' | '2' | '3+' | 'all';
 }
@@ -330,11 +328,6 @@ const fetchOptionalJson = async <T>(src: string): Promise<T | null> => {
     }
 };
 
-const hasSnapshotDate = async (date: string): Promise<boolean> => {
-    const games = await fetchOptionalJson<unknown>(`./data/${date}/games.json`);
-    return games !== null;
-};
-
 const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
     const data = await fetchOptionalJson<{
         gameWeek: Array<{
@@ -363,11 +356,6 @@ const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
     }
 
     return Array.from(timeGroups).sort();
-};
-
-const historyDateFromFile = (fileName: string): string | null => {
-    const match = fileName.match(/_(\d{4}-\d{2}-\d{2})_/);
-    return match ? match[1] : null;
 };
 
 const auditLabels: Record<LogStatsKey, string> = {
@@ -734,50 +722,30 @@ export const runHistoricalStrategyAudit = async (
 ): Promise<HistoricalAuditResults> => {
     const {
         correlationFactor = 1,
-        lookbackDays = 60,
-        snapshotDates,
         logResults = true,
         gameCountFilter = 'all',
     } = options;
 
     const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
+    const oldestDate = new Date("2026-04-09"); // Oldest recorded backup date
     const historyByDate = new Map<string, string>();
     for (const item of historyManifest) {
         for (const file of item.files) {
-            const date = historyDateFromFile(file);
-            if (date && !historyByDate.has(date)) historyByDate.set(date, file);
+            const components = file.split('_');
+            if (components.length !== 3) continue;
+            const name = components[1];
+            const date = new Date(name);
+            if (isNaN(date.valueOf())) continue;
+            if (date < oldestDate) continue;
+            historyByDate.set(name, file);
         }
-    }
-
-    let datesToCheck = snapshotDates ?? [];
-    if (datesToCheck.length === 0) {
-        const processData = await fetchOptionalJson<{ processed: string }>('./data/process.json');
-        const latest = processData?.processed ? new Date(processData.processed) : new Date();
-        const oldest = new Date(latest);
-        oldest.setDate(oldest.getDate() - lookbackDays);
-
-        datesToCheck = Array.from(historyByDate.keys())
-            .filter((date) => {
-                const day = new Date(`${date}T00:00:00`);
-                return day >= oldest && day <= latest;
-            })
-            .sort();
-    }
-
-    const availableDates: string[] = [];
-    for (const date of datesToCheck) {
-        if (!historyByDate.has(date)) continue;
-        if (await hasSnapshotDate(date)) availableDates.push(date);
     }
 
     const stats = createAuditBuckets();
     const daysWithSlots = new Set<string>();
 
-    for (const date of availableDates) {
+    for (const [date, historyFile] of historyByDate) {
         try {
-            const historyFile = historyByDate.get(date);
-            if (!historyFile) continue;
-
             const history = await fetchJson<{
                 playerLists: Array<{ id: number; players: HistoryPlayer[] }>;
             }>(`./history/${historyFile}`);
