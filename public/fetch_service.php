@@ -200,10 +200,13 @@ if ($live && isset($_GET['history'])) {
 				}
 
 				$filename = "{$season}_{$date}_{$part}.json";
+			$daily_file = $baseHistoryPath . '/' . $filename;
+			if (file_put_contents($daily_file, $response) !== false) {
 				$files[] = $filename;
-				$daily_file = $baseHistoryPath . '/' . $filename;
-				file_put_contents($daily_file, $response);
 				echo "$filename<br>";
+			} else {
+				echo "Failed to save $filename<br>";
+			}
 			}
 			echo "<br>";
 			unset($dateRange['process_start']);
