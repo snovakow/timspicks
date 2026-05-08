@@ -743,6 +743,7 @@ export const runHistoricalStrategyAudit = async (
 
     const stats = createAuditBuckets();
     const daysWithSlots = new Set<string>();
+    let auditedSlots = 0;
 
     for (const [date, historyFile] of historyByDate) {
         try {
@@ -838,6 +839,7 @@ export const runHistoricalStrategyAudit = async (
 
                     const ref = gameCount === 1 ? correlations['1'] : gameCount === 2 ? correlations['2'] : correlations['3+'];
                     daysWithSlots.add(date);
+                    auditedSlots++;
 
                     for (const bookKey of [...SportsbookKeys, 'betAvg'] as LogStatsKey[]) {
                         const set1 = rows.filter((row) => row.sid === '1' && row[bookKey] !== null);
@@ -930,7 +932,7 @@ export const runHistoricalStrategyAudit = async (
             ];
         }));
         console.table(display);
-        console.log(`Historical strategy audit: ${daysWithSlots.size} days, ${results.betAvg.top.tickets} tickets (factor ${correlationFactor}).`);
+        console.log(`Historical strategy audit: ${daysWithSlots.size} days, ${auditedSlots} slots (factor ${correlationFactor}).`);
     }
 
     return results;
