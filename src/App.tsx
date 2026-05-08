@@ -352,7 +352,7 @@ function App() {
 			});
 		}
 		if (ANALYZE) {
-			const options = { correlationFactor: 1, formatFilter: 'playoff' as const };
+			const options = { correlationFactor: 0, formatFilter: 'playoff' as const };
 
 			ANALYZE = false;
 			const format = (pick: Picks.PickOdds, betKey: LogStatsKey) => {
@@ -369,7 +369,7 @@ function App() {
 			}
 
 			bestPicks(memoizedDisplayData.table1Rows, memoizedDisplayData.table2Rows, memoizedDisplayData.table3Rows, options).then((results) => {
-				console.log(`${makeTitle("*** Best picks ***")}`);
+				console.log(`${makeTitle("*** Best Picks ***")}`);
 				for (const result of results) {
 					const bets: Map<LogStatsKey, number> = new Map();
 					const strategies: Set<Strategy> = new Set();

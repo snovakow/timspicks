@@ -284,7 +284,12 @@ type ItemFormat = 'regular' | 'playoff';
 type Format = ItemFormat | 'all';
 export interface AnalyzeOptions {
     correlationFactor?: number;
-    formatFilter: 'regular' | 'playoff' | 'all';
+    formatFilter?: Format;
+}
+const GameType: Record<Format, string> = {
+    regular: 'Regular Season',
+    playoff: 'Playoffs',
+    all: 'Full Season',
 }
 interface HistoricalAuditOptions extends AnalyzeOptions {
     logResults?: boolean;
@@ -907,36 +912,45 @@ export const runHistoricalStrategyAudit = async (
         },
     };
 
+    if (correlationFactor <= 0) {
+        for (const bookKey of Object.keys(auditLabels) as LogStatsKey[]) {
+            const top = results[bookKey].top;
+            results[bookKey].least1 = { ...top };
+            results[bookKey].points = { ...top };
+            results[bookKey].hits = { ...top };
+        }
+    }
+
     if (logResults) {
         const display = Object.fromEntries((Object.keys(auditLabels) as LogStatsKey[]).map((bookKey) => {
             const tickets = results[bookKey].top.tickets;
             const picks = results[bookKey].top.totalPicks;
+
+            const table: Record<string, string> = {};
+            table[`${StrategyLabels.least1} Top (${tickets}) Pred`] =
+                `${formatAuditPercent(results[bookKey].top.ticketWinPct)} ` +
+                `(${results[bookKey].top.ticketWins}) ` +
+                `${formatAuditPercent(results[bookKey].top.predictedTicketWinPct)}`;
+            if (correlationFactor > 0) table[`${StrategyLabels.least1} L% (${tickets}) Pred`] =
+                `${formatAuditPercent(results[bookKey].least1.ticketWinPct)} ` +
+                `(${results[bookKey].least1.ticketWins}) ` +
+                `${formatAuditPercent(results[bookKey].least1.predictedTicketWinPct)}`;
+            table[`${StrategyLabels.points} Top (${tickets}) Pred`] =
+                `${formatAuditPoints(results[bookKey].top.avgPoints)} ` +
+                `${formatAuditPoints(results[bookKey].top.predictedAvgPoints)}`;
+            if (correlationFactor > 0) table[`${StrategyLabels.points} L% (${tickets}) Pred`] =
+                `${formatAuditPoints(results[bookKey].points.avgPoints)} ` +
+                `${formatAuditPoints(results[bookKey].points.predictedAvgPoints)}`;
+            table[`${StrategyLabels.hits} Top (${picks}) Pred`] =
+                `${formatAuditPercent(results[bookKey].top.hitPct)} ` +
+                `(${results[bookKey].top.hits}) ` +
+                `${formatAuditPercent(results[bookKey].top.predictedHitPct)}`;
+            if (correlationFactor > 0) table[`${StrategyLabels.hits} L% (${picks}) Pred`] =
+                `${formatAuditPercent(results[bookKey].hits.hitPct)} ` +
+                `(${results[bookKey].hits.hits}) ` +
+                `${formatAuditPercent(results[bookKey].hits.predictedHitPct)}`;
             return [
-                auditLabels[bookKey],
-                {
-                    [`${StrategyLabels.least1} Top (${tickets}) Pred`]:
-                        `${formatAuditPercent(results[bookKey].top.ticketWinPct)} ` +
-                        `(${results[bookKey].top.ticketWins}) ` +
-                        `${formatAuditPercent(results[bookKey].top.predictedTicketWinPct)}`,
-                    [`${StrategyLabels.least1} L% (${tickets}) Pred`]:
-                        `${formatAuditPercent(results[bookKey].least1.ticketWinPct)} ` +
-                        `(${results[bookKey].least1.ticketWins}) ` +
-                        `${formatAuditPercent(results[bookKey].least1.predictedTicketWinPct)}`,
-                    [`${StrategyLabels.points} Top (${tickets}) Pred`]:
-                        `${formatAuditPoints(results[bookKey].top.avgPoints)} ` +
-                        `${formatAuditPoints(results[bookKey].top.predictedAvgPoints)}`,
-                    [`${StrategyLabels.points} L% (${tickets}) Pred`]:
-                        `${formatAuditPoints(results[bookKey].points.avgPoints)} ` +
-                        `${formatAuditPoints(results[bookKey].points.predictedAvgPoints)}`,
-                    [`${StrategyLabels.hits} Top (${picks}) Pred`]:
-                        `${formatAuditPercent(results[bookKey].top.hitPct)} ` +
-                        `(${results[bookKey].top.hits}) ` +
-                        `${formatAuditPercent(results[bookKey].top.predictedHitPct)}`,
-                    [`${StrategyLabels.hits} L% (${picks}) Pred`]:
-                        `${formatAuditPercent(results[bookKey].hits.hitPct)} ` +
-                        `(${results[bookKey].hits.hits}) ` +
-                        `${formatAuditPercent(results[bookKey].hits.predictedHitPct)}`,
-                },
+                auditLabels[bookKey], table
             ];
         }));
         console.table(display);
@@ -948,7 +962,7 @@ export const runHistoricalStrategyAudit = async (
 
 export const comparePoolAccuracy = async (options: AnalyzeOptions = {}): Promise<ComparePoolAccuracySummary> => {
     const { correlationFactor = 1, formatFilter = 'all' } = options;
-    console.log('Comparing top pick accuracy across game count pools and correlation factor', correlationFactor, '\n');
+    console.log(`Comparing top pick accuracy across game count pools and correlation factor ${correlationFactor} for the ${GameType[formatFilter]}\n`);
 
     const pools: PoolKey[] = ['1', '2', '3+', 'all'];
     const results: Record<PoolKey, HistoricalAuditResults> = {
@@ -1008,7 +1022,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions = {}): Promise
         results[pool] = auditResult;
     }
 
-    console.log(`\n\n=== SUMMARY L%=${correlationFactor} ===`);
+    console.log(`\n\n=== ${GameType[formatFilter]} Summary L%=${correlationFactor} ===`);
     console.log('Top correlated bet by pool and summary column:');
     for (const pool of pools) {
         const bestTopPickPct = getTopBooksForMetric(results[pool], 'top', (stat) => stat.hitPct);
@@ -1036,7 +1050,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions = {}): Promise
             `(${formatTicketRatio(bestTopStreak.stat)})`,
             `${formatBookPredictions(bestTopStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
         ].join(' '));
-        console.log([
+        if (correlationFactor > 0) console.log([
             `    ${StrategyLabels.least1} L%: `,
             `${bestCorrelatedStreak.stat.ticketWinPct.toFixed(2)}%`,
             `(${formatTicketRatio(bestCorrelatedStreak.stat)})`,
@@ -1048,7 +1062,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions = {}): Promise
             `(${bestTopPoints.stat.tickets})`,
             `${formatBookPredictions(bestTopPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
         ].join(' '));
-        console.log([
+        if (correlationFactor > 0) console.log([
             `    ${StrategyLabels.points} L%: `,
             `${bestCorrelatedPoints.stat.avgPoints.toFixed(2)}`,
             `(${bestCorrelatedPoints.stat.tickets})`,
@@ -1060,7 +1074,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions = {}): Promise
             `(${bestTopPickPct.stat.ratio})`,
             `${formatBookPredictions(bestTopPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
         ].join(' '));
-        console.log([
+        if (correlationFactor > 0) console.log([
             `    ${StrategyLabels.hits} L%: `,
             `${bestCorrelatedPickPct.stat.hitPct.toFixed(2)}%`,
             `(${bestCorrelatedPickPct.stat.ratio})`,
@@ -1188,8 +1202,10 @@ export const bestPicks = async (
 
     const poolKey = resolvePoolKey(gameCount);
     const ref = correlations[poolKey];
+    const correlationFactor = options?.correlationFactor ?? 1;
+    const epsilon = 1e-12;
 
-    // Run once with factor=1; top results within the summary are independent of correlation factor
+    // Run once using the requested analysis options.
     const summary = await comparePoolAccuracy(options);
 
     // For each strategy, decide: use top or correlated? Calculate correlation ratio.
@@ -1228,12 +1244,12 @@ export const bestPicks = async (
             corrScore = summary[poolKey].correlatedPickPct.actualHitPct;
         }
 
-        // Use correlated only if it improves the result
-        if (corrScore > topScore) {
+        // Use correlated only if correlation is enabled and it improves the result.
+        if (correlationFactor > 0 && corrScore > topScore + epsilon) {
             strategyConfig[strategy] = {
                 books: corrBooks,
-                correlationFactor: 1,
-                correlationRatio: corrScore / topScore,
+                correlationFactor: correlationFactor,
+                correlationRatio: topScore <= epsilon ? 1 : corrScore / topScore,
             };
         } else {
             strategyConfig[strategy] = {
@@ -1244,7 +1260,6 @@ export const bestPicks = async (
         }
     }
 
-    const epsilon = 1e-12;
     const bestByStrategyAndBooks: Record<Strategy, Map<string, { combo: Pick<BestPicksResult, "1" | "2" | "3">; ratio: number }>> = {
         least1: new Map(),
         points: new Map(),
