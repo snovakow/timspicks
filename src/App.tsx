@@ -194,7 +194,6 @@ function App() {
 
 					const bookName = (book: LogStatsKey, correlation: number) => {
 						const name = book === 'betAvg' ? 'Average' : Sportsbooks[book].title;
-						if (book === 'betAvg') return 'Average';
 						return makeTitle(`${name} (${correlation.toFixed(3)})`);
 					}
 
