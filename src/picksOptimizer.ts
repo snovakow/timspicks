@@ -7,6 +7,7 @@ import type { ComboPattern, LogStatsKey, StrategyMode, Strategy } from "./dataTy
 import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies } from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
 import { selectStrategyCombos } from "./strategySelection";
+import * as Feature from './features';
 
 export const calcAny = (prob1: number, prob2: number, prob3: number): number => {
     return 1 - (1 - prob1) * (1 - prob2) * (1 - prob3);
@@ -278,11 +279,13 @@ interface SnapshotOddsRow {
     bet3: number | null;
     bet4: number | null;
     betAvg: number | null;
+    betCount: number;
 }
 
 type ItemFormat = 'regular' | 'playoff';
 type Format = ItemFormat | 'all';
 export interface AnalyzeOptions {
+    minSportsbooks: number;
     correlationFactor?: number;
     formatFilter?: Format;
     firstSlotOnly?: boolean;
@@ -729,9 +732,10 @@ const formatAuditPoints = (value: number): string => value.toFixed(2);
 const formatTicketRatio = (stat: HistoricalAuditStat): string => `${stat.ticketWins}/${stat.tickets}`;
 
 export const runHistoricalStrategyAudit = async (
-    options: HistoricalAuditOptions = {}
+    options: HistoricalAuditOptions
 ): Promise<HistoricalAuditResults> => {
     const {
+        minSportsbooks,
         correlationFactor = 1,
         logResults = true,
         gameCountFilter = 'all',
@@ -759,7 +763,6 @@ export const runHistoricalStrategyAudit = async (
     const stats = createAuditBuckets();
     const daysWithSlots = new Set<string>();
     let auditedSlots = 0;
-    let skippedByGameCountFilter = 0;
 
     for (const [date, historyFile] of historyByDate) {
         try {
@@ -829,20 +832,25 @@ export const runHistoricalStrategyAudit = async (
                                 bet3: probs[2],
                                 bet4: probs[3],
                                 betAvg: null,
+                                betCount: 0,
                             });
                         }
                     }
 
                     if (rows.length === 0) continue;
 
-                    deVig(rows as unknown as Picks.Player[]);
+                    // Only apply deVig if normalizeSportsbooks is enabled
+                    if (Feature.normalizeSportsbooks) deVig(rows as unknown as Picks.Player[]);
+
+                    // Always recalculate betCount and betAvg using minSportsbooks filter, matching statsCalculations
                     for (const row of rows) {
                         const values = SportsbookKeys
                             .map((key) => row[key])
                             .filter((value): value is number => value !== null);
-                        row.betAvg = values.length === 0
-                            ? null
-                            : values.reduce((sum, value) => sum + value, 0) / values.length;
+                        row.betCount = values.length;
+                        row.betAvg = values.length >= minSportsbooks
+                            ? values.reduce((sum, value) => sum + value, 0) / values.length
+                            : null;
                     }
 
                     // Mirror gamesCount by deduping games from helper teams only.
@@ -853,7 +861,6 @@ export const runHistoricalStrategyAudit = async (
                     if (gameCountFilter !== 'all') {
                         const poolKey = gameCount === 1 ? '1' : gameCount === 2 ? '2' : '3+';
                         if (poolKey !== gameCountFilter) {
-                            skippedByGameCountFilter++;
                             // If firstSlotOnly, break after trying the first slot (even if it doesn't match)
                             if (firstSlotOnly && isFirstSlot) break;
                             continue;
@@ -865,9 +872,9 @@ export const runHistoricalStrategyAudit = async (
                     auditedSlots++;
 
                     for (const bookKey of [...SportsbookKeys, 'betAvg'] as LogStatsKey[]) {
-                        const set1 = rows.filter((row) => row.sid === '1' && row[bookKey] !== null);
-                        const set2 = rows.filter((row) => row.sid === '2' && row[bookKey] !== null);
-                        const set3 = rows.filter((row) => row.sid === '3' && row[bookKey] !== null);
+                        const set1 = rows.filter((row) => row.sid === '1' && row[bookKey] !== null && row.betCount >= minSportsbooks);
+                        const set2 = rows.filter((row) => row.sid === '2' && row[bookKey] !== null && row.betCount >= minSportsbooks);
+                        const set3 = rows.filter((row) => row.sid === '3' && row[bookKey] !== null && row.betCount >= minSportsbooks);
                         if (set1.length === 0 || set2.length === 0 || set3.length === 0) continue;
 
                         const evaluation = evaluateBookCombos(set1, set2, set3, bookKey, ref, correlationFactor);
@@ -976,8 +983,8 @@ export const runHistoricalStrategyAudit = async (
     return results;
 };
 
-export const comparePoolAccuracy = async (options: AnalyzeOptions = {}): Promise<ComparePoolAccuracySummary> => {
-    const { correlationFactor = 1, formatFilter = 'all', firstSlotOnly = false } = options;
+export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<ComparePoolAccuracySummary> => {
+    const { correlationFactor = 1, formatFilter = 'all', firstSlotOnly = false, minSportsbooks } = options;
     const slotDetail = firstSlotOnly ? "First slot per day" : "All slots per day";
     console.log(
         `\nComparing top pick accuracy across game count pools:\n` +
@@ -1036,6 +1043,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions = {}): Promise
     for (const pool of pools) {
         console.log(`\n=== Pool "${pool}" ===`);
         const auditResult = await runHistoricalStrategyAudit({
+            minSportsbooks,
             correlationFactor: correlationFactor,
             gameCountFilter: pool,
             formatFilter,
@@ -1218,7 +1226,7 @@ export const bestPicks = async (
     picks1: Picks.PickOdds[],
     picks2: Picks.PickOdds[],
     picks3: Picks.PickOdds[],
-    options?: AnalyzeOptions
+    options: AnalyzeOptions
 ): Promise<BestPicksResult[]> => {
     const gameCount = gamesCount(picks1, picks2, picks3);
     if (gameCount === 0) return [];
@@ -1226,6 +1234,7 @@ export const bestPicks = async (
     const poolKey = resolvePoolKey(gameCount);
     const ref = correlations[poolKey];
     const correlationFactor = options?.correlationFactor ?? 1;
+    const { minSportsbooks } = options;
     const epsilon = 1e-12;
 
     // Run once using the requested analysis options.
@@ -1303,13 +1312,13 @@ export const bestPicks = async (
             const candidates: SelectionCandidate<Picks.PickOdds>[] = [];
             for (const pick1 of picks1) {
                 const prob1 = pick1.player[book];
-                if (prob1 === null) continue;
+                if (prob1 === null || pick1.player.betCount < minSportsbooks) continue;
                 for (const pick2 of picks2) {
                     const prob2 = pick2.player[book];
-                    if (prob2 === null) continue;
+                    if (prob2 === null || pick2.player.betCount < minSportsbooks) continue;
                     for (const pick3 of picks3) {
                         const prob3 = pick3.player[book];
-                        if (prob3 === null) continue;
+                        if (prob3 === null || pick3.player.betCount < minSportsbooks) continue;
 
                         candidates.push({
                             pick1,

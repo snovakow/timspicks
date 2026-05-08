@@ -352,7 +352,12 @@ function App() {
 			});
 		}
 		if (ANALYZE) {
-			const options = { correlationFactor: 0, formatFilter: 'all' as const, firstSlotOnly: false };
+			const options = {
+				correlationFactor: 0,
+				formatFilter: 'all' as const,
+				firstSlotOnly: false,
+				minSportsbooks
+			};
 
 			ANALYZE = false;
 			const format = (pick: Picks.PickOdds, betKey: LogStatsKey) => {
