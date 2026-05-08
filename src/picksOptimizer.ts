@@ -932,7 +932,7 @@ export const runHistoricalStrategyAudit = async (
             ];
         }));
         console.table(display);
-        console.log(`Historical strategy audit: ${daysWithSlots.size} days, ${auditedSlots} slots (factor ${correlationFactor}).`);
+        console.log(`Historical strategy audit: ${daysWithSlots.size} days, ${auditedSlots} slots.`);
     }
 
     return results;
