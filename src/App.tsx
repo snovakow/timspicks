@@ -352,7 +352,7 @@ function App() {
 			});
 		}
 		if (ANALYZE) {
-			const options = { correlationFactor: 0, formatFilter: 'playoff' as const };
+			const options = { correlationFactor: 0, formatFilter: 'all' as const };
 
 			ANALYZE = false;
 			const format = (pick: Picks.PickOdds, betKey: LogStatsKey) => {
