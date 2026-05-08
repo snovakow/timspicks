@@ -285,6 +285,7 @@ type Format = ItemFormat | 'all';
 export interface AnalyzeOptions {
     correlationFactor?: number;
     formatFilter?: Format;
+    firstSlotOnly?: boolean;
 }
 const GameType: Record<Format, string> = {
     regular: 'Regular Season',
@@ -735,6 +736,7 @@ export const runHistoricalStrategyAudit = async (
         logResults = true,
         gameCountFilter = 'all',
         formatFilter = 'all',
+        firstSlotOnly = false,
     } = options;
 
     const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
@@ -757,6 +759,7 @@ export const runHistoricalStrategyAudit = async (
     const stats = createAuditBuckets();
     const daysWithSlots = new Set<string>();
     let auditedSlots = 0;
+    let skippedByGameCountFilter = 0;
 
     for (const [date, historyFile] of historyByDate) {
         try {
@@ -772,6 +775,8 @@ export const runHistoricalStrategyAudit = async (
             const gameStartTimes = await getGameStartTimeGroups(date);
 
             for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
+                // Track if this is the first slot we encounter (for firstSlotOnly logic)
+                const isFirstSlot = slotIndex === 0;
                 try {
                     const folderTime = gameStartTimes[slotIndex];
 
@@ -847,7 +852,12 @@ export const runHistoricalStrategyAudit = async (
 
                     if (gameCountFilter !== 'all') {
                         const poolKey = gameCount === 1 ? '1' : gameCount === 2 ? '2' : '3+';
-                        if (poolKey !== gameCountFilter) continue;
+                        if (poolKey !== gameCountFilter) {
+                            skippedByGameCountFilter++;
+                            // If firstSlotOnly, break after trying the first slot (even if it doesn't match)
+                            if (firstSlotOnly && isFirstSlot) break;
+                            continue;
+                        }
                     }
 
                     const ref = gameCount === 1 ? correlations['1'] : gameCount === 2 ? correlations['2'] : correlations['3+'];
@@ -870,9 +880,14 @@ export const runHistoricalStrategyAudit = async (
                             if (result) applyAuditOutcome(stats[bookKey][strategy], result.outcome);
                         }
                     }
+
+                    // Successfully audited a snapshot; break if firstSlotOnly
+                    if (firstSlotOnly) break;
                 } catch (error) {
                     console.warn(`Skipping snapshot ${date} ${gameStartTimes[slotIndex]}:`, error);
                 }
+                // Break after trying first slot even if there was an error
+                if (firstSlotOnly && isFirstSlot) break;
             }
         } catch (error) {
             console.warn(`Skipping date ${date}:`, error);
@@ -954,15 +969,22 @@ export const runHistoricalStrategyAudit = async (
             ];
         }));
         console.table(display);
-        console.log(`Historical strategy audit: ${daysWithSlots.size} days, ${auditedSlots} slots.`);
+        const detailMsg = firstSlotOnly ? "" : `, ${auditedSlots} slots`;
+        console.log(`Historical strategy audit: ${daysWithSlots.size} days${detailMsg}`);
     }
 
     return results;
 };
 
 export const comparePoolAccuracy = async (options: AnalyzeOptions = {}): Promise<ComparePoolAccuracySummary> => {
-    const { correlationFactor = 1, formatFilter = 'all' } = options;
-    console.log(`Comparing top pick accuracy across game count pools and correlation factor ${correlationFactor} for the ${GameType[formatFilter]}\n`);
+    const { correlationFactor = 1, formatFilter = 'all', firstSlotOnly = false } = options;
+    const slotDetail = firstSlotOnly ? "First slot per day" : "All slots per day";
+    console.log(
+        `\nComparing top pick accuracy across game count pools:\n` +
+        `Correlation factor = ${correlationFactor}\n` +
+        `${slotDetail}\n` +
+        `${GameType[formatFilter]}\n`
+    );
 
     const pools: PoolKey[] = ['1', '2', '3+', 'all'];
     const results: Record<PoolKey, HistoricalAuditResults> = {
@@ -1017,13 +1039,14 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions = {}): Promise
             correlationFactor: correlationFactor,
             gameCountFilter: pool,
             formatFilter,
+            firstSlotOnly,
             logResults: true,
         });
         results[pool] = auditResult;
     }
 
-    console.log(`\n\n=== ${GameType[formatFilter]} Summary L%=${correlationFactor} ===`);
-    console.log('Top correlated bet by pool and summary column:');
+    console.log(`\n\n=== Summary: ${GameType[formatFilter]}, L%=${correlationFactor}, ${slotDetail} ===`);
+    console.log('Top bet by pool and strategy:');
     for (const pool of pools) {
         const bestTopPickPct = getTopBooksForMetric(results[pool], 'top', (stat) => stat.hitPct);
         const bestTopPoints = getTopBooksForMetric(results[pool], 'top', (stat) => stat.avgPoints);
