@@ -174,73 +174,6 @@ function App() {
 
 				setData({ gamesList, playerList, table1Rows, table2Rows, table3Rows });
 				setError(null);
-
-				// Run SIMULATE or ANALYZE once app has initialized
-				if (SIMULATE) {
-					SIMULATE = false;
-					runSimulation(1000000).then((results) => {
-						console.log(results);
-					});
-				}
-				if (ANALYZE) {
-					ANALYZE = false;
-					const format = (pick: Picks.PickOdds, betKey: LogStatsKey) => {
-						const player = pick.player;
-						const bet = player[betKey];
-						const odds = bet === null ? '' : `${roundToPercent(bet, precision)} - `;
-						return `${odds}${player.fullName} (${player.team.code})`;
-					};
-					const makeTitle = (text: string) => `\n${text}\n${"-".repeat(text.length)}`;
-
-					const bookName = (book: LogStatsKey, correlation: number) => {
-						const name = book === 'betAvg' ? 'Average' : Sportsbooks[book].title;
-						return makeTitle(`${name} (${correlation.toFixed(3)})`);
-					}
-
-					const options = { correlationFactor: 1, formatFilter: 'playoff' as const };
-					bestPicks(table1Rows, table2Rows, table3Rows, options).then((results) => {
-						console.log(`${makeTitle("*** Best picks ***")}`);
-						for (const result of results) {
-							const bets: Map<LogStatsKey, number> = new Map();
-							const strategies: Set<Strategy> = new Set();
-							for (const strategy of result.strategies) {
-								for (const book of strategy.books) bets.set(book, strategy.correlationRatio);
-								strategies.add(strategy.key);
-							}
-
-							for (const [bet, correlation] of bets) {
-								console.log(`${bookName(bet, correlation)}`);
-								console.log(`1: ${format(result['1'], bet)}`);
-								console.log(`2: ${format(result['2'], bet)}`);
-								console.log(`3: ${format(result['3'], bet)}`);
-
-								const odd1 = result['1'].player[bet];
-								if (odd1 === null) continue;
-								const odd2 = result['2'].player[bet];
-								if (odd2 === null) continue;
-								const odd3 = result['3'].player[bet];
-								if (odd3 === null) continue;
-
-								const anyValue = calcAny(odd1, odd2, odd3) * correlation;
-								const pntValue = calcPnt(odd1, odd2, odd3) * correlation;
-								const hitValue = calcHit(odd1, odd2, odd3) / 3 * correlation;
-
-								const any = roundToPercent(anyValue, comboPrecision);
-								const pnt = pntValue.toFixed(comboPrecision);
-								const hit = roundToPercent(hitValue, comboPrecision);
-
-								const anyBold = strategies.has('least1') ? '*' : '';
-								const pntBold = strategies.has('points') ? '*' : '';
-								const hitBold = strategies.has('hits') ? '*' : '';
-
-								console.log(`${anyBold}${StrategyLabels.least1}: ${any}`);
-								console.log(`${pntBold}${StrategyLabels.points}: ${pnt}`);
-								console.log(`${hitBold}${StrategyLabels.hits}: ${hit}`);
-							}
-						}
-					});
-				}
-
 			} catch (error: unknown) {
 				if (error instanceof Error && error.message === DataProcessor.NO_GAMES_ERROR) {
 					console.warn('No games found for today. Displaying empty tables.');
@@ -409,6 +342,75 @@ function App() {
 			correlationFactor
 		);
 	}, [memoizedDisplayData, minSportsbooks, correlationFactor]);
+
+	if (memoizedDisplayData) {
+		// Run SIMULATE or ANALYZE only once after data has initialized
+		if (SIMULATE) {
+			SIMULATE = false;
+			runSimulation(1000000).then((results) => {
+				console.log(results);
+			});
+		}
+		if (ANALYZE) {
+			const options = { correlationFactor: 1, formatFilter: 'playoff' as const };
+
+			ANALYZE = false;
+			const format = (pick: Picks.PickOdds, betKey: LogStatsKey) => {
+				const player = pick.player;
+				const bet = player[betKey];
+				const odds = bet === null ? '' : `${roundToPercent(bet, precision)} - `;
+				return `${odds}${player.fullName} (${player.team.code})`;
+			};
+			const makeTitle = (text: string) => `\n${text}\n${"-".repeat(text.length)}`;
+
+			const bookName = (book: LogStatsKey, correlation: number) => {
+				const name = book === 'betAvg' ? 'Average' : Sportsbooks[book].title;
+				return makeTitle(`${name} (${correlation.toFixed(3)})`);
+			}
+
+			bestPicks(memoizedDisplayData.table1Rows, memoizedDisplayData.table2Rows, memoizedDisplayData.table3Rows, options).then((results) => {
+				console.log(`${makeTitle("*** Best picks ***")}`);
+				for (const result of results) {
+					const bets: Map<LogStatsKey, number> = new Map();
+					const strategies: Set<Strategy> = new Set();
+					for (const strategy of result.strategies) {
+						for (const book of strategy.books) bets.set(book, strategy.correlationRatio);
+						strategies.add(strategy.key);
+					}
+
+					for (const [bet, correlation] of bets) {
+						console.log(`${bookName(bet, correlation)}`);
+						console.log(`1: ${format(result['1'], bet)}`);
+						console.log(`2: ${format(result['2'], bet)}`);
+						console.log(`3: ${format(result['3'], bet)}`);
+
+						const odd1 = result['1'].player[bet];
+						if (odd1 === null) continue;
+						const odd2 = result['2'].player[bet];
+						if (odd2 === null) continue;
+						const odd3 = result['3'].player[bet];
+						if (odd3 === null) continue;
+
+						const anyValue = calcAny(odd1, odd2, odd3) * correlation;
+						const pntValue = calcPnt(odd1, odd2, odd3) * correlation;
+						const hitValue = calcHit(odd1, odd2, odd3) / 3 * correlation;
+
+						const any = roundToPercent(anyValue, comboPrecision);
+						const pnt = pntValue.toFixed(comboPrecision);
+						const hit = roundToPercent(hitValue, comboPrecision);
+
+						const anyBold = strategies.has('least1') ? '*' : '';
+						const pntBold = strategies.has('points') ? '*' : '';
+						const hitBold = strategies.has('hits') ? '*' : '';
+
+						console.log(`${anyBold}${StrategyLabels.least1}: ${any}`);
+						console.log(`${pntBold}${StrategyLabels.points}: ${pnt}`);
+						console.log(`${hitBold}${StrategyLabels.hits}: ${hit}`);
+					}
+				}
+			});
+		}
+	}
 
 	// Keep popup stats in sync with the latest cache only while the stats view is visible.
 	useEffect(() => {
