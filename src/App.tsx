@@ -198,7 +198,8 @@ function App() {
 						return makeTitle(`${name} (${correlation.toFixed(3)})`);
 					}
 
-					bestPicks(table1Rows, table2Rows, table3Rows).then((results) => {
+					const options = { correlationFactor: 1, formatFilter: 'all' } as const;
+					bestPicks(table1Rows, table2Rows, table3Rows, options).then((results) => {
 						console.log(`${makeTitle("*** Best picks ***")}`);
 						for (const result of results) {
 							const bets: Map<LogStatsKey, number> = new Map();

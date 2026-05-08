@@ -280,8 +280,13 @@ interface SnapshotOddsRow {
     betAvg: number | null;
 }
 
-interface HistoricalAuditOptions {
+type ItemFormat = 'regular' | 'playoff';
+type Format = ItemFormat | 'all';
+export interface AnalyzeOptions {
     correlationFactor?: number;
+    formatFilter: 'regular' | 'playoff' | 'all';
+}
+interface HistoricalAuditOptions extends AnalyzeOptions {
     logResults?: boolean;
     gameCountFilter?: '1' | '2' | '3+' | 'all';
 }
@@ -724,12 +729,15 @@ export const runHistoricalStrategyAudit = async (
         correlationFactor = 1,
         logResults = true,
         gameCountFilter = 'all',
+        formatFilter = 'all',
     } = options;
 
     const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
     const oldestDate = new Date("2026-04-09"); // Oldest recorded backup date
     const historyByDate = new Map<string, string>();
     for (const item of historyManifest) {
+        if (formatFilter !== 'all' && item.format !== formatFilter) continue;
+
         for (const file of item.files) {
             const components = file.split('_');
             if (components.length !== 3) continue;
@@ -938,7 +946,8 @@ export const runHistoricalStrategyAudit = async (
     return results;
 };
 
-export const comparePoolAccuracy = async (correlationFactor: number = 1): Promise<ComparePoolAccuracySummary> => {
+export const comparePoolAccuracy = async (options: AnalyzeOptions = {}): Promise<ComparePoolAccuracySummary> => {
+    const { correlationFactor = 1, formatFilter = 'all' } = options;
     console.log('Comparing top pick accuracy across game count pools and correlation factor', correlationFactor, '\n');
 
     const pools: PoolKey[] = ['1', '2', '3+', 'all'];
@@ -993,6 +1002,7 @@ export const comparePoolAccuracy = async (correlationFactor: number = 1): Promis
         const auditResult = await runHistoricalStrategyAudit({
             correlationFactor: correlationFactor,
             gameCountFilter: pool,
+            formatFilter,
             logResults: true,
         });
         results[pool] = auditResult;
@@ -1167,7 +1177,12 @@ export const gamesCount = (picks1: Picks.PickOdds[], picks2: Picks.PickOdds[], p
     return gameCount;
 }
 
-export const bestPicks = async (picks1: Picks.PickOdds[], picks2: Picks.PickOdds[], picks3: Picks.PickOdds[]): Promise<BestPicksResult[]> => {
+export const bestPicks = async (
+    picks1: Picks.PickOdds[],
+    picks2: Picks.PickOdds[],
+    picks3: Picks.PickOdds[],
+    options?: AnalyzeOptions
+): Promise<BestPicksResult[]> => {
     const gameCount = gamesCount(picks1, picks2, picks3);
     if (gameCount === 0) return [];
 
@@ -1175,7 +1190,7 @@ export const bestPicks = async (picks1: Picks.PickOdds[], picks2: Picks.PickOdds
     const ref = correlations[poolKey];
 
     // Run once with factor=1; top results within the summary are independent of correlation factor
-    const summary = await comparePoolAccuracy(1);
+    const summary = await comparePoolAccuracy(options);
 
     // For each strategy, decide: use top or correlated? Calculate correlation ratio.
     interface StrategyConfig {
