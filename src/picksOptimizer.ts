@@ -721,6 +721,10 @@ const evaluateBookCombos = (
     };
 };
 
+const round = (value: number, precision: number = 1): number => {
+    const factor = 10 ** precision;
+    return Math.round(value * factor) / factor;
+};
 const formatAuditStat = (bucket: AuditBucket): HistoricalAuditStat => {
     const totalPicks = bucket.tickets * 3;
     const hitPct = totalPicks === 0 ? 0 : (100 * bucket.totalHits) / totalPicks;
@@ -740,13 +744,13 @@ const formatAuditStat = (bucket: AuditBucket): HistoricalAuditStat => {
         predictedTicketWinPct,
         avgPoints,
         predictedAvgPoints,
-        ratio: `${bucket.totalHits}/${totalPicks}`,
+        ratio: `${round(bucket.totalHits)}/${totalPicks}`,
     };
 };
 
 const formatAuditPercent = (value: number): string => `${value.toFixed(2)}%`;
 const formatAuditPoints = (value: number): string => value.toFixed(2);
-const formatTicketRatio = (stat: HistoricalAuditStat): string => `${stat.ticketWins}/${stat.tickets}`;
+const formatTicketRatio = (stat: HistoricalAuditStat): string => `${round(stat.ticketWins)}/${stat.tickets}`;
 
 export const runHistoricalStrategyAudit = async (
     options: HistoricalAuditOptions
@@ -969,11 +973,11 @@ export const runHistoricalStrategyAudit = async (
             const table: Record<string, string> = {};
             table[`${StrategyLabels.least1} Top (${tickets}) Pred`] =
                 `${formatAuditPercent(results[bookKey].top.ticketWinPct)} ` +
-                `(${results[bookKey].top.ticketWins}) ` +
+                `(${round(results[bookKey].top.ticketWins)}) ` +
                 `${formatAuditPercent(results[bookKey].top.predictedTicketWinPct)}`;
             if (correlationFactor > 0) table[`${StrategyLabels.least1} L% (${tickets}) Pred`] =
                 `${formatAuditPercent(results[bookKey].least1.ticketWinPct)} ` +
-                `(${results[bookKey].least1.ticketWins}) ` +
+                `(${round(results[bookKey].least1.ticketWins)}) ` +
                 `${formatAuditPercent(results[bookKey].least1.predictedTicketWinPct)}`;
             table[`${StrategyLabels.points} Top (${tickets}) Pred`] =
                 `${formatAuditPoints(results[bookKey].top.avgPoints)} ` +
@@ -983,11 +987,11 @@ export const runHistoricalStrategyAudit = async (
                 `${formatAuditPoints(results[bookKey].points.predictedAvgPoints)}`;
             table[`${StrategyLabels.hits} Top (${picks}) Pred`] =
                 `${formatAuditPercent(results[bookKey].top.hitPct)} ` +
-                `(${results[bookKey].top.hits}) ` +
+                `(${round(results[bookKey].top.hits)}) ` +
                 `${formatAuditPercent(results[bookKey].top.predictedHitPct)}`;
             if (correlationFactor > 0) table[`${StrategyLabels.hits} L% (${picks}) Pred`] =
                 `${formatAuditPercent(results[bookKey].hits.hitPct)} ` +
-                `(${results[bookKey].hits.hits}) ` +
+                `(${round(results[bookKey].hits.hits)}) ` +
                 `${formatAuditPercent(results[bookKey].hits.predictedHitPct)}`;
             return [
                 auditLabels[bookKey], table
