@@ -752,6 +752,33 @@ const formatAuditPercent = (value: number): string => `${value.toFixed(2)}%`;
 const formatAuditPoints = (value: number): string => value.toFixed(2);
 const formatTicketRatio = (stat: HistoricalAuditStat): string => `${round(stat.ticketWins)}/${stat.tickets}`;
 
+// Statistical diagnostic functions for pool variance analysis
+const calculateHitRateCI = (hitPct: number, totalPicks: number): { lower: number; upper: number; se: number } => {
+    if (totalPicks === 0) return { lower: 0, upper: 0, se: 0 };
+    const p = hitPct / 100; // Convert percentage to decimal
+    const se = Math.sqrt((p * (1 - p)) / totalPicks);
+    const margin = 1.96 * se; // 95% CI
+    return {
+        lower: Math.max(0, (p - margin) * 100),
+        upper: Math.min(100, (p + margin) * 100),
+        se: se * 100,
+    };
+};
+
+const calculateZScore = (actual: number, predicted: number, se: number): number => {
+    if (se === 0) return 0;
+    return (actual - predicted) / se;
+};
+
+const formatCIDiagnostics = (hits: number, total: number, predictedHits: number, label: string): string => {
+    const ci = calculateHitRateCI(hits, total);
+    const zScore = calculateZScore(hits, predictedHits, ci.se);
+    const withinCI = predictedHits >= ci.lower && predictedHits <= ci.upper ? '✓' : '✗';
+    return `${label}: ${hits.toFixed(2)}% ` +
+        `[${ci.lower.toFixed(2)}%-${ci.upper.toFixed(2)}%] ` +
+        `(z=${zScore.toFixed(2)}, pred=${predictedHits.toFixed(2)}% ${withinCI})`;
+};
+
 export const runHistoricalStrategyAudit = async (
     options: HistoricalAuditOptions
 ): Promise<HistoricalAuditResults> => {
@@ -1017,11 +1044,15 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
         'all': {} as HistoricalAuditResults,
     };
 
+    interface StrategyMetric {
+        entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>;
+        stat: HistoricalAuditStat
+    };
     const getTopBooksForMetric = (
         poolResult: HistoricalAuditResults,
         column: StrategyMode,
         metric: (stat: HistoricalAuditStat) => number
-    ): { entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>; stat: HistoricalAuditStat } => {
+    ): StrategyMetric => {
         let bestBooks: LogStatsKey[] = [LogStatsKeys[0]];
         let bestValue = metric(poolResult[LogStatsKeys[0]][column]);
 
@@ -1069,12 +1100,50 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
         results[pool] = auditResult;
     }
 
-    console.log(`\n\n=== Summary: ${GameType[formatFilter]}, L%=${correlationFactor}, ${slotDetail} ===`);
-    console.log('Top bet by pool and strategy:');
+    const poolTopStrategies = new Map<PoolKey, {
+        bestTopStreak: StrategyMetric;
+        bestTopPoints: StrategyMetric;
+        bestTopPickPct: StrategyMetric;
+    }>();
     for (const pool of pools) {
-        const bestTopPickPct = getTopBooksForMetric(results[pool], 'top', (stat) => stat.hitPct);
-        const bestTopPoints = getTopBooksForMetric(results[pool], 'top', (stat) => stat.avgPoints);
         const bestTopStreak = getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct);
+        const bestTopPoints = getTopBooksForMetric(results[pool], 'top', (stat) => stat.avgPoints);
+        const bestTopPickPct = getTopBooksForMetric(results[pool], 'top', (stat) => stat.hitPct);
+        poolTopStrategies.set(pool, {
+            bestTopStreak,
+            bestTopPoints,
+            bestTopPickPct,
+        });
+    }
+
+    console.log(`\n\n=== Statistical Diagnostics: ${GameType[formatFilter]}, ${slotDetail} Slot ===`);
+    console.log("\n");
+    console.log(" • 95% CI (Confidence Interval): The range where the true hit rate likely falls with 95% confidence");
+    console.log("   ◦ Wider CI = smaller pool (more variance)");
+    console.log("   ◦ Narrower CI = larger pool (more stable results)");
+    console.log(" • Z-score: How many standard errors away from the predicted value");
+    console.log("   ◦ Z > 1.96 or Z < -1.96: Statistically significant at 95% level");
+    console.log("   ◦ Z between -1.96 and 1.96: Within expected random variance");
+    console.log(" • ✓/✗: Whether the predicted value falls within the 95% CI");
+    console.log("   ◦ ✓ = prediction is reasonable for the data");
+    console.log("   ◦ ✗ = significant deviation from prediction");
+    console.log("\n");
+    for (const [pool, strategies] of poolTopStrategies) {
+        const { bestTopStreak, bestTopPoints, bestTopPickPct } = strategies;
+
+        const least1 = bestTopStreak.stat;
+        const points = bestTopPoints.stat;
+        const hits = bestTopPickPct.stat;
+        console.log(`  Pool "${pool}" CI:`);
+        console.log(`    ${formatCIDiagnostics(least1.ticketWinPct, least1.tickets, least1.predictedTicketWinPct, StrategyLabels.least1)}`);
+        console.log(`    ${formatCIDiagnostics(points.avgPoints, points.tickets, points.predictedAvgPoints, StrategyLabels.points)}`);
+        console.log(`    ${formatCIDiagnostics(hits.hitPct, hits.totalPicks, hits.predictedHitPct, StrategyLabels.hits)}`);
+    }
+
+    console.log(`\n\n=== Summary: ${GameType[formatFilter]}, L%=${correlationFactor}, ${slotDetail} Slot ===`);
+    console.log('Top bet by pool and strategy:');
+    for (const [pool, strategies] of poolTopStrategies) {
+        const { bestTopStreak, bestTopPoints, bestTopPickPct } = strategies;
 
         const bestCorrelatedStreak = getTopBooksForMetric(results[pool], 'least1', (stat) => stat.ticketWinPct);
         const bestCorrelatedPoints = getTopBooksForMetric(results[pool], 'points', (stat) => stat.avgPoints);
