@@ -539,10 +539,18 @@ const createComboOutcome = (prob1: number, prob2: number, prob3: number, hitCoun
 });
 
 const selectionHitCount = <T extends { scored: boolean }>(selection: MergedSelection<T>): number => {
-    const { representative } = selection;
-    return (representative.pick1.scored ? 1 : 0)
-        + (representative.pick2.scored ? 1 : 0)
-        + (representative.pick3.scored ? 1 : 0);
+    // Proportional/fractional hit counting for ties
+    const { combos } = selection;
+    if (!combos || combos.length === 0) return 0;
+    let totalHits = 0;
+    for (const combo of combos) {
+        const hitCount = (combo.pick1.scored ? 1 : 0)
+            + (combo.pick2.scored ? 1 : 0)
+            + (combo.pick3.scored ? 1 : 0);
+        totalHits += hitCount;
+    }
+    // Divide by number of tied combos to get fractional credit
+    return totalHits / combos.length;
 };
 
 type ScoredSelection = {
@@ -551,9 +559,7 @@ type ScoredSelection = {
 };
 
 const aggregateSelectionOutcome = (selections: ScoredSelection[]): ComboOutcome | null => {
-    // All tied selections represent the same book-level choice.
-    // Use the representative combo from each selection to get actual outcomes.
-    // This ensures actualTicketWins remains binary (0 or 1), not fractional.
+    // Proportional/fractional hit counting for ties
     let selectionCount = 0;
     let actualTicketWins = 0;
     let actualHits = 0;
@@ -563,20 +569,29 @@ const aggregateSelectionOutcome = (selections: ScoredSelection[]): ComboOutcome 
     let expectedPoints = 0;
 
     for (const { selection, outcome } of selections) {
-        // Use representative combo's actual outcome (all tied combos are equivalent)
-        const rep = selection.representative;
-        const hitCount = (rep.pick1.scored ? 1 : 0)
-            + (rep.pick2.scored ? 1 : 0)
-            + (rep.pick3.scored ? 1 : 0);
-        const actual = createComboOutcome(rep.prob1, rep.prob2, rep.prob3, hitCount);
-
-        selectionCount++;
-        actualTicketWins += actual.actualTicketWins;
-        actualHits += actual.actualHits;
-        actualPoints += actual.actualPoints;
+        // For each tied combo, calculate its outcome and sum fractionally
+        const { combos } = selection;
+        if (!combos || combos.length === 0) continue;
+        let comboHits = 0;
+        let comboPoints = 0;
+        let comboTicketWins = 0;
+        for (const combo of combos) {
+            const hitCount = (combo.pick1.scored ? 1 : 0)
+                + (combo.pick2.scored ? 1 : 0)
+                + (combo.pick3.scored ? 1 : 0);
+            const actual = createComboOutcome(combo.prob1, combo.prob2, combo.prob3, hitCount);
+            comboHits += actual.actualHits;
+            comboPoints += actual.actualPoints;
+            comboTicketWins += actual.actualTicketWins;
+        }
+        // Average across all tied combos
+        actualHits += comboHits / combos.length;
+        actualPoints += comboPoints / combos.length;
+        actualTicketWins += comboTicketWins / combos.length;
         expectedLeast1 += outcome.expectedLeast1;
         expectedHits += outcome.expectedHits;
         expectedPoints += outcome.expectedPoints;
+        selectionCount++;
     }
 
     if (selectionCount === 0) return null;
@@ -691,9 +706,8 @@ const evaluateBookCombos = (
     for (const metric of AllStrategies) {
         const best = bestSelections[metric];
         if (!best) continue;
-        // For actual outcomes, use only the first (representative) tied selection.
-        // This keeps ticketWins binary (0 or 1), not averaged across different strategies.
-        const aggregatedOutcome = aggregateSelectionOutcome([best.selections[0]]);
+        // For actual outcomes, aggregate over all tied best selections for full proportional credit.
+        const aggregatedOutcome = aggregateSelectionOutcome(best.selections);
         if (!aggregatedOutcome) continue;
         bestScores[metric] = {
             score: best.score,
