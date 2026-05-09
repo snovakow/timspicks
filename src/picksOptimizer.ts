@@ -798,7 +798,7 @@ export const runHistoricalStrategyAudit = async (
 
             const gameStartTimes = await getGameStartTimeGroups(date);
 
-            const findOne = slotsOption !== 'all';
+            const findOne = slotsOption !== 'all' && gameCountFilter !== 'all';
             for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
                 try {
                     const orderIndex = slotsOption === 'latest' ? gameStartTimes.length - 1 - slotIndex : slotIndex;
