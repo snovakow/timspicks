@@ -353,7 +353,7 @@ function App() {
 		}
 		if (ANALYZE) {
 			const options = {
-				correlationFactor: 0,
+				correlationFactor: 1,
 				formatFilter: 'all' as const,
 				slotsOption: 'latest' as const,
 				minSportsbooks

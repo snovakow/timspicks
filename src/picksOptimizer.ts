@@ -770,7 +770,7 @@ const calculateZScore = (actual: number, predicted: number, se: number): number 
     return (actual - predicted) / se;
 };
 
-const formatCIDiagnostics = (hits: number, total: number, predictedHits: number, label: string): string => {
+const formatCIDiagnostics = (label: string, hits: number, total: number, predictedHits: number): string => {
     const ci = calculateHitRateCI(hits, total);
     const zScore = calculateZScore(hits, predictedHits, ci.se);
     const withinCI = predictedHits >= ci.lower && predictedHits <= ci.upper ? '✓' : '✗';
@@ -1104,15 +1104,24 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
         bestTopStreak: StrategyMetric;
         bestTopPoints: StrategyMetric;
         bestTopPickPct: StrategyMetric;
+        bestCorrelatedStreak: StrategyMetric;
+        bestCorrelatedPoints: StrategyMetric;
+        bestCorrelatedPickPct: StrategyMetric;
     }>();
     for (const pool of pools) {
         const bestTopStreak = getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct);
         const bestTopPoints = getTopBooksForMetric(results[pool], 'top', (stat) => stat.avgPoints);
         const bestTopPickPct = getTopBooksForMetric(results[pool], 'top', (stat) => stat.hitPct);
+        const bestCorrelatedStreak = getTopBooksForMetric(results[pool], 'least1', (stat) => stat.ticketWinPct);
+        const bestCorrelatedPoints = getTopBooksForMetric(results[pool], 'points', (stat) => stat.avgPoints);
+        const bestCorrelatedPickPct = getTopBooksForMetric(results[pool], 'hits', (stat) => stat.hitPct);
         poolTopStrategies.set(pool, {
             bestTopStreak,
             bestTopPoints,
             bestTopPickPct,
+            bestCorrelatedStreak,
+            bestCorrelatedPoints,
+            bestCorrelatedPickPct,
         });
     }
 
@@ -1129,25 +1138,45 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
     console.log("   ◦ ✗ = significant deviation from prediction");
     console.log("\n");
     for (const [pool, strategies] of poolTopStrategies) {
-        const { bestTopStreak, bestTopPoints, bestTopPickPct } = strategies;
+        const {
+            bestTopStreak, bestTopPoints, bestTopPickPct,
+            bestCorrelatedStreak, bestCorrelatedPoints, bestCorrelatedPickPct
+        } = strategies;
 
         const least1 = bestTopStreak.stat;
         const points = bestTopPoints.stat;
         const hits = bestTopPickPct.stat;
+        const least1_c = bestCorrelatedStreak.stat;
+        const points_c = bestCorrelatedPoints.stat;
+        const hits_c = bestCorrelatedPickPct.stat;
         console.log(`  Pool "${pool}" CI:`);
-        console.log(`    ${formatCIDiagnostics(least1.ticketWinPct, least1.tickets, least1.predictedTicketWinPct, StrategyLabels.least1)}`);
-        console.log(`    ${formatCIDiagnostics(points.avgPoints, points.tickets, points.predictedAvgPoints, StrategyLabels.points)}`);
-        console.log(`    ${formatCIDiagnostics(hits.hitPct, hits.totalPicks, hits.predictedHitPct, StrategyLabels.hits)}`);
+        console.log(`    ${formatCIDiagnostics(
+            StrategyLabels.least1 + " Top", least1.ticketWinPct, least1.tickets, least1.predictedTicketWinPct
+        )}`);
+        if (correlationFactor > 0) console.log(`    ${formatCIDiagnostics(
+            StrategyLabels.least1 + " L%", least1_c.ticketWinPct, least1_c.tickets, least1_c.predictedTicketWinPct
+        )}`);
+        console.log(`    ${formatCIDiagnostics(
+            StrategyLabels.points + " Top", points.avgPoints, points.tickets, points.predictedAvgPoints
+        )}`);
+        if (correlationFactor > 0) console.log(`    ${formatCIDiagnostics(
+            StrategyLabels.points + " L%", points_c.avgPoints, points_c.tickets, points_c.predictedAvgPoints
+        )}`);
+        console.log(`    ${formatCIDiagnostics(
+            StrategyLabels.hits + " Top", hits.hitPct, hits.totalPicks, hits.predictedHitPct
+        )}`);
+        if (correlationFactor > 0) console.log(`    ${formatCIDiagnostics(
+            StrategyLabels.hits + " L%", hits_c.hitPct, hits_c.totalPicks, hits_c.predictedHitPct
+        )}`);
     }
 
     console.log(`\n\n=== Summary: ${GameType[formatFilter]}, L%=${correlationFactor}, ${slotDetail} Slot ===`);
     console.log('Top bet by pool and strategy:');
     for (const [pool, strategies] of poolTopStrategies) {
-        const { bestTopStreak, bestTopPoints, bestTopPickPct } = strategies;
-
-        const bestCorrelatedStreak = getTopBooksForMetric(results[pool], 'least1', (stat) => stat.ticketWinPct);
-        const bestCorrelatedPoints = getTopBooksForMetric(results[pool], 'points', (stat) => stat.avgPoints);
-        const bestCorrelatedPickPct = getTopBooksForMetric(results[pool], 'hits', (stat) => stat.hitPct);
+        const {
+            bestTopStreak, bestTopPoints, bestTopPickPct,
+            bestCorrelatedStreak, bestCorrelatedPoints, bestCorrelatedPickPct
+        } = strategies;
 
         const bestModeForWins: { mode: StrategyMode; result: { entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>; stat: HistoricalAuditStat } } = [
             { mode: 'top' as const, result: getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct) },
