@@ -799,7 +799,6 @@ export const runHistoricalStrategyAudit = async (
             const gameStartTimes = await getGameStartTimeGroups(date);
 
             const findOne = slotsOption !== 'all';
-            let foundOne = false;
             for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
                 try {
                     const orderIndex = slotsOption === 'latest' ? gameStartTimes.length - 1 - slotIndex : slotIndex;
@@ -883,8 +882,6 @@ export const runHistoricalStrategyAudit = async (
                     if (gameCountFilter !== 'all') {
                         const poolKey = gameCount === 1 ? '1' : gameCount === 2 ? '2' : '3+';
                         if (poolKey !== gameCountFilter) {
-                            // If firstSlotOnly, break after trying the first slot (even if it doesn't match)
-                            // if (firstSlotOnly && isFirstSlot) break;
                             continue;
                         }
                     }
@@ -910,13 +907,10 @@ export const runHistoricalStrategyAudit = async (
                         }
                     }
 
-                    // Successfully audited a snapshot; break if firstSlotOnly
                     if (findOne) break;
                 } catch (error) {
                     console.warn(`Skipping snapshot ${date} ${gameStartTimes[slotIndex]}:`, error);
                 }
-                // Break after trying first slot even if there was an error
-                // if (findOne) break;
             }
         } catch (error) {
             console.warn(`Skipping date ${date}:`, error);
