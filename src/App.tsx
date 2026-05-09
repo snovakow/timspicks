@@ -355,7 +355,7 @@ function App() {
 			const options = {
 				correlationFactor: 0,
 				formatFilter: 'all' as const,
-				firstSlotOnly: false,
+				slotsOption: 'latest' as const,
 				minSportsbooks
 			};
 

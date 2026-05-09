@@ -284,11 +284,14 @@ interface SnapshotOddsRow {
 
 type ItemFormat = 'regular' | 'playoff';
 type Format = ItemFormat | 'all';
+
+type SlotsOption = 'earliest' | 'latest' | 'all';
+
 export interface AnalyzeOptions {
     minSportsbooks: number;
     correlationFactor?: number;
     formatFilter?: Format;
-    firstSlotOnly?: boolean;
+    slotsOption?: SlotsOption;
 }
 const GameType: Record<Format, string> = {
     regular: 'Regular Season',
@@ -740,7 +743,7 @@ export const runHistoricalStrategyAudit = async (
         logResults = true,
         gameCountFilter = 'all',
         formatFilter = 'all',
-        firstSlotOnly = false,
+        slotsOption = 'all',
     } = options;
 
     const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
@@ -777,11 +780,12 @@ export const runHistoricalStrategyAudit = async (
 
             const gameStartTimes = await getGameStartTimeGroups(date);
 
+            const findOne = slotsOption !== 'all';
+            let foundOne = false;
             for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
-                // Track if this is the first slot we encounter (for firstSlotOnly logic)
-                const isFirstSlot = slotIndex === 0;
                 try {
-                    const folderTime = gameStartTimes[slotIndex];
+                    const orderIndex = slotsOption === 'latest' ? gameStartTimes.length - 1 - slotIndex : slotIndex;
+                    const folderTime = gameStartTimes[orderIndex];
 
                     const folder = `./data/${date}/${folderTime}`;
                     const helper = await fetchOptionalJson<Record<'1' | '2' | '3', Picks.OddsItem[]>>(`${folder}/helper.json`);
@@ -862,7 +866,7 @@ export const runHistoricalStrategyAudit = async (
                         const poolKey = gameCount === 1 ? '1' : gameCount === 2 ? '2' : '3+';
                         if (poolKey !== gameCountFilter) {
                             // If firstSlotOnly, break after trying the first slot (even if it doesn't match)
-                            if (firstSlotOnly && isFirstSlot) break;
+                            // if (firstSlotOnly && isFirstSlot) break;
                             continue;
                         }
                     }
@@ -889,12 +893,12 @@ export const runHistoricalStrategyAudit = async (
                     }
 
                     // Successfully audited a snapshot; break if firstSlotOnly
-                    if (firstSlotOnly) break;
+                    if (findOne) break;
                 } catch (error) {
                     console.warn(`Skipping snapshot ${date} ${gameStartTimes[slotIndex]}:`, error);
                 }
                 // Break after trying first slot even if there was an error
-                if (firstSlotOnly && isFirstSlot) break;
+                // if (findOne) break;
             }
         } catch (error) {
             console.warn(`Skipping date ${date}:`, error);
@@ -976,7 +980,7 @@ export const runHistoricalStrategyAudit = async (
             ];
         }));
         console.table(display);
-        const detailMsg = firstSlotOnly ? "" : `, ${auditedSlots} slots`;
+        const detailMsg = slotsOption !== 'all' ? "" : `, ${auditedSlots} slots`;
         console.log(`Historical strategy audit: ${daysWithSlots.size} days${detailMsg}`);
     }
 
@@ -984,12 +988,12 @@ export const runHistoricalStrategyAudit = async (
 };
 
 export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<ComparePoolAccuracySummary> => {
-    const { correlationFactor = 1, formatFilter = 'all', firstSlotOnly = false, minSportsbooks } = options;
-    const slotDetail = firstSlotOnly ? "First slot per day" : "All slots per day";
+    const { correlationFactor = 1, formatFilter = 'all', slotsOption = 'all', minSportsbooks } = options;
+    const slotDetail = slotsOption === 'earliest' ? "Earliest" : slotsOption === 'latest' ? "Latest" : "Every";
     console.log(
         `\nComparing top pick accuracy across game count pools:\n` +
         `Correlation factor = ${correlationFactor}\n` +
-        `${slotDetail}\n` +
+        `${slotDetail} slot per day\n` +
         `${GameType[formatFilter]}\n`
     );
 
@@ -1047,7 +1051,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
             correlationFactor: correlationFactor,
             gameCountFilter: pool,
             formatFilter,
-            firstSlotOnly,
+            slotsOption,
             logResults: true,
         });
         results[pool] = auditResult;
