@@ -1,13 +1,14 @@
 import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
-import type { CorrelationData, CorrelationResult, CorrelationResults } from "./correlationData";
+import type { CorrelationData, CorrelationResult, CorrelationResults, GameCount } from "./correlationData";
 import { correlations } from "./correlationData";
 import { deVig, oddsNameMap, removeAccentsNormalize } from "./dataProcessor";
 import type { ComboPattern, LogStatsKey, StrategyMode, Strategy } from "./dataTypes";
-import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies } from "./dataTypes";
+import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies, Sportsbooks } from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
 import { selectStrategyCombos } from "./strategySelection";
 import * as Feature from './features';
+import { roundToPercent } from "./utility";
 
 export const calcAny = (prob1: number, prob2: number, prob3: number): number => {
     return 1 - (1 - prob1) * (1 - prob2) * (1 - prob3);
@@ -285,13 +286,10 @@ interface SnapshotOddsRow {
 type ItemFormat = 'regular' | 'playoff';
 type Format = ItemFormat | 'all';
 
-type SlotsOption = 'earliest' | 'latest' | 'all';
-
 export interface AnalyzeOptions {
     minSportsbooks: number;
     correlationFactor?: number;
     formatFilter?: Format;
-    slotsOption?: SlotsOption;
 }
 const GameType: Record<Format, string> = {
     regular: 'Regular Season',
@@ -300,7 +298,7 @@ const GameType: Record<Format, string> = {
 }
 interface HistoricalAuditOptions extends AnalyzeOptions {
     logResults?: boolean;
-    gameCountFilter?: '1' | '2' | '3+' | 'all';
+    slots?: PoolSlots;
 }
 
 export interface HistoricalAuditStat {
@@ -481,7 +479,7 @@ type BookComboEvaluation = {
     bestScores: Record<Strategy, StrategyScore | null>;
 };
 
-type PoolKey = '1' | '2' | '3+' | 'all';
+type PoolSlots = '1' | '2' | 'earliest 3+' | 'latest 3+';
 
 type BookPredictionSummary = {
     book: LogStatsKey;
@@ -527,7 +525,7 @@ export type PoolAccuracySummary = {
     correlatedPickPct: HitPctSummary;
 };
 
-export type ComparePoolAccuracySummary = Record<PoolKey, PoolAccuracySummary>;
+export type ComparePoolAccuracySummary = Record<PoolSlots, PoolAccuracySummary>;
 
 const createComboOutcome = (prob1: number, prob2: number, prob3: number, hitCount: number): ComboOutcome => ({
     actualTicketWins: hitCount > 0 ? 1 : 0,
@@ -786,9 +784,8 @@ export const runHistoricalStrategyAudit = async (
         minSportsbooks,
         correlationFactor = 1,
         logResults = true,
-        gameCountFilter = 'all',
+        slots = 'earliest 3+',
         formatFilter = 'all',
-        slotsOption = 'all',
     } = options;
 
     const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
@@ -810,7 +807,6 @@ export const runHistoricalStrategyAudit = async (
 
     const stats = createAuditBuckets();
     const daysWithSlots = new Set<string>();
-    let auditedSlots = 0;
 
     for (const [date, historyFile] of historyByDate) {
         try {
@@ -825,10 +821,10 @@ export const runHistoricalStrategyAudit = async (
 
             const gameStartTimes = await getGameStartTimeGroups(date);
 
-            const findOne = slotsOption !== 'all' && gameCountFilter !== 'all';
+            const findOne = true;
             for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
                 try {
-                    const orderIndex = slotsOption === 'latest' ? gameStartTimes.length - 1 - slotIndex : slotIndex;
+                    const orderIndex = slots === 'latest 3+' ? gameStartTimes.length - 1 - slotIndex : slotIndex;
                     const folderTime = gameStartTimes[orderIndex];
 
                     const folder = `./data/${date}/${folderTime}`;
@@ -906,16 +902,14 @@ export const runHistoricalStrategyAudit = async (
                     const gameCount = helperGameCount;
                     if (gameCount === 0) continue;
 
-                    if (gameCountFilter !== 'all') {
-                        const poolKey = gameCount === 1 ? '1' : gameCount === 2 ? '2' : '3+';
-                        if (poolKey !== gameCountFilter) {
-                            continue;
-                        }
+                    switch (slots) {
+                        case '1': if (gameCount !== 1) continue; break;
+                        case '2': if (gameCount !== 2) continue; break;
+                        default: if (gameCount < 3) continue;
                     }
 
                     const ref = gameCount === 1 ? correlations['1'] : gameCount === 2 ? correlations['2'] : correlations['3+'];
                     daysWithSlots.add(date);
-                    auditedSlots++;
 
                     for (const bookKey of [...SportsbookKeys, 'betAvg'] as LogStatsKey[]) {
                         const set1 = rows.filter((row) => row.sid === '1' && row[bookKey] !== null && row.betCount >= minSportsbooks);
@@ -1019,30 +1013,36 @@ export const runHistoricalStrategyAudit = async (
             ];
         }));
         console.table(display);
-        const detailMsg = slotsOption !== 'all' ? "" : `, ${auditedSlots} slots`;
-        console.log(`Historical strategy audit: ${daysWithSlots.size} days${detailMsg}`);
+        console.log(`Historical strategy audit: ${daysWithSlots.size} days`);
     }
 
     return results;
 };
 
+const titleForPoolKey = (poolKey: PoolSlots): string => {
+    switch (poolKey) {
+        case '1': return "1 Game Slots";
+        case '2': return "2 Game Slots";
+        case 'earliest 3+': return "Earliest 3+ Game Slots";
+        case 'latest 3+': return "Latest 3+ Game Slots";
+    }
+};
+
 export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<ComparePoolAccuracySummary> => {
-    const { correlationFactor = 1, formatFilter = 'all', slotsOption = 'all', minSportsbooks } = options;
-    const slotDetail = slotsOption === 'earliest' ? "Earliest" : slotsOption === 'latest' ? "Latest" : "Every";
+    const { correlationFactor = 1, formatFilter = 'all', minSportsbooks } = options;
+
     console.log(
         `\nComparing top pick accuracy across game count pools:\n` +
         `Correlation factor = ${correlationFactor}\n` +
-        `${slotDetail} slot per day\n` +
         `${GameType[formatFilter]}\n`
     );
 
-    const pools: PoolKey[] = ['1', '2', '3+', 'all'];
-    const results: Record<PoolKey, HistoricalAuditResults> = {
-        '1': {} as HistoricalAuditResults,
-        '2': {} as HistoricalAuditResults,
-        '3+': {} as HistoricalAuditResults,
-        'all': {} as HistoricalAuditResults,
-    };
+    const pools: PoolSlots[] = ['1', '2', 'latest 3+', 'earliest 3+'];
+    type PoolResults = Record<PoolSlots, HistoricalAuditResults>;
+    const results: PoolResults = {} as PoolResults;
+    for (const pool of pools) {
+        results[pool] = {} as HistoricalAuditResults;
+    }
 
     interface StrategyMetric {
         entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>;
@@ -1088,19 +1088,18 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
     const summaryByPool = {} as ComparePoolAccuracySummary;
 
     for (const pool of pools) {
-        console.log(`\n=== Pool "${pool}" ===`);
+        console.log(`\n=== Pool ${titleForPoolKey(pool)} ===`);
         const auditResult = await runHistoricalStrategyAudit({
             minSportsbooks,
             correlationFactor: correlationFactor,
-            gameCountFilter: pool,
             formatFilter,
-            slotsOption,
+            slots: pool,
             logResults: true,
         });
         results[pool] = auditResult;
     }
 
-    const poolTopStrategies = new Map<PoolKey, {
+    const poolTopStrategies = new Map<PoolSlots, {
         bestTopStreak: StrategyMetric;
         bestTopPoints: StrategyMetric;
         bestTopPickPct: StrategyMetric;
@@ -1125,7 +1124,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
         });
     }
 
-    console.log(`\n\n=== Statistical Diagnostics: ${GameType[formatFilter]}, ${slotDetail} Slot ===`);
+    console.log(`\n\n=== Statistical Diagnostics: ${GameType[formatFilter]} ===`);
     console.log("\n");
     console.log(" • 95% CI (Confidence Interval): The range where the true hit rate likely falls with 95% confidence");
     console.log("   ◦ Wider CI = smaller pool (more variance)");
@@ -1149,7 +1148,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
         const least1_c = bestCorrelatedStreak.stat;
         const points_c = bestCorrelatedPoints.stat;
         const hits_c = bestCorrelatedPickPct.stat;
-        console.log(`  Pool "${pool}" CI:`);
+        console.log(`  CI Pool ${titleForPoolKey(pool)}:`);
         console.log(`    ${formatCIDiagnostics(
             StrategyLabels.least1 + " Top", least1.ticketWinPct, least1.tickets, least1.predictedTicketWinPct
         )}`);
@@ -1170,7 +1169,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
         )}`);
     }
 
-    console.log(`\n\n=== Summary: ${GameType[formatFilter]}, L%=${correlationFactor}, ${slotDetail} Slot ===`);
+    console.log(`\n\n=== Summary: ${GameType[formatFilter]}, L%=${correlationFactor} ===`);
     console.log('Top bet by pool and strategy:');
     for (const [pool, strategies] of poolTopStrategies) {
         const {
@@ -1188,7 +1187,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
             return best;
         });
 
-        console.log(`  Pool "${pool}":`);
+        console.log(`  Pool ${titleForPoolKey(pool)}:`);
         console.log([
             `    ${StrategyLabels.least1} Top:`,
             `${bestTopStreak.stat.ticketWinPct.toFixed(2)}%`,
@@ -1298,7 +1297,7 @@ interface BestPicksResult {
     strategies: Set<StrategyType>,
 }
 
-const resolvePoolKey = (gameCount: number): Exclude<PoolKey, 'all'> => gameCount <= 1 ? '1' : gameCount === 2 ? '2' : '3+';
+const resolvePoolKey = (gameCount: number): GameCount => gameCount <= 1 ? '1' : gameCount === 2 ? '2' : '3+';
 
 const getPlayerStrategy = (pick1: Picks.Player, pick2: Picks.Player, pick3: Picks.Player): ComboPattern | null => {
     if (!pick1.sameGame(pick2) && !pick2.sameGame(pick3) && !pick1.sameGame(pick3)) return 'iii';
@@ -1345,8 +1344,8 @@ export const bestPicks = async (
     const gameCount = gamesCount(picks1, picks2, picks3);
     if (gameCount === 0) return [];
 
-    const poolKey = resolvePoolKey(gameCount);
-    const ref = correlations[poolKey];
+    const sizeMode = resolvePoolKey(gameCount);
+    const ref = correlations[sizeMode];
     const correlationFactor = options?.correlationFactor ?? 1;
     const { minSportsbooks } = options;
     const epsilon = 1e-12;
@@ -1365,6 +1364,8 @@ export const bestPicks = async (
         points: null,
         hits: null,
     };
+
+    const poolKey: PoolSlots = gameCount === 1 ? '1' : gameCount === 2 ? '2' : 'latest 3+';
 
     // Compare and decide for each strategy
     for (const strategy of AllStrategies) {
@@ -1518,6 +1519,61 @@ export const bestPicks = async (
         if (right.strategies.size !== left.strategies.size) return right.strategies.size - left.strategies.size;
         return comboCode(left).localeCompare(comboCode(right));
     });
+
+    const format = (pick: Picks.PickOdds, betKey: LogStatsKey) => {
+        const player = pick.player;
+        const bet = player[betKey];
+        const precision = 1;
+        const odds = bet === null ? '' : `${roundToPercent(bet, precision)} - `;
+        return `${odds}${player.fullName} (${player.team.code})`;
+    };
+    const makeTitle = (text: string) => `\n${text}\n${"-".repeat(text.length)}`;
+
+    const bookName = (book: LogStatsKey, correlation: number) => {
+        const name = book === 'betAvg' ? 'Average' : Sportsbooks[book].title;
+        return makeTitle(`${name} (${correlation.toFixed(3)})`);
+    }
+
+    console.log(makeTitle(`*** Best Picks ${titleForPoolKey(poolKey)} ***`));
+    for (const result of results) {
+        const bets: Map<LogStatsKey, number> = new Map();
+        const strategies: Set<Strategy> = new Set();
+        for (const strategy of result.strategies) {
+            for (const book of strategy.books) bets.set(book, strategy.correlationRatio);
+            strategies.add(strategy.key);
+        }
+
+        for (const [bet, correlation] of bets) {
+            console.log(`${bookName(bet, correlation)}`, result.strategies);
+            console.log(`1: ${format(result['1'], bet)}`);
+            console.log(`2: ${format(result['2'], bet)}`);
+            console.log(`3: ${format(result['3'], bet)}`);
+
+            const odd1 = result['1'].player[bet];
+            if (odd1 === null) continue;
+            const odd2 = result['2'].player[bet];
+            if (odd2 === null) continue;
+            const odd3 = result['3'].player[bet];
+            if (odd3 === null) continue;
+
+            const anyValue = calcAny(odd1, odd2, odd3) * correlation;
+            const pntValue = calcPnt(odd1, odd2, odd3) * correlation;
+            const hitValue = calcHit(odd1, odd2, odd3) / 3 * correlation;
+
+            const comboPrecision = 2;
+            const any = roundToPercent(anyValue, comboPrecision);
+            const pnt = pntValue.toFixed(comboPrecision);
+            const hit = roundToPercent(hitValue, comboPrecision);
+
+            const anyBold = strategies.has('least1') ? '*' : '';
+            const pntBold = strategies.has('points') ? '*' : '';
+            const hitBold = strategies.has('hits') ? '*' : '';
+
+            console.log(`${anyBold}${StrategyLabels.least1}: ${any}`);
+            console.log(`${pntBold}${StrategyLabels.points}: ${pnt}`);
+            console.log(`${hitBold}${StrategyLabels.hits}: ${hit}`);
+        }
+    }
 
     return results;
 }

@@ -2,11 +2,8 @@ import type { AllCombos, Strategy } from "./dataTypes";
 
 export type CorrelationData = Record<typeof AllCombos[number], number | null>;
 export type CorrelationResult = Record<Strategy, CorrelationData>;
-export interface CorrelationResults {
-    "1": CorrelationResult,
-    "2": CorrelationResult,
-    "3+": CorrelationResult,
-};
+export type GameCount = '1' | '2' | '3+';
+export type CorrelationResults = Record<GameCount, CorrelationResult>;
 
 export const correlations: CorrelationResults = {
     "1": {
