@@ -114,6 +114,12 @@ interface InitializedData {
 	table3Rows: Picks.PickOdds[];
 }
 
+let xgMapCachePromise: Promise<Map<Team, number>> | null = null;
+const getXgMap = async (): Promise<Map<Team, number>> => {
+	if (!xgMapCachePromise) xgMapCachePromise = getTeamTotals();
+	return xgMapCachePromise;
+}
+
 function App() {
 	// xG (expected goals) state
 	const [xgEnabled, setXgEnabled] = useState(false);
@@ -123,7 +129,7 @@ function App() {
 	// Lazy-load xG data only if enabled and not already loaded
 	useEffect(() => {
 		if (xgEnabled && !xgLoadedRef.current) {
-			getTeamTotals().then((map) => {
+			getXgMap().then((map) => {
 				setXgMap(map);
 				xgLoadedRef.current = true;
 			});
@@ -359,7 +365,13 @@ function App() {
 				formatFilter: 'all' as const,
 				minSportsbooks
 			};
-			bestPicks(memoizedDisplayData.table1Rows, memoizedDisplayData.table2Rows, memoizedDisplayData.table3Rows, options);
+			bestPicks(
+				memoizedDisplayData.table1Rows,
+				memoizedDisplayData.table2Rows,
+				memoizedDisplayData.table3Rows,
+				options,
+				getXgMap
+			);
 		}
 	}
 

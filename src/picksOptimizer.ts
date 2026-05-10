@@ -768,12 +768,11 @@ const calculateZScore = (actual: number, predicted: number, se: number): number 
     return (actual - predicted) / se;
 };
 
-const formatCIDiagnostics = (label: string, hits: number, total: number, predictedHits: number): string => {
+const formatCIDiagnostics = (hits: number, total: number, predictedHits: number): string => {
     const ci = calculateHitRateCI(hits, total);
     const zScore = calculateZScore(hits, predictedHits, ci.se);
     const withinCI = predictedHits >= ci.lower && predictedHits <= ci.upper ? '✓' : '✗';
-    return `${label}: ${hits.toFixed(2)}% ` +
-        `[${ci.lower.toFixed(2)}%-${ci.upper.toFixed(2)}%] ` +
+    return `[${ci.lower.toFixed(2)}%-${ci.upper.toFixed(2)}%] ` +
         `(z=${zScore.toFixed(2)}, pred=${predictedHits.toFixed(2)}% ${withinCI})`;
 };
 
@@ -1099,31 +1098,6 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
         results[pool] = auditResult;
     }
 
-    const poolTopStrategies = new Map<PoolSlots, {
-        bestTopStreak: StrategyMetric;
-        bestTopPoints: StrategyMetric;
-        bestTopPickPct: StrategyMetric;
-        bestCorrelatedStreak: StrategyMetric;
-        bestCorrelatedPoints: StrategyMetric;
-        bestCorrelatedPickPct: StrategyMetric;
-    }>();
-    for (const pool of pools) {
-        const bestTopStreak = getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct);
-        const bestTopPoints = getTopBooksForMetric(results[pool], 'top', (stat) => stat.avgPoints);
-        const bestTopPickPct = getTopBooksForMetric(results[pool], 'top', (stat) => stat.hitPct);
-        const bestCorrelatedStreak = getTopBooksForMetric(results[pool], 'least1', (stat) => stat.ticketWinPct);
-        const bestCorrelatedPoints = getTopBooksForMetric(results[pool], 'points', (stat) => stat.avgPoints);
-        const bestCorrelatedPickPct = getTopBooksForMetric(results[pool], 'hits', (stat) => stat.hitPct);
-        poolTopStrategies.set(pool, {
-            bestTopStreak,
-            bestTopPoints,
-            bestTopPickPct,
-            bestCorrelatedStreak,
-            bestCorrelatedPoints,
-            bestCorrelatedPickPct,
-        });
-    }
-
     console.log(`\n\n=== Statistical Diagnostics: ${GameType[formatFilter]} ===`);
     console.log("\n");
     console.log(" • 95% CI (Confidence Interval): The range where the true hit rate likely falls with 95% confidence");
@@ -1135,47 +1109,16 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
     console.log(" • ✓/✗: Whether the predicted value falls within the 95% CI");
     console.log("   ◦ ✓ = prediction is reasonable for the data");
     console.log("   ◦ ✗ = significant deviation from prediction");
-    console.log("\n");
-    for (const [pool, strategies] of poolTopStrategies) {
-        const {
-            bestTopStreak, bestTopPoints, bestTopPickPct,
-            bestCorrelatedStreak, bestCorrelatedPoints, bestCorrelatedPickPct
-        } = strategies;
-
-        const least1 = bestTopStreak.stat;
-        const points = bestTopPoints.stat;
-        const hits = bestTopPickPct.stat;
-        const least1_c = bestCorrelatedStreak.stat;
-        const points_c = bestCorrelatedPoints.stat;
-        const hits_c = bestCorrelatedPickPct.stat;
-        console.log(`  CI Pool ${titleForPoolKey(pool)}:`);
-        console.log(`    ${formatCIDiagnostics(
-            StrategyLabels.least1 + " Top", least1.ticketWinPct, least1.tickets, least1.predictedTicketWinPct
-        )}`);
-        if (correlationFactor > 0) console.log(`    ${formatCIDiagnostics(
-            StrategyLabels.least1 + " L%", least1_c.ticketWinPct, least1_c.tickets, least1_c.predictedTicketWinPct
-        )}`);
-        console.log(`    ${formatCIDiagnostics(
-            StrategyLabels.points + " Top", points.avgPoints, points.tickets, points.predictedAvgPoints
-        )}`);
-        if (correlationFactor > 0) console.log(`    ${formatCIDiagnostics(
-            StrategyLabels.points + " L%", points_c.avgPoints, points_c.tickets, points_c.predictedAvgPoints
-        )}`);
-        console.log(`    ${formatCIDiagnostics(
-            StrategyLabels.hits + " Top", hits.hitPct, hits.totalPicks, hits.predictedHitPct
-        )}`);
-        if (correlationFactor > 0) console.log(`    ${formatCIDiagnostics(
-            StrategyLabels.hits + " L%", hits_c.hitPct, hits_c.totalPicks, hits_c.predictedHitPct
-        )}`);
-    }
 
     console.log(`\n\n=== Summary: ${GameType[formatFilter]}, L%=${correlationFactor} ===`);
     console.log('Top bet by pool and strategy:');
-    for (const [pool, strategies] of poolTopStrategies) {
-        const {
-            bestTopStreak, bestTopPoints, bestTopPickPct,
-            bestCorrelatedStreak, bestCorrelatedPoints, bestCorrelatedPickPct
-        } = strategies;
+    for (const pool of pools) {
+        const bestTopStreak = getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct);
+        const bestTopPoints = getTopBooksForMetric(results[pool], 'top', (stat) => stat.avgPoints);
+        const bestTopPickPct = getTopBooksForMetric(results[pool], 'top', (stat) => stat.hitPct);
+        const bestCorrelatedStreak = getTopBooksForMetric(results[pool], 'least1', (stat) => stat.ticketWinPct);
+        const bestCorrelatedPoints = getTopBooksForMetric(results[pool], 'points', (stat) => stat.avgPoints);
+        const bestCorrelatedPickPct = getTopBooksForMetric(results[pool], 'hits', (stat) => stat.hitPct);
 
         const bestModeForWins: { mode: StrategyMode; result: { entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>; stat: HistoricalAuditStat } } = [
             { mode: 'top' as const, result: getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct) },
@@ -1187,43 +1130,56 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
             return best;
         });
 
+        const least1 = bestTopStreak.stat;
+        const points = bestTopPoints.stat;
+        const hits = bestTopPickPct.stat;
+        const least1_c = bestCorrelatedStreak.stat;
+        const points_c = bestCorrelatedPoints.stat;
+        const hits_c = bestCorrelatedPickPct.stat;
+
         console.log(`  Pool ${titleForPoolKey(pool)}:`);
-        console.log([
-            `    ${StrategyLabels.least1} Top:`,
-            `${bestTopStreak.stat.ticketWinPct.toFixed(2)}%`,
-            `(${formatTicketRatio(bestTopStreak.stat)})`,
-            `${formatBookPredictions(bestTopStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
-        ].join(' '));
-        if (correlationFactor > 0) console.log([
-            `    ${StrategyLabels.least1} L%: `,
-            `${bestCorrelatedStreak.stat.ticketWinPct.toFixed(2)}%`,
-            `(${formatTicketRatio(bestCorrelatedStreak.stat)})`,
-            `${formatBookPredictions(bestCorrelatedStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
-        ].join(' '));
-        console.log([
-            `    ${StrategyLabels.points} Top:`,
-            `${bestTopPoints.stat.avgPoints.toFixed(2)}`,
-            `(${bestTopPoints.stat.tickets})`,
-            `${formatBookPredictions(bestTopPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
-        ].join(' '));
-        if (correlationFactor > 0) console.log([
-            `    ${StrategyLabels.points} L%: `,
-            `${bestCorrelatedPoints.stat.avgPoints.toFixed(2)}`,
-            `(${bestCorrelatedPoints.stat.tickets})`,
-            `${formatBookPredictions(bestCorrelatedPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
-        ].join(' '));
-        console.log([
-            `    ${StrategyLabels.hits} Top:`,
-            `${bestTopPickPct.stat.hitPct.toFixed(2)}%`,
-            `(${bestTopPickPct.stat.ratio})`,
-            `${formatBookPredictions(bestTopPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
-        ].join(' '));
-        if (correlationFactor > 0) console.log([
-            `    ${StrategyLabels.hits} L%: `,
-            `${bestCorrelatedPickPct.stat.hitPct.toFixed(2)}%`,
-            `(${bestCorrelatedPickPct.stat.ratio})`,
-            `${formatBookPredictions(bestCorrelatedPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
-        ].join(' '));
+		console.log([
+			`    ${StrategyLabels.least1} Top:`,
+			`${least1.ticketWinPct.toFixed(2)}%`,
+			`(${formatTicketRatio(least1)})`,
+			`CI - ${formatCIDiagnostics(least1.ticketWinPct, least1.tickets, least1.predictedTicketWinPct)}`,
+			`${formatBookPredictions(bestTopStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
+		].join(' '));
+		if (correlationFactor > 0) console.log([
+			`    ${StrategyLabels.least1} L%: `,
+			`${least1_c.ticketWinPct.toFixed(2)}%`,
+			`(${formatTicketRatio(least1_c)})`,
+			`CI - ${formatCIDiagnostics(least1_c.ticketWinPct, least1_c.tickets, least1_c.predictedTicketWinPct)}`,
+			`${formatBookPredictions(bestCorrelatedStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
+		].join(' '));
+		console.log([
+			`    ${StrategyLabels.points} Top:`,
+			`${points.avgPoints.toFixed(2)}`,
+			`(${points.tickets})`,
+			`CI - ${formatCIDiagnostics(points.avgPoints, points.tickets, points.predictedAvgPoints)}`,
+			`${formatBookPredictions(bestTopPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
+		].join(' '));
+		if (correlationFactor > 0) console.log([
+			`    ${StrategyLabels.points} L%: `,
+			`${points_c.avgPoints.toFixed(2)}`,
+			`(${points_c.tickets})`,
+			`CI - ${formatCIDiagnostics(points_c.avgPoints, points_c.tickets, points_c.predictedAvgPoints)}`,
+			`${formatBookPredictions(bestCorrelatedPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
+		].join(' '));
+		console.log([
+			`    ${StrategyLabels.hits} Top:`,
+			`${hits.hitPct.toFixed(2)}%`,
+			`(${hits.ratio})`,
+			`CI - ${formatCIDiagnostics(hits.hitPct, hits.totalPicks, hits.predictedHitPct)}`,
+			`${formatBookPredictions(bestTopPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
+		].join(' '));
+		if (correlationFactor > 0) console.log([
+			`    ${StrategyLabels.hits} L%: `,
+			`${hits_c.hitPct.toFixed(2)}%`,
+			`(${hits_c.ratio})`,
+			`CI - ${formatCIDiagnostics(hits_c.hitPct, hits_c.totalPicks, hits_c.predictedHitPct)}`,
+			`${formatBookPredictions(bestCorrelatedPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
+		].join(' '));
 
         const recommendedForWins = {
             mode: bestModeForWins.mode,
@@ -1295,6 +1251,8 @@ interface BestPicksResult {
     "2": Picks.PickOdds,
     "3": Picks.PickOdds,
     strategies: Set<StrategyType>,
+    rankedBy?: 'top' | 'strategies' | 'least1' | 'hits' | 'points' | 'ratio' | 'xg' | 'tied';
+    isTied?: boolean;
 }
 
 const resolvePoolKey = (gameCount: number): GameCount => gameCount <= 1 ? '1' : gameCount === 2 ? '2' : '3+';
@@ -1339,7 +1297,8 @@ export const bestPicks = async (
     picks1: Picks.PickOdds[],
     picks2: Picks.PickOdds[],
     picks3: Picks.PickOdds[],
-    options: AnalyzeOptions
+    options: AnalyzeOptions,
+    getXgMap: () => Promise<Map<Team, number>>
 ): Promise<BestPicksResult[]> => {
     const gameCount = gamesCount(picks1, picks2, picks3);
     if (gameCount === 0) return [];
@@ -1349,6 +1308,7 @@ export const bestPicks = async (
     const correlationFactor = options?.correlationFactor ?? 1;
     const { minSportsbooks } = options;
     const epsilon = 1e-12;
+    const xgMap = await getXgMap();
 
     // Run once using the requested analysis options.
     const summary = await comparePoolAccuracy(options);
@@ -1511,14 +1471,158 @@ export const bestPicks = async (
         results.push({
             ...combo,
             strategies: new Set([...strategies.entries()].map(([strat, { ratio, books }]) => new StrategyType(strat, ratio, books))),
+            rankedBy: undefined,
+            isTied: false,
         });
     }
 
-    // Return deterministically: strongest overlap first, then stable player id code.
-    results.sort((left, right) => {
-        if (right.strategies.size !== left.strategies.size) return right.strategies.size - left.strategies.size;
-        return comboCode(left).localeCompare(comboCode(right));
+    /*
+        1. More agreeing strategies (strategies.size)
+        2. Higher least1 (streak) tie score
+        3. Higher hits tie score
+        4. Higher points tie score
+        5. Higher average correlation ratio
+        6. Higher average team xG
+    */
+    const metricForBook = (combo: Pick<BestPicksResult, "1" | "2" | "3">, book: LogStatsKey, strategy: Strategy): number | null => {
+        const odd1 = combo['1'].player[book];
+        if (odd1 === null) return null;
+        const odd2 = combo['2'].player[book];
+        if (odd2 === null) return null;
+        const odd3 = combo['3'].player[book];
+        if (odd3 === null) return null;
+
+        if (strategy === 'least1') return calcAny(odd1, odd2, odd3);
+        if (strategy === 'points') return calcPnt(odd1, odd2, odd3);
+        return calcHit(odd1, odd2, odd3) / 3;
+    };
+
+    const strategyTieScore = (result: BestPicksResult, strategy: Strategy): number => {
+        let strategyType: StrategyType | undefined;
+        for (const item of result.strategies) {
+            if (item.key === strategy) {
+                strategyType = item;
+                break;
+            }
+        }
+        if (!strategyType) return Number.NEGATIVE_INFINITY;
+
+        let bestMetric = Number.NEGATIVE_INFINITY;
+        for (const book of strategyType.books) {
+            const metric = metricForBook(result, book, strategy);
+            if (metric === null) continue;
+            if (metric > bestMetric) bestMetric = metric;
+        }
+        if (bestMetric === Number.NEGATIVE_INFINITY) return Number.NEGATIVE_INFINITY;
+
+        return bestMetric * strategyType.correlationRatio;
+    };
+
+    const averageCorrelationRatio = (result: BestPicksResult): number => {
+        let total = 0;
+        let count = 0;
+        for (const strategyType of result.strategies) {
+            total += strategyType.correlationRatio;
+            count++;
+        }
+        return count === 0 ? 0 : total / count;
+    };
+
+    const averageTeamXg = (result: BestPicksResult): number => {
+        const xg1 = xgMap.get(result['1'].player.team.code as Team) ?? 0;
+        const xg2 = xgMap.get(result['2'].player.team.code as Team) ?? 0;
+        const xg3 = xgMap.get(result['3'].player.team.code as Team) ?? 0;
+        return (xg1 + xg2 + xg3) / 3;
+    };
+
+    const compareDesc = (left: number, right: number): number => {
+        if (left > right) return -1;
+        if (left < right) return 1;
+        return 0;
+    };
+
+    type RankMetrics = {
+        strategyCount: number;
+        least1: number;
+        hits: number;
+        points: number;
+        ratio: number;
+        xg: number;
+    };
+
+    const toMetrics = (result: BestPicksResult): RankMetrics => ({
+        strategyCount: result.strategies.size,
+        least1: strategyTieScore(result, 'least1'),
+        hits: strategyTieScore(result, 'hits'),
+        points: strategyTieScore(result, 'points'),
+        ratio: averageCorrelationRatio(result),
+        xg: averageTeamXg(result),
     });
+
+    const metricsEqual = (left: RankMetrics, right: RankMetrics): boolean => {
+        return left.strategyCount === right.strategyCount
+            && Math.abs(left.least1 - right.least1) <= epsilon
+            && Math.abs(left.hits - right.hits) <= epsilon
+            && Math.abs(left.points - right.points) <= epsilon
+            && Math.abs(left.ratio - right.ratio) <= epsilon
+            && Math.abs(left.xg - right.xg) <= epsilon;
+    };
+
+    const rankReasonVsPrevious = (current: RankMetrics, previous: RankMetrics): BestPicksResult['rankedBy'] => {
+        if (current.strategyCount !== previous.strategyCount) return 'strategies';
+        if (Math.abs(current.least1 - previous.least1) > epsilon) return 'least1';
+        if (Math.abs(current.hits - previous.hits) > epsilon) return 'hits';
+        if (Math.abs(current.points - previous.points) > epsilon) return 'points';
+        if (Math.abs(current.ratio - previous.ratio) > epsilon) return 'ratio';
+        if (Math.abs(current.xg - previous.xg) > epsilon) return 'xg';
+        return 'tied';
+    };
+
+    const ranked = results.map((result, originalIndex) => ({
+        result,
+        originalIndex,
+        metrics: toMetrics(result),
+    }));
+
+    // Sort by ranking priority. If fully tied, preserve original insertion order.
+    ranked.sort((left, right) => {
+        if (right.metrics.strategyCount !== left.metrics.strategyCount) return right.metrics.strategyCount - left.metrics.strategyCount;
+
+        const least1Compare = compareDesc(left.metrics.least1, right.metrics.least1);
+        if (least1Compare !== 0) return least1Compare;
+
+        const hitsCompare = compareDesc(left.metrics.hits, right.metrics.hits);
+        if (hitsCompare !== 0) return hitsCompare;
+
+        const pointsCompare = compareDesc(left.metrics.points, right.metrics.points);
+        if (pointsCompare !== 0) return pointsCompare;
+
+        const ratioCompare = compareDesc(left.metrics.ratio, right.metrics.ratio);
+        if (ratioCompare !== 0) return ratioCompare;
+
+        const xgCompare = compareDesc(left.metrics.xg, right.metrics.xg);
+        if (xgCompare !== 0) return xgCompare;
+
+        return left.originalIndex - right.originalIndex;
+    });
+
+    for (let index = 0; index < ranked.length; index++) {
+        const current = ranked[index];
+        const previous = index > 0 ? ranked[index - 1] : null;
+        const next = index + 1 < ranked.length ? ranked[index + 1] : null;
+
+        if (!previous) {
+            current.result.rankedBy = 'top';
+        } else {
+            current.result.rankedBy = rankReasonVsPrevious(current.metrics, previous.metrics);
+        }
+
+        const tiedWithPrevious = previous ? metricsEqual(current.metrics, previous.metrics) : false;
+        const tiedWithNext = next ? metricsEqual(current.metrics, next.metrics) : false;
+        current.result.isTied = tiedWithPrevious || tiedWithNext;
+    }
+
+    results.splice(0, results.length, ...ranked.map((item) => item.result));
 
     const format = (pick: Picks.PickOdds, betKey: LogStatsKey) => {
         const player = pick.player;
@@ -1529,12 +1633,59 @@ export const bestPicks = async (
     };
     const makeTitle = (text: string) => `\n${text}\n${"-".repeat(text.length)}`;
 
-    const bookName = (book: LogStatsKey, correlation: number) => {
+    const bookName = (book: LogStatsKey) => {
         const name = book === 'betAvg' ? 'Average' : Sportsbooks[book].title;
-        return makeTitle(`${name} (${correlation.toFixed(3)})`);
+        return makeTitle(`${name}`);
     }
 
     console.log(makeTitle(`*** Best Picks ${titleForPoolKey(poolKey)} ***`));
+    const rankOrder: Array<Exclude<BestPicksResult['rankedBy'], undefined>> = [
+        'top',
+        'strategies',
+        'least1',
+        'hits',
+        'points',
+        'ratio',
+        'xg',
+        'tied',
+    ];
+    const rankCounts: Record<Exclude<BestPicksResult['rankedBy'], undefined>, number> = {
+        top: 0,
+        strategies: 0,
+        least1: 0,
+        hits: 0,
+        points: 0,
+        ratio: 0,
+        xg: 0,
+        tied: 0,
+    };
+    for (const result of results) {
+        if (result.rankedBy) rankCounts[result.rankedBy]++;
+    }
+
+    let tieGroups = 0;
+    let tieEntries = 0;
+    for (let index = 0; index < results.length; index++) {
+        const current = results[index];
+        if (!current.isTied) continue;
+        tieEntries++;
+
+        const previous = index > 0 ? results[index - 1] : null;
+        const sameAsPrevious = previous
+            ? previous.isTied && metricsEqual(toMetrics(current), toMetrics(previous))
+            : false;
+        if (!sameAsPrevious) tieGroups++;
+    }
+
+    console.log('Rank summary:');
+    console.log(` • Total results: ${results.length}`);
+    console.log(` • Tied entries: ${tieEntries}`);
+    console.log(` • Tie groups: ${tieGroups}`);
+    for (const rank of rankOrder) {
+        const count = rankCounts[rank];
+        if (count > 0) console.log(` • ${rank}: ${count}`);
+    }
+
     for (const result of results) {
         const bets: Map<LogStatsKey, number> = new Map();
         const strategies: Set<Strategy> = new Set();
@@ -1544,7 +1695,9 @@ export const bestPicks = async (
         }
 
         for (const [bet, correlation] of bets) {
-            console.log(`${bookName(bet, correlation)}`, result.strategies);
+            console.log(`${bookName(bet)}`);
+            console.log(`${correlation.toFixed(3)}x correlation`);
+            if (result.rankedBy) console.log(`→ Ranked by: ${result.rankedBy}${result.isTied ? ' (tied)' : ''}`);
             console.log(`1: ${format(result['1'], bet)}`);
             console.log(`2: ${format(result['2'], bet)}`);
             console.log(`3: ${format(result['3'], bet)}`);
