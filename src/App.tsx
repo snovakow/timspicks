@@ -10,16 +10,17 @@ import SettingsPanel from './components/Settings';
 import { roundToPercent, probabilityToAmerican, getEntries } from './utility';
 import * as DataProcessor from './dataProcessor';
 import { precalculateLogStats, cloneLogStats } from './statsCalculations';
+import { bestPicks, runSimulation } from './picksOptimizer';
+import CollapsibleSection from './components/CollapsibleSection';
+import { getTeamTotals } from './teamGoals';
+import * as Feature from './features';
+
 import iconSettings from './images/settings_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconStats from './images/leaderboard_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconInfo from './images/info_i_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconLegend from './images/legend_toggle_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyDark from './images/sports_hockey_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconHockeyLight from './images/sports_hockey_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
-import { bestPicks, runSimulation } from './picksOptimizer';
-import CollapsibleSection from './components/CollapsibleSection';
-import { getTeamTotals } from './teamGoals';
-import * as Feature from './features';
 
 import './App.css';
 
