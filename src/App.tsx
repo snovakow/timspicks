@@ -12,6 +12,7 @@ import * as DataProcessor from './dataProcessor';
 import { precalculateLogStats, cloneLogStats } from './statsCalculations';
 import { bestPicks, runSimulation } from './picksOptimizer';
 import CollapsibleSection from './components/CollapsibleSection';
+import type { Team } from './components/logo';
 import { getTeamTotals } from './teamGoals';
 import * as Feature from './features';
 
@@ -116,7 +117,7 @@ interface InitializedData {
 function App() {
 	// xG (expected goals) state
 	const [xgEnabled, setXgEnabled] = useState(false);
-	const [xgMap, setXgMap] = useState<Map<string, number> | null>(null);
+	const [xgMap, setXgMap] = useState<Map<Team, number> | null>(null);
 	const xgLoadedRef = useRef(false);
 
 	// Lazy-load xG data only if enabled and not already loaded
