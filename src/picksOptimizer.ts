@@ -768,12 +768,20 @@ const calculateZScore = (actual: number, predicted: number, se: number): number 
 	return (actual - predicted) / se;
 };
 
-const formatCIDiagnostics = (hits: number, total: number, predictedHits: number): string => {
-	const ci = calculateHitRateCI(hits, total);
-	const zScore = calculateZScore(hits, predictedHits, ci.se);
-	const withinCI = predictedHits >= ci.lower && predictedHits <= ci.upper ? '✓' : '✗';
-	return `[${ci.lower.toFixed(2)}%-${ci.upper.toFixed(2)}%] ` +
-		`(z=${zScore.toFixed(2)}, pred=${predictedHits.toFixed(2)}% ${withinCI})`;
+const formatMultiBookCIDiagnostics = (
+	actual: number,
+	total: number,
+	entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>,
+	getPredicted: (stat: HistoricalAuditStat) => number
+): string[] => {
+	const ci = calculateHitRateCI(actual, total);
+	const bookDiagnostics = entries.map((entry) => {
+		const predicted = getPredicted(entry.stat);
+		const zScore = calculateZScore(actual, predicted, ci.se);
+		const withinCI = predicted >= ci.lower && predicted <= ci.upper ? '✓' : '✗';
+		return `${entry.book}(z=${zScore.toFixed(2)} pred=${predicted.toFixed(2)}% ${withinCI})`;
+	});
+	return [`[${ci.lower.toFixed(2)}%-${ci.upper.toFixed(2)}%]`, ...bookDiagnostics];
 };
 
 export const runHistoricalStrategyAudit = async (
@@ -1071,11 +1079,6 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 		return { entries, stat: entries[0].stat };
 	};
 
-	const formatBookPredictions = (
-		entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>,
-		metric: (stat: HistoricalAuditStat) => string
-	): string => entries.map((entry) => `${entry.book}(${metric(entry.stat)})`).join('/');
-
 	const summarizeEntries = (
 		entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>,
 		metric: (stat: HistoricalAuditStat) => string
@@ -1099,7 +1102,6 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	}
 
 	console.log(`\n\n=== Statistical Diagnostics: ${GameType[formatFilter]} ===`);
-	console.log("\n");
 	console.log(" • 95% CI (Confidence Interval): The range where the true hit rate likely falls with 95% confidence");
 	console.log("   ◦ Wider CI = smaller pool (more variance)");
 	console.log("   ◦ Narrower CI = larger pool (more stable results)");
@@ -1130,6 +1132,10 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 			return best;
 		});
 
+		const formatCI = (lines: string[], ci: string[]) => {
+			const indent = "\n\t\t";
+			return `\t${lines.join(" ")} CI ${ci.join(indent)}`;
+		}
 		const least1 = bestTopStreak.stat;
 		const points = bestTopPoints.stat;
 		const hits = bestTopPickPct.stat;
@@ -1137,49 +1143,49 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 		const points_c = bestCorrelatedPoints.stat;
 		const hits_c = bestCorrelatedPickPct.stat;
 
-		console.log(`  Pool ${titleForPoolKey(pool)}:`);
-		console.log([
-			`    ${StrategyLabels.least1} Top:`,
-			`${least1.ticketWinPct.toFixed(2)}%`,
-			`(${formatTicketRatio(least1)})`,
-			`CI - ${formatCIDiagnostics(least1.ticketWinPct, least1.tickets, least1.predictedTicketWinPct)}`,
-			`${formatBookPredictions(bestTopStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
-		].join(' '));
-		if (correlationFactor > 0) console.log([
-			`    ${StrategyLabels.least1} L%: `,
-			`${least1_c.ticketWinPct.toFixed(2)}%`,
-			`(${formatTicketRatio(least1_c)})`,
-			`CI - ${formatCIDiagnostics(least1_c.ticketWinPct, least1_c.tickets, least1_c.predictedTicketWinPct)}`,
-			`${formatBookPredictions(bestCorrelatedStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`)}`,
-		].join(' '));
-		console.log([
-			`    ${StrategyLabels.points} Top:`,
-			`${points.avgPoints.toFixed(2)}`,
-			`(${points.tickets})`,
-			`CI - ${formatCIDiagnostics(points.avgPoints, points.tickets, points.predictedAvgPoints)}`,
-			`${formatBookPredictions(bestTopPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
-		].join(' '));
-		if (correlationFactor > 0) console.log([
-			`    ${StrategyLabels.points} L%: `,
-			`${points_c.avgPoints.toFixed(2)}`,
-			`(${points_c.tickets})`,
-			`CI - ${formatCIDiagnostics(points_c.avgPoints, points_c.tickets, points_c.predictedAvgPoints)}`,
-			`${formatBookPredictions(bestCorrelatedPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2))}`,
-		].join(' '));
-		console.log([
-			`    ${StrategyLabels.hits} Top:`,
-			`${hits.hitPct.toFixed(2)}%`,
-			`(${hits.ratio})`,
-			`CI - ${formatCIDiagnostics(hits.hitPct, hits.totalPicks, hits.predictedHitPct)}`,
-			`${formatBookPredictions(bestTopPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
-		].join(' '));
-		if (correlationFactor > 0) console.log([
-			`    ${StrategyLabels.hits} L%: `,
-			`${hits_c.hitPct.toFixed(2)}%`,
-			`(${hits_c.ratio})`,
-			`CI - ${formatCIDiagnostics(hits_c.hitPct, hits_c.totalPicks, hits_c.predictedHitPct)}`,
-			`${formatBookPredictions(bestCorrelatedPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`)}`,
-		].join(' '));
+		console.log(`Pool ${titleForPoolKey(pool)}:`);
+		console.log(
+			formatCI([
+				`${StrategyLabels.least1} Top:`, `${least1.ticketWinPct.toFixed(2)}%`, `(${formatTicketRatio(least1)})`,
+			], formatMultiBookCIDiagnostics(
+				least1.ticketWinPct, least1.tickets, bestTopStreak.entries, (stat) => stat.predictedTicketWinPct
+			))
+		);
+		if (correlationFactor > 0) console.log(
+			formatCI([
+				`${StrategyLabels.least1} L%:`, `${least1_c.ticketWinPct.toFixed(2)}%`, `(${formatTicketRatio(least1_c)})`,
+			], formatMultiBookCIDiagnostics(
+				least1_c.ticketWinPct, least1_c.tickets, bestCorrelatedStreak.entries, (stat) => stat.predictedTicketWinPct
+			))
+		);
+		console.log(
+			formatCI([
+				`${StrategyLabels.points} Top:`, `${points.avgPoints.toFixed(2)}`, `(${points.tickets})`,
+			], formatMultiBookCIDiagnostics(
+				points.avgPoints, points.tickets, bestTopPoints.entries, (stat) => stat.predictedAvgPoints
+			))
+		);
+		if (correlationFactor > 0) console.log(
+			formatCI([
+				`${StrategyLabels.points} L%:`, `${points_c.avgPoints.toFixed(2)}`, `(${points_c.tickets})`,
+			], formatMultiBookCIDiagnostics(
+				points_c.avgPoints, points_c.tickets, bestCorrelatedPoints.entries, (stat) => stat.predictedAvgPoints
+			))
+		);
+		console.log(
+			formatCI([
+				`${StrategyLabels.hits} Top:`, `${hits.hitPct.toFixed(2)}%`, `(${hits.ratio})`,
+			], formatMultiBookCIDiagnostics(
+				hits.hitPct, hits.totalPicks, bestTopPickPct.entries, (stat) => stat.predictedHitPct
+			))
+		);
+		if (correlationFactor > 0) console.log(
+			formatCI([
+				`${StrategyLabels.hits} L%:`, `${hits_c.hitPct.toFixed(2)}%`, `(${hits_c.ratio})`,
+			], formatMultiBookCIDiagnostics(
+				hits_c.hitPct, hits_c.totalPicks, bestCorrelatedPickPct.entries, (stat) => stat.predictedHitPct
+			))
+		);
 
 		const recommendedForWins = {
 			mode: bestModeForWins.mode,
@@ -1251,7 +1257,7 @@ interface BestPicksResult {
 	"2": Picks.PickOdds,
 	"3": Picks.PickOdds,
 	strategies: Set<StrategyType>,
-	rankedBy?: 'top' | 'strategies' | 'least1' | 'hits' | 'points' | 'ratio' | 'xg' | 'tied';
+	rankedBy?: 'top' | 'strategies' | 'least1' | 'hits' | 'points' | 'ratio' | 'corrLean' | 'consensus' | 'xg' | 'tied';
 	isTied?: boolean;
 }
 
@@ -1482,8 +1488,45 @@ export const bestPicks = async (
 		3. Higher hits tie score
 		4. Higher points tie score
 		5. Higher average correlation ratio
-		6. Higher average team xG
+		6. Higher correlation lean (pool strategy model)
+		7. Higher book consensus (favored by more books)
+		8. Higher average team xG
 	*/
+	type SlotKey = '1' | '2' | '3';
+	const sportsbookKeys = [...SportsbookKeys] as LogStatsKey[];
+
+	const favoredBooksByPlayer = (slotPicks: Picks.PickOdds[]): Map<number, number> => {
+		const supportedByBook = new Map<number, number>();
+		for (const book of sportsbookKeys) {
+			let bestProb = Number.NEGATIVE_INFINITY;
+			const bestPlayers = new Set<number>();
+
+			for (const pick of slotPicks) {
+				if (pick.player.betCount < minSportsbooks) continue;
+				const prob = pick.player[book];
+				if (prob === null) continue;
+
+				if (prob > bestProb + epsilon) {
+					bestProb = prob;
+					bestPlayers.clear();
+					bestPlayers.add(pick.player.playerId);
+				} else if (Math.abs(prob - bestProb) <= epsilon) {
+					bestPlayers.add(pick.player.playerId);
+				}
+			}
+
+			for (const playerId of bestPlayers) {
+				supportedByBook.set(playerId, (supportedByBook.get(playerId) ?? 0) + 1);
+			}
+		}
+		return supportedByBook;
+	};
+
+	const supportBySlot: Record<SlotKey, Map<number, number>> = {
+		'1': favoredBooksByPlayer(picks1),
+		'2': favoredBooksByPlayer(picks2),
+		'3': favoredBooksByPlayer(picks3),
+	};
 	const metricForBook = (combo: Pick<BestPicksResult, "1" | "2" | "3">, book: LogStatsKey, strategy: Strategy): number | null => {
 		const odd1 = combo['1'].player[book];
 		if (odd1 === null) return null;
@@ -1535,6 +1578,29 @@ export const bestPicks = async (
 		return (xg1 + xg2 + xg3) / 3;
 	};
 
+	const averageBookConsensus = (result: BestPicksResult): number => {
+		const support1 = supportBySlot['1'].get(result['1'].player.playerId) ?? 0;
+		const support2 = supportBySlot['2'].get(result['2'].player.playerId) ?? 0;
+		const support3 = supportBySlot['3'].get(result['3'].player.playerId) ?? 0;
+		return (support1 + support2 + support3) / 3;
+	};
+
+	const averageCorrelationLean = (result: BestPicksResult): number => {
+		const comboStrategy = getPlayerStrategy(result['1'].player, result['2'].player, result['3'].player);
+		if (!comboStrategy) return 1;
+
+		let total = 0;
+		let weightTotal = 0;
+		for (const strategyType of result.strategies) {
+			const modelValue = ref[strategyType.key][comboStrategy];
+			const scaled = (((modelValue ?? 1) - 1) * correlationFactor) + 1;
+			const weight = Math.max(1, strategyType.books.length);
+			total += scaled * weight;
+			weightTotal += weight;
+		}
+		return weightTotal === 0 ? 1 : total / weightTotal;
+	};
+
 	const compareDesc = (left: number, right: number): number => {
 		if (left > right) return -1;
 		if (left < right) return 1;
@@ -1547,6 +1613,8 @@ export const bestPicks = async (
 		hits: number;
 		points: number;
 		ratio: number;
+		corrLean: number;
+		consensus: number;
 		xg: number;
 	};
 
@@ -1556,6 +1624,8 @@ export const bestPicks = async (
 		hits: strategyTieScore(result, 'hits'),
 		points: strategyTieScore(result, 'points'),
 		ratio: averageCorrelationRatio(result),
+		corrLean: averageCorrelationLean(result),
+		consensus: averageBookConsensus(result),
 		xg: averageTeamXg(result),
 	});
 
@@ -1565,6 +1635,8 @@ export const bestPicks = async (
 			&& Math.abs(left.hits - right.hits) <= epsilon
 			&& Math.abs(left.points - right.points) <= epsilon
 			&& Math.abs(left.ratio - right.ratio) <= epsilon
+			&& Math.abs(left.corrLean - right.corrLean) <= epsilon
+			&& Math.abs(left.consensus - right.consensus) <= epsilon
 			&& Math.abs(left.xg - right.xg) <= epsilon;
 	};
 
@@ -1574,6 +1646,8 @@ export const bestPicks = async (
 		if (Math.abs(current.hits - previous.hits) > epsilon) return 'hits';
 		if (Math.abs(current.points - previous.points) > epsilon) return 'points';
 		if (Math.abs(current.ratio - previous.ratio) > epsilon) return 'ratio';
+		if (Math.abs(current.corrLean - previous.corrLean) > epsilon) return 'corrLean';
+		if (Math.abs(current.consensus - previous.consensus) > epsilon) return 'consensus';
 		if (Math.abs(current.xg - previous.xg) > epsilon) return 'xg';
 		return 'tied';
 	};
@@ -1600,6 +1674,12 @@ export const bestPicks = async (
 		const ratioCompare = compareDesc(left.metrics.ratio, right.metrics.ratio);
 		if (ratioCompare !== 0) return ratioCompare;
 
+		const corrLeanCompare = compareDesc(left.metrics.corrLean, right.metrics.corrLean);
+		if (corrLeanCompare !== 0) return corrLeanCompare;
+
+		const consensusCompare = compareDesc(left.metrics.consensus, right.metrics.consensus);
+		if (consensusCompare !== 0) return consensusCompare;
+
 		const xgCompare = compareDesc(left.metrics.xg, right.metrics.xg);
 		if (xgCompare !== 0) return xgCompare;
 
@@ -1620,6 +1700,25 @@ export const bestPicks = async (
 		const tiedWithPrevious = previous ? metricsEqual(current.metrics, previous.metrics) : false;
 		const tiedWithNext = next ? metricsEqual(current.metrics, next.metrics) : false;
 		current.result.isTied = tiedWithPrevious || tiedWithNext;
+	}
+
+	const tieGroupByIndex: Array<number | null> = new Array(ranked.length).fill(null);
+	let tieGroupCount = 0;
+	for (let index = 0; index < ranked.length; index++) {
+		const current = ranked[index];
+		if (!current.result.isTied) continue;
+
+		const previous = index > 0 ? ranked[index - 1] : null;
+		const sameAsPrevious = previous
+			? previous.result.isTied && metricsEqual(current.metrics, previous.metrics)
+			: false;
+
+		if (sameAsPrevious) {
+			tieGroupByIndex[index] = tieGroupByIndex[index - 1];
+		} else {
+			tieGroupCount++;
+			tieGroupByIndex[index] = tieGroupCount;
+		}
 	}
 
 	results.splice(0, results.length, ...ranked.map((item) => item.result));
@@ -1646,6 +1745,8 @@ export const bestPicks = async (
 		'hits',
 		'points',
 		'ratio',
+		'corrLean',
+		'consensus',
 		'xg',
 		'tied',
 	];
@@ -1656,6 +1757,8 @@ export const bestPicks = async (
 		hits: 0,
 		points: 0,
 		ratio: 0,
+		corrLean: 0,
+		consensus: 0,
 		xg: 0,
 		tied: 0,
 	};
@@ -1663,30 +1766,35 @@ export const bestPicks = async (
 		if (result.rankedBy) rankCounts[result.rankedBy]++;
 	}
 
-	let tieGroups = 0;
 	let tieEntries = 0;
-	for (let index = 0; index < results.length; index++) {
-		const current = results[index];
-		if (!current.isTied) continue;
-		tieEntries++;
-
-		const previous = index > 0 ? results[index - 1] : null;
-		const sameAsPrevious = previous
-			? previous.isTied && metricsEqual(toMetrics(current), toMetrics(previous))
-			: false;
-		if (!sameAsPrevious) tieGroups++;
+	for (const group of tieGroupByIndex) {
+		if (group !== null) tieEntries++;
 	}
+
+	const rankReasonLabel: Record<Exclude<BestPicksResult['rankedBy'], undefined>, string> = {
+		top: 'Highest overall rank',
+		strategies: 'More strategy matches',
+		least1: 'Higher least1 score (streak)',
+		hits: 'Higher hits score',
+		points: 'Higher points score',
+		ratio: 'Higher correlation ratio',
+		corrLean: 'Higher correlation lean (pool strategy model)',
+		consensus: 'Higher book consensus (favored by more books)',
+		xg: 'Higher average team xG',
+		tied: 'Fully tied on all rank metrics (original order kept)',
+	};
 
 	console.log('Rank summary:');
 	console.log(` • Total results: ${results.length}`);
-	console.log(` • Tied entries: ${tieEntries}`);
-	console.log(` • Tie groups: ${tieGroups}`);
+	console.log(` • Tied entries: ${tieEntries} (results tied with at least one adjacent result)`);
+	console.log(` • Tie groups: ${tieGroupCount} (contiguous clusters of fully-equal ranked results)`);
+	console.log(' • Rank decision counts:');
 	for (const rank of rankOrder) {
 		const count = rankCounts[rank];
-		if (count > 0) console.log(` • ${rank}: ${count}`);
+		if (count > 0) console.log(`   - ${rankReasonLabel[rank]}: ${count}`);
 	}
 
-	for (const result of results) {
+	for (const [resultIndex, result] of results.entries()) {
 		const bets: Map<LogStatsKey, number> = new Map();
 		const strategies: Set<Strategy> = new Set();
 		for (const strategy of result.strategies) {
@@ -1697,7 +1805,12 @@ export const bestPicks = async (
 		for (const [bet, correlation] of bets) {
 			console.log(`${bookName(bet)}`);
 			console.log(`${correlation.toFixed(3)}x correlation`);
-			if (result.rankedBy) console.log(`→ Ranked by: ${result.rankedBy}${result.isTied ? ' (tied)' : ''}`);
+			console.log(`Correlation lean: ${toMetrics(result).corrLean.toFixed(3)}x`);
+			if (result.rankedBy) {
+				const tieGroup = tieGroupByIndex[resultIndex];
+				const tieSuffix = tieGroup !== null ? ` | tie group #${tieGroup}` : '';
+				console.log(`→ Rank reason: ${rankReasonLabel[result.rankedBy]}${tieSuffix}`);
+			}
 			console.log(`1: ${format(result['1'], bet)}`);
 			console.log(`2: ${format(result['2'], bet)}`);
 			console.log(`3: ${format(result['3'], bet)}`);
