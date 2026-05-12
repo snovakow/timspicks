@@ -361,7 +361,7 @@ function App() {
 		if (ANALYZE) {
 			ANALYZE = false;
 			const options = {
-				correlationFactor: 1,
+				correlationFactor: Feature.correlation ? 1 : 0,
 				formatFilter: 'all' as const,
 				minSportsbooks
 			};
