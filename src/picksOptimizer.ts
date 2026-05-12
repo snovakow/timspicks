@@ -1875,8 +1875,6 @@ export const runSimulation = async (iterations: number) => {
 		randomResults = new ResultTotal();
 		strategyResults: Map<ComboPattern, ResultTotal> = new Map();
 
-		picksCount = 0;
-
 		constructor() {
 			for (const strategy of AllCombos) {
 				this.strategyResults.set(strategy, new ResultTotal());
@@ -1929,7 +1927,6 @@ export const runSimulation = async (iterations: number) => {
 					gameResult = new GameResult();
 					gameResults.set(index, gameResult);
 				}
-				gameResult.picksCount++;
 
 				const array1 = Array.from(set1.values());
 				const array2 = Array.from(set2.values());
@@ -1958,8 +1955,7 @@ export const runSimulation = async (iterations: number) => {
 
 			results.push({
 				totals,
-				...index,
-				picksCount: result.picksCount
+				...index
 			});
 		}
 		return compileSimItems(results);
