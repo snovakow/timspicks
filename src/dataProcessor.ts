@@ -140,7 +140,6 @@ const loadAndValidate = async <T>(
 	return value as T;
 };
 
-
 // Async loader/validator for games.json that merges players into each game
 const loadGamesAndPlayers = async (processSrc: string, gamesSrc: string): Promise<[Picks.Player[], Picks.GameData[]]> => {
 	let cutoff: Date | null = null;

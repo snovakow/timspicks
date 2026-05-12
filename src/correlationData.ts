@@ -1,9 +1,8 @@
-import type { AllCombos, Strategy } from "./dataTypes";
+import type { AllCombos, PoolSlots, Strategy } from "./dataTypes";
 
 export type CorrelationData = Record<typeof AllCombos[number], number | null>;
 export type CorrelationResult = Record<Strategy, CorrelationData>;
-export type GameCount = '1' | '2' | '3+';
-export type CorrelationResults = Record<GameCount, CorrelationResult>;
+export type CorrelationResults = Record<PoolSlots, CorrelationResult>;
 
 export const correlations: CorrelationResults = {
     "1": {
@@ -94,7 +93,51 @@ export const correlations: CorrelationResults = {
             "oss": 0.9994532747892344
         }
     },
-    "3+": {
+    "3": {
+        "least1": {
+            "iii": 1,
+            "sss": 0.9960442243285105,
+            "iss": 0.996558654369376,
+            "sis": 0.995749417682109,
+            "ssi": 0.9990153773210311,
+            "ioo": 0.9969392003938472,
+            "oio": 1.000493366280597,
+            "ooi": 1.0096913487194108,
+            "oso": 0.9990090518694602,
+            "soo": 0.9990320844204282,
+            "sos": 1.0084083707057592,
+            "oss": 1.0053358022751429
+        },
+        "points": {
+            "iii": 1,
+            "sss": 0.9888477956814133,
+            "iss": 0.9932110174050741,
+            "sis": 0.9951795511787667,
+            "ssi": 0.9958330458710244,
+            "ioo": 0.9943741406469522,
+            "oio": 0.9984557414025668,
+            "ooi": 1.0092641355316305,
+            "oso": 0.9949787437725824,
+            "soo": 0.9950500015590041,
+            "sos": 1.0039262025113742,
+            "oss": 1.0002450562658138
+        },
+        "hits": {
+            "iii": 1,
+            "sss": 0.989614754632695,
+            "iss": 0.9938478050344842,
+            "sis": 0.9951753385519866,
+            "ssi": 0.9961345472347511,
+            "ioo": 0.9948314987127403,
+            "oio": 0.9988696652027286,
+            "ooi": 1.0089822759829932,
+            "oso": 0.996092929834147,
+            "soo": 0.9961612620668687,
+            "sos": 1.00436597135487,
+            "oss": 1.0010637691458937
+        }
+    },
+    "4+": {
         "least1": {
             "iii": 1,
             "sss": 0.9960442243285105,

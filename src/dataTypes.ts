@@ -51,3 +51,5 @@ export const Sportsbooks: Record<SportsbookKey, Sportsbook> = {
     bet3: { title: "BetMGM", logo: logo3 },
     bet4: { title: "BetRivers", logo: logo4 },
 };
+
+export type PoolSlots = '1' | '2' | '3' | '4+';

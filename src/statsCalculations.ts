@@ -1,9 +1,12 @@
 import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
-import { calcAny, calcPnt, calcHit, gamesCount } from './picksOptimizer';
+import { calcAny, calcPnt, calcHit, resolvePoolKey, gamesCount } from './picksOptimizer';
 import { correlations, } from './correlationData';
 import type { CorrelationResult } from './correlationData';
-import type { LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, Strategy, StrategyMode, ComboPattern } from './dataTypes';
+import type {
+	LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog,
+	Strategy, StrategyMode, ComboPattern
+} from './dataTypes';
 import { LogStatsKeys, Sportsbooks, StrategyLabels } from './dataTypes';
 import type { MergedSelection, SelectionCandidate } from './strategySelection';
 import { selectStrategyCombos } from './strategySelection';
@@ -307,7 +310,7 @@ const calculateStats = (
 	const gameCount = gamesCount(table1Rows, table2Rows, table3Rows);
 	if (gameCount === 0) return;
 
-	const ref = gameCount === 1 ? correlations['1'] : gameCount === 2 ? correlations['2'] : correlations['3+'];
+	const ref = correlations[resolvePoolKey(gameCount)];
 
 	const { top, strategies } = calcCombos();
 	const topSelection = top.merge();

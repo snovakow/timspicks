@@ -1,9 +1,9 @@
 import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
-import type { CorrelationData, CorrelationResult, CorrelationResults, GameCount } from "./correlationData";
+import type { CorrelationData, CorrelationResult, CorrelationResults } from "./correlationData";
 import { correlations } from "./correlationData";
 import { deVig, oddsNameMap, removeAccentsNormalize } from "./dataProcessor";
-import type { ComboPattern, LogStatsKey, StrategyMode, Strategy } from "./dataTypes";
+import type { ComboPattern, LogStatsKey, StrategyMode, Strategy, PoolSlots } from "./dataTypes";
 import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies, Sportsbooks } from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
 import { selectStrategyCombos } from "./strategySelection";
@@ -124,18 +124,23 @@ const compileSimItems = (simItems: SimItem[]): CorrelationResults => {
 	const game1 = new Correlation('random');
 	const game2 = new Correlation('random');
 	const game3 = new Correlation('iii');
+	const game4 = new Correlation('iii');
 	for (const item of simItems) {
-		const game = item.gameCount === 1 ? game1 : item.gameCount === 2 ? game2 : game3;
-		game.add(item.totals);
+		if (item.gameCount === 1) game1.add(item.totals);
+		else if (item.gameCount === 2) game2.add(item.totals);
+		else if (item.gameCount === 3) game3.add(item.totals);
+		else game4.add(item.totals);
 	}
 	game1.calculate();
 	game2.calculate();
 	game3.calculate();
+	game4.calculate();
 
 	return {
 		"1": game1.results(),
 		"2": game2.results(),
-		"3+": game3.results()
+		"3": game3.results(),
+		"4+": game4.results(),
 	}
 }
 
@@ -181,7 +186,6 @@ interface SimItem {
 	slotTotal: number;
 	slotIndex: number;
 	gameCount: number;
-	picksCount: number;
 	totals: SimTotal;
 }
 
@@ -298,7 +302,7 @@ const GameType: Record<Format, string> = {
 }
 interface HistoricalAuditOptions extends AnalyzeOptions {
 	logResults?: boolean;
-	slots?: PoolSlots;
+	slots: PoolSlots;
 }
 
 export interface HistoricalAuditStat {
@@ -358,14 +362,17 @@ const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
 		if (week.date !== date) continue;
 		for (const game of week.games) {
 			const utc = new Date(game.startTimeUTC);
-			const offsetMatch = game.easternUTCOffset.match(/^([+-])(\d{2}):(\d{2})$/);
-			if (!offsetMatch) continue;
 
-			const [, sign, hoursText, minutesText] = offsetMatch;
-			const offsetMinutes = (Number(hoursText) * 60) + Number(minutesText);
-			const direction = sign === '-' ? -1 : 1;
-			const local = new Date(utc.getTime() + direction * offsetMinutes * 60_000);
-			const hhmm = `${local.getUTCHours().toString().padStart(2, '0')}${local.getUTCMinutes().toString().padStart(2, '0')}`;
+			const formatter = new Intl.DateTimeFormat('en-US', {
+				timeZone: 'America/New_York',
+				hour: '2-digit',
+				minute: '2-digit',
+				hour12: false
+			});
+			const parts = formatter.formatToParts(utc);
+			const dateMap = Object.fromEntries(parts.map(p => [p.type, p.value]));
+
+			const hhmm = `${dateMap.hour}${dateMap.minute}`;
 			timeGroups.add(hhmm);
 		}
 	}
@@ -478,8 +485,6 @@ type BookComboEvaluation = {
 	topOutcome: ComboOutcome;
 	bestScores: Record<Strategy, StrategyScore | null>;
 };
-
-type PoolSlots = '1' | '2' | 'earliest 3+' | 'latest 3+';
 
 type BookPredictionSummary = {
 	book: LogStatsKey;
@@ -791,7 +796,7 @@ export const runHistoricalStrategyAudit = async (
 		minSportsbooks,
 		correlationFactor = 1,
 		logResults = true,
-		slots = 'earliest 3+',
+		slots,
 		formatFilter = 'all',
 	} = options;
 
@@ -831,8 +836,7 @@ export const runHistoricalStrategyAudit = async (
 			const findOne = true;
 			for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
 				try {
-					const orderIndex = slots === 'latest 3+' ? gameStartTimes.length - 1 - slotIndex : slotIndex;
-					const folderTime = gameStartTimes[orderIndex];
+					const folderTime = gameStartTimes[slotIndex];
 
 					const folder = `./data/${date}/${folderTime}`;
 					const helper = await fetchOptionalJson<Record<'1' | '2' | '3', Picks.OddsItem[]>>(`${folder}/helper.json`);
@@ -912,10 +916,11 @@ export const runHistoricalStrategyAudit = async (
 					switch (slots) {
 						case '1': if (gameCount !== 1) continue; break;
 						case '2': if (gameCount !== 2) continue; break;
-						default: if (gameCount < 3) continue;
+						case '3': if (gameCount !== 3) continue; break;
+						default: if (gameCount < 4) continue;
 					}
 
-					const ref = gameCount === 1 ? correlations['1'] : gameCount === 2 ? correlations['2'] : correlations['3+'];
+					const ref = correlations[slots];
 					daysWithSlots.add(date);
 
 					for (const bookKey of [...SportsbookKeys, 'betAvg'] as LogStatsKey[]) {
@@ -1030,8 +1035,8 @@ const titleForPoolKey = (poolKey: PoolSlots): string => {
 	switch (poolKey) {
 		case '1': return "1 Game Slots";
 		case '2': return "2 Game Slots";
-		case 'earliest 3+': return "Earliest 3+ Game Slots";
-		case 'latest 3+': return "Latest 3+ Game Slots";
+		case '3': return "3 Game Slots";
+		case '4+': return "4+ Game Slots";
 	}
 };
 
@@ -1044,7 +1049,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 		`${GameType[formatFilter]}\n`
 	);
 
-	const pools: PoolSlots[] = ['1', '2', 'latest 3+', 'earliest 3+'];
+	const pools: PoolSlots[] = ['1', '2', '3', '4+'];
 	type PoolResults = Record<PoolSlots, HistoricalAuditResults>;
 	const results: PoolResults = {} as PoolResults;
 	for (const pool of pools) {
@@ -1261,7 +1266,12 @@ interface BestPicksResult {
 	isTied?: boolean;
 }
 
-const resolvePoolKey = (gameCount: number): GameCount => gameCount <= 1 ? '1' : gameCount === 2 ? '2' : '3+';
+export const resolvePoolKey = (gameCount: number): PoolSlots => {
+	if (gameCount <= 1) return '1';
+	if (gameCount === 2) return '2';
+	if (gameCount === 3) return '3';
+	return '4+';
+}
 
 const getPlayerStrategy = (pick1: Picks.Player, pick2: Picks.Player, pick3: Picks.Player): ComboPattern | null => {
 	if (!pick1.sameGame(pick2) && !pick2.sameGame(pick3) && !pick1.sameGame(pick3)) return 'iii';
@@ -1309,8 +1319,8 @@ export const bestPicks = async (
 	const gameCount = gamesCount(picks1, picks2, picks3);
 	if (gameCount === 0) return [];
 
-	const sizeMode = resolvePoolKey(gameCount);
-	const ref = correlations[sizeMode];
+	const poolKey: PoolSlots = resolvePoolKey(gameCount);
+	const ref = correlations[poolKey];
 	const correlationFactor = options?.correlationFactor ?? 1;
 	const { minSportsbooks } = options;
 	const epsilon = 1e-12;
@@ -1330,8 +1340,6 @@ export const bestPicks = async (
 		points: null,
 		hits: null,
 	};
-
-	const poolKey: PoolSlots = gameCount === 1 ? '1' : gameCount === 2 ? '2' : 'latest 3+';
 
 	// Compare and decide for each strategy
 	for (const strategy of AllStrategies) {
