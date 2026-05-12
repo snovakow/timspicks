@@ -1495,9 +1495,9 @@ export const bestPicks = async (
 		2. Higher least1 (streak) tie score
 		3. Higher hits tie score
 		4. Higher points tie score
-		5. Higher average correlation ratio
-		6. Higher correlation lean (pool strategy model)
-		7. Higher book consensus (favored by more books)
+		5. Higher book consensus (favored by more books)
+		6. Higher average correlation ratio
+		7. Higher correlation lean (pool strategy model)
 		8. Higher average team xG
 	*/
 	type SlotKey = '1' | '2' | '3';
@@ -1653,9 +1653,9 @@ export const bestPicks = async (
 		if (Math.abs(current.least1 - previous.least1) > epsilon) return 'least1';
 		if (Math.abs(current.hits - previous.hits) > epsilon) return 'hits';
 		if (Math.abs(current.points - previous.points) > epsilon) return 'points';
+		if (Math.abs(current.consensus - previous.consensus) > epsilon) return 'consensus';
 		if (Math.abs(current.ratio - previous.ratio) > epsilon) return 'ratio';
 		if (Math.abs(current.corrLean - previous.corrLean) > epsilon) return 'corrLean';
-		if (Math.abs(current.consensus - previous.consensus) > epsilon) return 'consensus';
 		if (Math.abs(current.xg - previous.xg) > epsilon) return 'xg';
 		return 'tied';
 	};
@@ -1679,14 +1679,14 @@ export const bestPicks = async (
 		const pointsCompare = compareDesc(left.metrics.points, right.metrics.points);
 		if (pointsCompare !== 0) return pointsCompare;
 
+		const consensusCompare = compareDesc(left.metrics.consensus, right.metrics.consensus);
+		if (consensusCompare !== 0) return consensusCompare;
+
 		const ratioCompare = compareDesc(left.metrics.ratio, right.metrics.ratio);
 		if (ratioCompare !== 0) return ratioCompare;
 
 		const corrLeanCompare = compareDesc(left.metrics.corrLean, right.metrics.corrLean);
 		if (corrLeanCompare !== 0) return corrLeanCompare;
-
-		const consensusCompare = compareDesc(left.metrics.consensus, right.metrics.consensus);
-		if (consensusCompare !== 0) return consensusCompare;
 
 		const xgCompare = compareDesc(left.metrics.xg, right.metrics.xg);
 		if (xgCompare !== 0) return xgCompare;
@@ -1752,9 +1752,9 @@ export const bestPicks = async (
 		'least1',
 		'hits',
 		'points',
+		'consensus',
 		'ratio',
 		'corrLean',
-		'consensus',
 		'xg',
 		'tied',
 	];
