@@ -403,8 +403,8 @@ type ComboOutcome = {
 	actualHits: number;
 	actualPoints: number;
 	expectedLeast1: number;
-	expectedHits: number;
 	expectedPoints: number;
+	expectedHits: number;
 };
 
 const applyAuditOutcome = (bucket: AuditBucket, outcome: ComboOutcome) => {
@@ -525,8 +525,8 @@ const createComboOutcome = (prob1: number, prob2: number, prob3: number, hitCoun
 	actualHits: hitCount,
 	actualPoints: hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100,
 	expectedLeast1: calcAny(prob1, prob2, prob3),
-	expectedHits: calcHit(prob1, prob2, prob3),
 	expectedPoints: calcPnt(prob1, prob2, prob3),
+	expectedHits: calcHit(prob1, prob2, prob3),
 });
 
 const selectionHitCount = <T extends { scored: boolean }>(selection: MergedSelection<T>): number => {
@@ -1258,13 +1258,12 @@ export const bestPicks = async (
 			}
 		}
 
-		// Store with correlation ratio
 		for (const [code, combo] of bestCombos) {
 			bestByStrategyAndBooks[strategy].set(`${candidateBooks.join(',')}:${code}`, combo);
 		}
 	}
 
-	// Merge results: same combo might work for multiple strategies with different books/ratios
+	// Merge results: same combo might work for multiple strategies with different books
 	const merged = new Map<string, { combo: Pick<BestPicksResult, "1" | "2" | "3">; strategies: Map<Strategy, LogStatsKey[]> }>();
 	for (const strategy of AllStrategies) {
 		const books = strategyConfig[strategy];
