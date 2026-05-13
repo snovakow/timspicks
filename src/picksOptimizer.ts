@@ -554,8 +554,8 @@ type ScoredSelection = {
 };
 
 const aggregateSelectionOutcome = (selections: ScoredSelection[]): ComboOutcome | null => {
-	// Proportional/fractional hit counting for ties
-	let selectionCount = 0;
+	// Accumulate each combo as a separate result
+	let totalCombos = 0;
 	let actualTicketWins = 0;
 	let actualHits = 0;
 	let actualPoints = 0;
@@ -564,40 +564,32 @@ const aggregateSelectionOutcome = (selections: ScoredSelection[]): ComboOutcome 
 	let expectedPoints = 0;
 
 	for (const { selection, outcome } of selections) {
-		// For each tied combo, calculate its outcome and sum fractionally
 		const { combos } = selection;
 		if (!combos || combos.length === 0) continue;
-		let comboHits = 0;
-		let comboPoints = 0;
-		let comboTicketWins = 0;
 		for (const combo of combos) {
 			const hitCount = (combo.pick1.scored ? 1 : 0)
 				+ (combo.pick2.scored ? 1 : 0)
 				+ (combo.pick3.scored ? 1 : 0);
 			const actual = createComboOutcome(combo.prob1, combo.prob2, combo.prob3, hitCount);
-			comboHits += actual.actualHits;
-			comboPoints += actual.actualPoints;
-			comboTicketWins += actual.actualTicketWins;
+			actualHits += actual.actualHits;
+			actualPoints += actual.actualPoints;
+			actualTicketWins += actual.actualTicketWins;
+			totalCombos++;
 		}
-		// Average across all tied combos
-		actualHits += comboHits / combos.length;
-		actualPoints += comboPoints / combos.length;
-		actualTicketWins += comboTicketWins / combos.length;
 		expectedLeast1 += outcome.expectedLeast1;
 		expectedHits += outcome.expectedHits;
 		expectedPoints += outcome.expectedPoints;
-		selectionCount++;
 	}
 
-	if (selectionCount === 0) return null;
+	if (totalCombos === 0) return null;
 
 	return {
-		actualTicketWins: actualTicketWins / selectionCount,
-		actualHits: actualHits / selectionCount,
-		actualPoints: actualPoints / selectionCount,
-		expectedLeast1: expectedLeast1 / selectionCount,
-		expectedHits: expectedHits / selectionCount,
-		expectedPoints: expectedPoints / selectionCount,
+		actualTicketWins: actualTicketWins / totalCombos,
+		actualHits: actualHits / totalCombos,
+		actualPoints: actualPoints / totalCombos,
+		expectedLeast1: expectedLeast1 / selections.length,
+		expectedHits: expectedHits / selections.length,
+		expectedPoints: expectedPoints / selections.length,
 	};
 };
 
@@ -1298,24 +1290,16 @@ export const bestPicks = async (
 
 	/*
 		Ranking priority (derived from pool results):
-		1. More agreeing strategies (higher strategy count)
-		2. Higher least1 (ticket win %) tie score
-		3. Higher hits tie score
-		4. Higher points tie score
-		5. Higher book consensus, compared by slot (pick1, pick2, pick3) then tie-break within each slot:
-		   a) Earlier top-ranked supporting book wins (ranking order derived from pool ticketWinPct)
+		- Primary sort: strategies, least1, hits, points, consensus, xg (in fixed order)
+		- Within tied combos, use consensus book support as tie-breaker:
+		   a) Earlier top-ranked supporting book wins
 		   b) If tied, more supporting books wins
-		   c) If tied, compare supporting values in ranked book order (by ticketWinPct)
-		   d) If still tied, compare remaining books' values in ranked order (all books by ticketWinPct)
-		6. Higher average team xG
-		7. Fully tied → preserve original insertion order
+		   c) If tied, compare supporting values in ranked order (bet1, bet2, bet3, bet4, betAvg)
+		   d) If still tied, compare remaining (non-top) books in ranked order (bet1, bet2, bet3, bet4, betAvg)
+		- Final tie-breaker: higher average team xG
 		
-		Book ranking order is dynamically derived per-pool from historical effectiveness:
-		- Sort by: ticketWinPct (primary), then hitPct, then avgPoints
-		
-		Display order for rank reasons in console output:
-		- Shows results grouped by which criterion separated them (strategies, least1, hits, points, consensus, xg, or tied)
-		- Order reflects combined pool performance metrics
+		Display order for rank reasons reflects pool performance:
+		- Ordered by: ticketWinPct (primary), hitPct (secondary), avgPoints (tertiary)
 	*/
 	const metricForBook = (combo: Pick<BestPicksResult, "1" | "2" | "3">, book: LogStatsKey, strategy: Strategy): number | null => {
 		const odd1 = combo['1'].player[book];
@@ -1780,14 +1764,13 @@ export const bestPicks = async (
 	console.log(` • Total results: ${results.length}`);
 	console.log(` • Tied entries: ${tieGroupByIndex.filter(g => g !== null).length} (results tied with at least one adjacent result)`);
 	console.log(` • Tie groups: ${tieGroupCount} (contiguous clusters of fully-equal ranked results)`);
-	console.log(` • Book ranking order (by pool effectiveness): ${rankedConsensusBooks.join(' > ')}`);
-	console.log(` • Pool ${poolKey} metrics - ticketWinPct=${summary[poolKey].topWin.actualTicketWinPct.toFixed(2)}%, hitPct=${summary[poolKey].topPickPct.actualHitPct.toFixed(2)}%, avgPts=${summary[poolKey].topPoints.actualAvgPoints.toFixed(2)}`);
-	console.log(' • Consensus tie-break order: (a) top-ranked book, (b) support count, (c) supporting values in ranked order, (d) remaining books in ranked order');
-	console.log(' • Rank reason distribution:');
+	console.log(` • Consensus rank order: ${rankedConsensusBooks.join(' > ')}`);
+	console.log(' • Consensus tie-break order: (1) top-ranked book, (2) support count, (3) ranked book values, (4) remaining books in order');
+	console.log(` • Rank decision order (by pool effectiveness: ticketWinPct=${summary[poolKey].topWin.actualTicketWinPct.toFixed(2)}%, hitPct=${summary[poolKey].topPickPct.actualHitPct.toFixed(2)}%, avgPts=${summary[poolKey].topPoints.actualAvgPoints.toFixed(2)}):`);
 	for (const key of derivedRankOrder) {
 		const meta = rankMetaMap[key];
 		const count = results.filter(r => r.rankedBy === key).length;
-		if (count > 0 && meta) console.log(`   ${meta.label}: ${count}`);
+		if (count > 0 && meta) console.log(`   - ${meta.label}: ${count}`);
 	}
 
 	for (const payload of displayPayloads) {
