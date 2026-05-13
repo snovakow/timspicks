@@ -1,7 +1,6 @@
 import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
 import type { CorrelationData, CorrelationResult, CorrelationResults } from "./correlationData";
-import { correlations } from "./correlationData";
 import { deVig, oddsNameMap, removeAccentsNormalize } from "./dataProcessor";
 import type { ComboPattern, LogStatsKey, StrategyMode, Strategy, PoolSlots } from "./dataTypes";
 import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies, Sportsbooks } from "./dataTypes";
@@ -292,7 +291,6 @@ type Format = ItemFormat | 'all';
 
 export interface AnalyzeOptions {
 	minSportsbooks: number;
-	correlationFactor?: number;
 	formatFilter?: Format;
 }
 const GameType: Record<Format, string> = {
@@ -319,7 +317,7 @@ export interface HistoricalAuditStat {
 	ratio: string;
 }
 
-export type HistoricalAuditResults = Record<LogStatsKey, Record<StrategyMode, HistoricalAuditStat>>;
+export type HistoricalAuditResults = Record<LogStatsKey, HistoricalAuditStat>;
 
 type AuditBucket = {
 	tickets: number;
@@ -509,7 +507,6 @@ type HitPctSummary = {
 
 export type PoolAccuracySummary = {
 	recommendedForWins: {
-		mode: StrategyMode;
 		books: LogStatsKey[];
 		actualTicketWinPct: number;
 		predictedByBook: BookPredictionSummary[];
@@ -517,11 +514,8 @@ export type PoolAccuracySummary = {
 		tickets: number;
 	};
 	topWin: WinSummary;
-	correlatedWin: WinSummary;
 	topPoints: PointsSummary;
-	correlatedPoints: PointsSummary;
 	topPickPct: HitPctSummary;
-	correlatedPickPct: HitPctSummary;
 };
 
 export type ComparePoolAccuracySummary = Record<PoolSlots, PoolAccuracySummary>;
@@ -608,8 +602,6 @@ const evaluateBookCombos = (
 	set2: SnapshotOddsRow[],
 	set3: SnapshotOddsRow[],
 	bookKey: LogStatsKey,
-	ref: CorrelationResult,
-	correlationFactor: number
 ): BookComboEvaluation | null => {
 	const candidates: SelectionCandidate<SnapshotOddsRow>[] = [];
 	for (const pick1 of set1) {
@@ -653,8 +645,7 @@ const evaluateBookCombos = (
 		hits: null,
 	};
 
-	const scaleCorrelation = (value: number | null): number => (((value ?? 1) - 1) * correlationFactor) + 1;
-	for (const [strategy, combos] of strategies) {
+	for (const combos of strategies.values()) {
 		const selection = combos.merge();
 		if (!selection) continue;
 
@@ -664,17 +655,13 @@ const evaluateBookCombos = (
 			selection.prob3,
 			selectionHitCount(selection)
 		);
-		const least1Scaled = scaleCorrelation(ref.least1[strategy]);
-		const pointsScaled = scaleCorrelation(ref.points[strategy]);
-		const hitsScaled = scaleCorrelation(ref.hits[strategy]);
-
 		const correlatedOutcome: ComboOutcome = {
 			actualTicketWins: outcome.actualTicketWins,
 			actualHits: outcome.actualHits,
 			actualPoints: outcome.actualPoints,
-			expectedLeast1: outcome.expectedLeast1 * least1Scaled,
-			expectedHits: outcome.expectedHits * hitsScaled,
-			expectedPoints: outcome.expectedPoints * pointsScaled,
+			expectedLeast1: outcome.expectedLeast1,
+			expectedHits: outcome.expectedHits,
+			expectedPoints: outcome.expectedPoints,
 		};
 
 		const scores: Record<Strategy, number> = {
@@ -781,7 +768,6 @@ export const runHistoricalStrategyAudit = async (
 ): Promise<HistoricalAuditResults> => {
 	const {
 		minSportsbooks,
-		correlationFactor = 1,
 		logResults = true,
 		slots,
 		formatFilter = 'all',
@@ -907,7 +893,6 @@ export const runHistoricalStrategyAudit = async (
 						default: if (gameCount < 4) continue;
 					}
 
-					const ref = correlations[slots];
 					daysWithSlots.add(date);
 
 					for (const bookKey of [...SportsbookKeys, 'betAvg'] as LogStatsKey[]) {
@@ -916,7 +901,7 @@ export const runHistoricalStrategyAudit = async (
 						const set3 = rows.filter((row) => row.sid === '3' && row[bookKey] !== null && row.betCount >= minSportsbooks);
 						if (set1.length === 0 || set2.length === 0 || set3.length === 0) continue;
 
-						const evaluation = evaluateBookCombos(set1, set2, set3, bookKey, ref, correlationFactor);
+						const evaluation = evaluateBookCombos(set1, set2, set3, bookKey);
 						if (!evaluation) continue;
 
 						applyAuditOutcome(stats[bookKey].top, evaluation.topOutcome);
@@ -938,46 +923,12 @@ export const runHistoricalStrategyAudit = async (
 	}
 
 	const results: HistoricalAuditResults = {
-		bet1: {
-			top: formatAuditStat(stats.bet1.top),
-			least1: formatAuditStat(stats.bet1.least1),
-			points: formatAuditStat(stats.bet1.points),
-			hits: formatAuditStat(stats.bet1.hits),
-		},
-		bet2: {
-			top: formatAuditStat(stats.bet2.top),
-			least1: formatAuditStat(stats.bet2.least1),
-			points: formatAuditStat(stats.bet2.points),
-			hits: formatAuditStat(stats.bet2.hits),
-		},
-		bet3: {
-			top: formatAuditStat(stats.bet3.top),
-			least1: formatAuditStat(stats.bet3.least1),
-			points: formatAuditStat(stats.bet3.points),
-			hits: formatAuditStat(stats.bet3.hits),
-		},
-		bet4: {
-			top: formatAuditStat(stats.bet4.top),
-			least1: formatAuditStat(stats.bet4.least1),
-			points: formatAuditStat(stats.bet4.points),
-			hits: formatAuditStat(stats.bet4.hits),
-		},
-		betAvg: {
-			top: formatAuditStat(stats.betAvg.top),
-			least1: formatAuditStat(stats.betAvg.least1),
-			points: formatAuditStat(stats.betAvg.points),
-			hits: formatAuditStat(stats.betAvg.hits),
-		},
+		bet1: formatAuditStat(stats.bet1.top),
+		bet2: formatAuditStat(stats.bet2.top),
+		bet3: formatAuditStat(stats.bet3.top),
+		bet4: formatAuditStat(stats.bet4.top),
+		betAvg: formatAuditStat(stats.betAvg.top),
 	};
-
-	if (correlationFactor <= 0) {
-		for (const bookKey of LogStatsKeys) {
-			const top = results[bookKey].top;
-			results[bookKey].least1 = { ...top };
-			results[bookKey].points = { ...top };
-			results[bookKey].hits = { ...top };
-		}
-	}
 
 	if (logResults) {
 		const makeDisplay = (
@@ -988,7 +939,7 @@ export const runHistoricalStrategyAudit = async (
 			predictedKey: 'predictedTicketWinPct' | 'predictedAvgPoints' | 'predictedHitPct',
 		) => {
 			const display = Object.fromEntries((LogStatsKeys).map((bookKey) => {
-				const result = results[bookKey].top;
+				const result = results[bookKey];
 
 				const hits = result[hitsKey];
 				const hitsTotal = result[hitsTotalKey];
@@ -1001,12 +952,12 @@ export const runHistoricalStrategyAudit = async (
 
 				if (percent) {
 					table["%"] = formatAuditPercent(hits);
-					table["hits"] = `${round(result.ticketWins)}/${hitsTotal}`;
 					table["Odds %"] = formatAuditPercent(predicted);
+					table["hits"] = `${round(result.ticketWins)}/${hitsTotal}`;
 				} else {
 					table["#"] = formatAuditPoints(hits);
-					table["hits"] = hitsTotal;
 					table["Odds #"] = formatAuditPoints(predicted);
+					table["hits"] = hitsTotal;
 				}
 
 				table["CI Lower"] = round(ci.lower, 2);
@@ -1028,11 +979,10 @@ export const runHistoricalStrategyAudit = async (
 };
 
 export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<ComparePoolAccuracySummary> => {
-	const { correlationFactor = 1, formatFilter = 'all', minSportsbooks } = options;
+	const { formatFilter = 'all', minSportsbooks } = options;
 
 	console.log(
 		`\nComparing top pick accuracy across game count pools:\n` +
-		`Correlation factor = ${correlationFactor}\n` +
 		`${GameType[formatFilter]}\n`
 	);
 
@@ -1060,15 +1010,14 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	};
 	const getTopBooksForMetric = (
 		poolResult: HistoricalAuditResults,
-		column: StrategyMode,
 		metric: (stat: HistoricalAuditStat) => number
 	): StrategyMetric => {
 		let bestBooks: LogStatsKey[] = [LogStatsKeys[0]];
-		let bestValue = metric(poolResult[LogStatsKeys[0]][column]);
+		let bestValue = metric(poolResult[LogStatsKeys[0]]);
 
 		for (let index = 1; index < LogStatsKeys.length; index++) {
 			const book = LogStatsKeys[index];
-			const stat = poolResult[book][column];
+			const stat = poolResult[book];
 			const value = metric(stat);
 			if (value > bestValue) {
 				bestValue = value;
@@ -1078,7 +1027,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 			}
 		}
 
-		const entries = bestBooks.map((book) => ({ book, stat: poolResult[book][column] }));
+		const entries = bestBooks.map((book) => ({ book, stat: poolResult[book] }));
 		return { entries, stat: entries[0].stat };
 	};
 
@@ -1095,7 +1044,6 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	for (const pool of pools) {
 		const auditResult = await runHistoricalStrategyAudit({
 			minSportsbooks,
-			correlationFactor: correlationFactor,
 			formatFilter,
 			slots: pool,
 			logResults: true,
@@ -1104,25 +1052,18 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	}
 
 	for (const pool of pools) {
-		const bestTopStreak = getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct);
-		const bestTopPoints = getTopBooksForMetric(results[pool], 'top', (stat) => stat.avgPoints);
-		const bestTopPickPct = getTopBooksForMetric(results[pool], 'top', (stat) => stat.hitPct);
-		const bestCorrelatedStreak = getTopBooksForMetric(results[pool], 'least1', (stat) => stat.ticketWinPct);
-		const bestCorrelatedPoints = getTopBooksForMetric(results[pool], 'points', (stat) => stat.avgPoints);
-		const bestCorrelatedPickPct = getTopBooksForMetric(results[pool], 'hits', (stat) => stat.hitPct);
+		const bestTopStreak = getTopBooksForMetric(results[pool], (stat) => stat.ticketWinPct);
+		const bestTopPoints = getTopBooksForMetric(results[pool], (stat) => stat.avgPoints);
+		const bestTopPickPct = getTopBooksForMetric(results[pool], (stat) => stat.hitPct);
 
-		const bestModeForWins: { mode: StrategyMode; result: { entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>; stat: HistoricalAuditStat } } = [
-			{ mode: 'top' as const, result: getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct) },
-			{ mode: 'least1' as const, result: getTopBooksForMetric(results[pool], 'least1', (stat) => stat.ticketWinPct) },
-			{ mode: 'points' as const, result: getTopBooksForMetric(results[pool], 'points', (stat) => stat.ticketWinPct) },
-			{ mode: 'hits' as const, result: getTopBooksForMetric(results[pool], 'hits', (stat) => stat.ticketWinPct) },
+		const bestModeForWins: { result: { entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>; stat: HistoricalAuditStat } } = [
+			{ result: getTopBooksForMetric(results[pool], (stat) => stat.ticketWinPct) },
 		].reduce((best, current) => {
 			if (current.result.stat.ticketWinPct > best.result.stat.ticketWinPct) return current;
 			return best;
 		});
 
 		const recommendedForWins = {
-			mode: bestModeForWins.mode,
 			books: bestModeForWins.result.entries.map((entry) => entry.book),
 			actualTicketWinPct: bestModeForWins.result.stat.ticketWinPct,
 			predictedByBook: summarizeEntries(bestModeForWins.result.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
@@ -1139,36 +1080,17 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 				ticketRatio: formatTicketRatio(bestTopStreak.stat),
 				tickets: bestTopStreak.stat.tickets,
 			},
-			correlatedWin: {
-				books: bestCorrelatedStreak.entries.map((entry) => entry.book),
-				actualTicketWinPct: bestCorrelatedStreak.stat.ticketWinPct,
-				predictedByBook: summarizeEntries(bestCorrelatedStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
-				ticketRatio: formatTicketRatio(bestCorrelatedStreak.stat),
-				tickets: bestCorrelatedStreak.stat.tickets,
-			},
 			topPoints: {
 				books: bestTopPoints.entries.map((entry) => entry.book),
 				actualAvgPoints: bestTopPoints.stat.avgPoints,
 				predictedByBook: summarizeEntries(bestTopPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2)),
 				tickets: bestTopPoints.stat.tickets,
 			},
-			correlatedPoints: {
-				books: bestCorrelatedPoints.entries.map((entry) => entry.book),
-				actualAvgPoints: bestCorrelatedPoints.stat.avgPoints,
-				predictedByBook: summarizeEntries(bestCorrelatedPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2)),
-				tickets: bestCorrelatedPoints.stat.tickets,
-			},
 			topPickPct: {
 				books: bestTopPickPct.entries.map((entry) => entry.book),
 				actualHitPct: bestTopPickPct.stat.hitPct,
 				predictedByBook: summarizeEntries(bestTopPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`),
 				ratio: bestTopPickPct.stat.ratio,
-			},
-			correlatedPickPct: {
-				books: bestCorrelatedPickPct.entries.map((entry) => entry.book),
-				actualHitPct: bestCorrelatedPickPct.stat.hitPct,
-				predictedByBook: summarizeEntries(bestCorrelatedPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`),
-				ratio: bestCorrelatedPickPct.stat.ratio,
 			},
 		};
 	}
@@ -1178,11 +1100,9 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 
 class StrategyType {
 	key: Strategy;
-	correlationRatio: number;
 	books: LogStatsKey[];
-	constructor(strategy: Strategy, correlationRatio: number = 1, books: LogStatsKey[] = []) {
+	constructor(strategy: Strategy, books: LogStatsKey[] = []) {
 		this.key = strategy;
-		this.correlationRatio = correlationRatio;
 		this.books = books;
 	}
 }
@@ -1191,7 +1111,7 @@ interface BestPicksResult {
 	"2": Picks.PickOdds,
 	"3": Picks.PickOdds,
 	strategies: Set<StrategyType>,
-	rankedBy?: 'top' | 'strategies' | 'least1' | 'hits' | 'points' | 'ratio' | 'corrLean' | 'consensus' | 'xg' | 'tied';
+	rankedBy?: 'top' | 'strategies' | 'least1' | 'hits' | 'points' | 'consensus' | 'xg' | 'tied';
 	isTied?: boolean;
 }
 
@@ -1249,8 +1169,6 @@ export const bestPicks = async (
 	if (gameCount === 0) return [];
 
 	const poolKey: PoolSlots = resolvePoolKey(gameCount);
-	const ref = correlations[poolKey];
-	const correlationFactor = options?.correlationFactor ?? 1;
 	const { minSportsbooks } = options;
 	const epsilon = 1e-12;
 	const xgMap = await getXgMap();
@@ -1258,59 +1176,24 @@ export const bestPicks = async (
 	// Run once using the requested analysis options.
 	const summary = await comparePoolAccuracy(options);
 
-	// For each strategy, decide: use top or correlated? Calculate correlation ratio.
-	interface StrategyConfig {
-		books: LogStatsKey[];
-		correlationFactor: number;
-		correlationRatio: number;
-	}
-	const strategyConfig: Record<Strategy, StrategyConfig | null> = {
-		least1: null,
-		points: null,
-		hits: null,
+	const strategyConfig: Record<Strategy, LogStatsKey[]> = {
+		least1: [],
+		points: [],
+		hits: [],
 	};
 
 	// Compare and decide for each strategy
 	for (const strategy of AllStrategies) {
-		let topBooks: LogStatsKey[];
-		let topScore: number;
-		let corrBooks: LogStatsKey[];
-		let corrScore: number;
-
 		if (strategy === 'least1') {
-			topBooks = summary[poolKey].topWin.books;
-			topScore = summary[poolKey].topWin.actualTicketWinPct;
-			corrBooks = summary[poolKey].correlatedWin.books;
-			corrScore = summary[poolKey].correlatedWin.actualTicketWinPct;
+			strategyConfig[strategy] = summary[poolKey].topWin.books;
 		} else if (strategy === 'points') {
-			topBooks = summary[poolKey].topPoints.books;
-			topScore = summary[poolKey].topPoints.actualAvgPoints;
-			corrBooks = summary[poolKey].correlatedPoints.books;
-			corrScore = summary[poolKey].correlatedPoints.actualAvgPoints;
+			strategyConfig[strategy] = summary[poolKey].topPoints.books;
 		} else { // hits
-			topBooks = summary[poolKey].topPickPct.books;
-			topScore = summary[poolKey].topPickPct.actualHitPct;
-			corrBooks = summary[poolKey].correlatedPickPct.books;
-			corrScore = summary[poolKey].correlatedPickPct.actualHitPct;
-		}
-
-		// Use correlated only if correlation is enabled and it improves the result.
-		if (correlationFactor > 0 && corrScore > topScore + epsilon) {
-			strategyConfig[strategy] = {
-				books: corrBooks,
-				correlationFactor: correlationFactor,
-				correlationRatio: topScore <= epsilon ? 1 : corrScore / topScore,
-			};
-		} else {
-			strategyConfig[strategy] = {
-				books: topBooks,
-				correlationFactor: 0,
-				correlationRatio: 1,
-			};
+			strategyConfig[strategy] = summary[poolKey].topPickPct.books;
 		}
 	}
 
-	const bestByStrategyAndBooks: Record<Strategy, Map<string, { combo: Pick<BestPicksResult, "1" | "2" | "3">; ratio: number }>> = {
+	const bestByStrategyAndBooks: Record<Strategy, Map<string, Pick<BestPicksResult, "1" | "2" | "3">>> = {
 		least1: new Map(),
 		points: new Map(),
 		hits: new Map(),
@@ -1318,10 +1201,7 @@ export const bestPicks = async (
 
 	// Find best combos for each strategy using its decided configuration
 	for (const strategy of AllStrategies) {
-		const config = strategyConfig[strategy];
-		if (!config) continue;
-		const candidateBooks = config.books;
-		const scaleCorrelation = (value: number | null): number => (((value ?? 1) - 1) * config.correlationFactor) + 1;
+		const candidateBooks = strategyConfig[strategy];
 
 		let bestScore = Number.NEGATIVE_INFINITY;
 		const bestCombos = new Map<string, Pick<BestPicksResult, "1" | "2" | "3">>();
@@ -1352,19 +1232,15 @@ export const bestPicks = async (
 			}
 
 			const { strategies } = selectStrategyCombos(candidates);
-			for (const [strategyCode, combos] of strategies) {
+			for (const combos of strategies.values()) {
 				const selection = combos.merge();
 				if (!selection) continue;
 
-				const least1Scale = scaleCorrelation(ref.least1[strategyCode]);
-				const pointsScale = scaleCorrelation(ref.points[strategyCode]);
-				const hitsScale = scaleCorrelation(ref.hits[strategyCode]);
-
 				const score = strategy === 'least1'
-					? calcAny(selection.prob1, selection.prob2, selection.prob3) * least1Scale
+					? calcAny(selection.prob1, selection.prob2, selection.prob3)
 					: strategy === 'points'
-						? calcPnt(selection.prob1, selection.prob2, selection.prob3) * pointsScale
-						: calcHit(selection.prob1, selection.prob2, selection.prob3) * hitsScale;
+						? calcPnt(selection.prob1, selection.prob2, selection.prob3)
+						: calcHit(selection.prob1, selection.prob2, selection.prob3);
 
 				if (score > bestScore + epsilon) {
 					bestScore = score;
@@ -1384,26 +1260,23 @@ export const bestPicks = async (
 
 		// Store with correlation ratio
 		for (const [code, combo] of bestCombos) {
-			bestByStrategyAndBooks[strategy].set(`${candidateBooks.join(',')}:${code}`, {
-				combo,
-				ratio: config.correlationRatio,
-			});
+			bestByStrategyAndBooks[strategy].set(`${candidateBooks.join(',')}:${code}`, combo);
 		}
 	}
 
 	// Merge results: same combo might work for multiple strategies with different books/ratios
-	const merged = new Map<string, { combo: Pick<BestPicksResult, "1" | "2" | "3">; strategies: Map<Strategy, { ratio: number; books: LogStatsKey[] }> }>();
+	const merged = new Map<string, { combo: Pick<BestPicksResult, "1" | "2" | "3">; strategies: Map<Strategy, LogStatsKey[]> }>();
 	for (const strategy of AllStrategies) {
-		const config = strategyConfig[strategy];
-		if (!config) continue;
-		for (const { combo, ratio } of bestByStrategyAndBooks[strategy].values()) {
+		const books = strategyConfig[strategy];
+		if (!books) continue;
+		for (const combo of bestByStrategyAndBooks[strategy].values()) {
 			const code = comboCode(combo);
 			const existing = merged.get(code);
 			if (existing) {
-				existing.strategies.set(strategy, { ratio, books: config.books });
+				existing.strategies.set(strategy, books);
 			} else {
-				const strategies = new Map<Strategy, { ratio: number; books: LogStatsKey[] }>();
-				strategies.set(strategy, { ratio, books: config.books });
+				const strategies = new Map<Strategy, LogStatsKey[]>();
+				strategies.set(strategy, books);
 				merged.set(code, { combo, strategies });
 			}
 		}
@@ -1413,7 +1286,7 @@ export const bestPicks = async (
 	for (const { combo, strategies } of merged.values()) {
 		results.push({
 			...combo,
-			strategies: new Set([...strategies.entries()].map(([strat, { ratio, books }]) => new StrategyType(strat, ratio, books))),
+			strategies: new Set([...strategies.entries()].map(([strat, books]) => new StrategyType(strat, books))),
 			rankedBy: undefined,
 			isTied: false,
 		});
@@ -1425,9 +1298,7 @@ export const bestPicks = async (
 		3. Higher hits tie score
 		4. Higher points tie score
 		5. Higher book consensus (favored by more books)
-		6. Higher average correlation ratio
-		7. Higher correlation lean (pool strategy model)
-		8. Higher average team xG
+		6. Higher average team xG
 	*/
 	type SlotKey = '1' | '2' | '3';
 	const sportsbookKeys = [...SportsbookKeys] as LogStatsKey[];
@@ -1495,17 +1366,7 @@ export const bestPicks = async (
 		}
 		if (bestMetric === Number.NEGATIVE_INFINITY) return Number.NEGATIVE_INFINITY;
 
-		return bestMetric * strategyType.correlationRatio;
-	};
-
-	const averageCorrelationRatio = (result: BestPicksResult): number => {
-		let total = 0;
-		let count = 0;
-		for (const strategyType of result.strategies) {
-			total += strategyType.correlationRatio;
-			count++;
-		}
-		return count === 0 ? 0 : total / count;
+		return bestMetric;
 	};
 
 	const averageTeamXg = (result: BestPicksResult): number => {
@@ -1522,22 +1383,6 @@ export const bestPicks = async (
 		return (support1 + support2 + support3) / 3;
 	};
 
-	const averageCorrelationLean = (result: BestPicksResult): number => {
-		const comboStrategy = getPlayerStrategy(result['1'].player, result['2'].player, result['3'].player);
-		if (!comboStrategy) return 1;
-
-		let total = 0;
-		let weightTotal = 0;
-		for (const strategyType of result.strategies) {
-			const modelValue = ref[strategyType.key][comboStrategy];
-			const scaled = (((modelValue ?? 1) - 1) * correlationFactor) + 1;
-			const weight = Math.max(1, strategyType.books.length);
-			total += scaled * weight;
-			weightTotal += weight;
-		}
-		return weightTotal === 0 ? 1 : total / weightTotal;
-	};
-
 	const compareDesc = (left: number, right: number): number => {
 		if (left > right) return -1;
 		if (left < right) return 1;
@@ -1549,8 +1394,6 @@ export const bestPicks = async (
 		least1: number;
 		hits: number;
 		points: number;
-		ratio: number;
-		corrLean: number;
 		consensus: number;
 		xg: number;
 	};
@@ -1560,8 +1403,6 @@ export const bestPicks = async (
 		least1: strategyTieScore(result, 'least1'),
 		hits: strategyTieScore(result, 'hits'),
 		points: strategyTieScore(result, 'points'),
-		ratio: averageCorrelationRatio(result),
-		corrLean: averageCorrelationLean(result),
 		consensus: averageBookConsensus(result),
 		xg: averageTeamXg(result),
 	});
@@ -1571,8 +1412,6 @@ export const bestPicks = async (
 			&& Math.abs(left.least1 - right.least1) <= epsilon
 			&& Math.abs(left.hits - right.hits) <= epsilon
 			&& Math.abs(left.points - right.points) <= epsilon
-			&& Math.abs(left.ratio - right.ratio) <= epsilon
-			&& Math.abs(left.corrLean - right.corrLean) <= epsilon
 			&& Math.abs(left.consensus - right.consensus) <= epsilon
 			&& Math.abs(left.xg - right.xg) <= epsilon;
 	};
@@ -1583,8 +1422,6 @@ export const bestPicks = async (
 		if (Math.abs(current.hits - previous.hits) > epsilon) return 'hits';
 		if (Math.abs(current.points - previous.points) > epsilon) return 'points';
 		if (Math.abs(current.consensus - previous.consensus) > epsilon) return 'consensus';
-		if (Math.abs(current.ratio - previous.ratio) > epsilon) return 'ratio';
-		if (Math.abs(current.corrLean - previous.corrLean) > epsilon) return 'corrLean';
 		if (Math.abs(current.xg - previous.xg) > epsilon) return 'xg';
 		return 'tied';
 	};
@@ -1610,12 +1447,6 @@ export const bestPicks = async (
 
 		const consensusCompare = compareDesc(left.metrics.consensus, right.metrics.consensus);
 		if (consensusCompare !== 0) return consensusCompare;
-
-		const ratioCompare = compareDesc(left.metrics.ratio, right.metrics.ratio);
-		if (ratioCompare !== 0) return ratioCompare;
-
-		const corrLeanCompare = compareDesc(left.metrics.corrLean, right.metrics.corrLean);
-		if (corrLeanCompare !== 0) return corrLeanCompare;
 
 		const xgCompare = compareDesc(left.metrics.xg, right.metrics.xg);
 		if (xgCompare !== 0) return xgCompare;
@@ -1682,8 +1513,6 @@ export const bestPicks = async (
 		'hits',
 		'points',
 		'consensus',
-		'ratio',
-		'corrLean',
 		'xg',
 		'tied',
 	];
@@ -1693,8 +1522,6 @@ export const bestPicks = async (
 		least1: 0,
 		hits: 0,
 		points: 0,
-		ratio: 0,
-		corrLean: 0,
 		consensus: 0,
 		xg: 0,
 		tied: 0,
@@ -1714,8 +1541,6 @@ export const bestPicks = async (
 		least1: 'Higher least1 score (streak)',
 		hits: 'Higher hits score',
 		points: 'Higher points score',
-		ratio: 'Higher correlation ratio',
-		corrLean: 'Higher correlation lean (pool strategy model)',
 		consensus: 'Higher book consensus (favored by more books)',
 		xg: 'Higher average team xG',
 		tied: 'Fully tied on all rank metrics (original order kept)',
@@ -1732,17 +1557,15 @@ export const bestPicks = async (
 	}
 
 	for (const [resultIndex, result] of results.entries()) {
-		const bets: Map<LogStatsKey, number> = new Map();
+		const bets: Set<LogStatsKey> = new Set();
 		const strategies: Set<Strategy> = new Set();
 		for (const strategy of result.strategies) {
-			for (const book of strategy.books) bets.set(book, strategy.correlationRatio);
+			for (const book of strategy.books) bets.add(book);
 			strategies.add(strategy.key);
 		}
 
-		for (const [bet, correlation] of bets) {
+		for (const bet of bets) {
 			console.log(`${bookName(bet)}`);
-			console.log(`${correlation.toFixed(3)}x correlation`);
-			console.log(`Correlation lean: ${toMetrics(result).corrLean.toFixed(3)}x`);
 			if (result.rankedBy) {
 				const tieGroup = tieGroupByIndex[resultIndex];
 				const tieSuffix = tieGroup !== null ? ` | tie group #${tieGroup}` : '';
@@ -1759,9 +1582,9 @@ export const bestPicks = async (
 			const odd3 = result['3'].player[bet];
 			if (odd3 === null) continue;
 
-			const anyValue = calcAny(odd1, odd2, odd3) * correlation;
-			const pntValue = calcPnt(odd1, odd2, odd3) * correlation;
-			const hitValue = calcHit(odd1, odd2, odd3) / 3 * correlation;
+			const anyValue = calcAny(odd1, odd2, odd3);
+			const pntValue = calcPnt(odd1, odd2, odd3);
+			const hitValue = calcHit(odd1, odd2, odd3) / 3;
 
 			const comboPrecision = 2;
 			const any = roundToPercent(anyValue, comboPrecision);

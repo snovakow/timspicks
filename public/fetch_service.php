@@ -99,11 +99,12 @@ if ($live && isset($_GET['history'])) {
 	if (!is_dir($baseHistoryPath)) mkdir($baseHistoryPath, 0755, true);
 
 	$datesTotal = [
-		['season' => '2023-2024', 'format' => 'regular', 'start' => '2023-10-10', 'end' => '2024-04-18'],
-		['season' => '2023-2024', 'format' => 'playoff', 'start' => '2024-04-20', 'end' => '2024-06-24'],
-		['season' => '2024-2025', 'format' => 'regular', 'start' => '2024-10-04', 'end' => '2025-04-17'],
-		['season' => '2024-2025', 'format' => 'playoff', 'start' => '2025-04-19', 'end' => '2025-06-17'],
-		['season' => '2025-2026', 'format' => 'regular', 'start' => '2025-10-07', 'end' => '2026-04-16'],
+		// ['season' => '2023-2024', 'format' => 'regular', 'start' => '2023-10-10', 'end' => '2024-04-18'],
+		// ['season' => '2023-2024', 'format' => 'playoff', 'start' => '2024-04-20', 'end' => '2024-06-24'],
+		// ['season' => '2024-2025', 'format' => 'regular', 'start' => '2024-10-04', 'end' => '2025-04-17'],
+		// ['season' => '2024-2025', 'format' => 'playoff', 'start' => '2025-04-19', 'end' => '2025-06-17'],
+		// ['season' => '2025-2026', 'format' => 'regular', 'start' => '2025-10-07', 'end' => '2026-04-16'],
+		['season' => '2025-2026', 'format' => 'regular', 'start' => '2026-04-09', 'end' => '2026-04-16'],
 		['season' => '2025-2026', 'format' => 'playoff', 'start' => '2026-04-18', 'end' => '2026-05-12'],
 	];
 
