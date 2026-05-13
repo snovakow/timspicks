@@ -208,7 +208,7 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 	$map = [];
 	foreach ($data as $market) {
 		if ($market->marketType !== 'ANY_TIME_GOAL_SCORER') continue;
-		if ($market->marketName !== 'Any Time Goal Scorer') continue;
+		if ($market->marketName !== 'Any Time Goal Scorer' && $market->marketName !== 'Anytime Goal Scorer') continue;
 
 		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $market->marketTime);
 		if (!$closingTime) {
