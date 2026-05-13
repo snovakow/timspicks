@@ -519,6 +519,10 @@ export type PoolAccuracySummary = {
 };
 
 export type ComparePoolAccuracySummary = Record<PoolSlots, PoolAccuracySummary>;
+export type ComparePoolAccuracyResult = {
+	summary: ComparePoolAccuracySummary;
+	results: Record<PoolSlots, HistoricalAuditResults>;
+};
 
 const createComboOutcome = (prob1: number, prob2: number, prob3: number, hitCount: number): ComboOutcome => ({
 	actualTicketWins: hitCount > 0 ? 1 : 0,
@@ -978,7 +982,7 @@ export const runHistoricalStrategyAudit = async (
 	return results;
 };
 
-export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<ComparePoolAccuracySummary> => {
+export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<ComparePoolAccuracyResult> => {
 	const { formatFilter = 'all', minSportsbooks } = options;
 
 	console.log(
@@ -1095,7 +1099,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 		};
 	}
 
-	return summaryByPool;
+	return { summary: summaryByPool, results };
 };
 
 class StrategyType {
@@ -1174,7 +1178,8 @@ export const bestPicks = async (
 	const xgMap = await getXgMap();
 
 	// Run once using the requested analysis options.
-	const summary = await comparePoolAccuracy(options);
+	const { summary: summaryByPool, results: auditResults } = await comparePoolAccuracy(options);
+	const summary = summaryByPool;
 
 	const strategyConfig: Record<Strategy, LogStatsKey[]> = {
 		least1: [],
@@ -1292,48 +1297,26 @@ export const bestPicks = async (
 	}
 
 	/*
-		1. More agreeing strategies (strategies.size)
-		2. Higher least1 (streak) tie score
+		Ranking priority (derived from pool results):
+		1. More agreeing strategies (higher strategy count)
+		2. Higher least1 (ticket win %) tie score
 		3. Higher hits tie score
 		4. Higher points tie score
-		5. Higher book consensus (favored by more books)
+		5. Higher book consensus, compared by slot (pick1, pick2, pick3) then tie-break within each slot:
+		   a) Earlier top-ranked supporting book wins (ranking order derived from pool ticketWinPct)
+		   b) If tied, more supporting books wins
+		   c) If tied, compare supporting values in ranked book order (by ticketWinPct)
+		   d) If still tied, compare remaining books' values in ranked order (all books by ticketWinPct)
 		6. Higher average team xG
+		7. Fully tied → preserve original insertion order
+		
+		Book ranking order is dynamically derived per-pool from historical effectiveness:
+		- Sort by: ticketWinPct (primary), then hitPct, then avgPoints
+		
+		Display order for rank reasons in console output:
+		- Shows results grouped by which criterion separated them (strategies, least1, hits, points, consensus, xg, or tied)
+		- Order reflects combined pool performance metrics
 	*/
-	type SlotKey = '1' | '2' | '3';
-	const sportsbookKeys = [...SportsbookKeys] as LogStatsKey[];
-
-	const favoredBooksByPlayer = (slotPicks: Picks.PickOdds[]): Map<number, number> => {
-		const supportedByBook = new Map<number, number>();
-		for (const book of sportsbookKeys) {
-			let bestProb = Number.NEGATIVE_INFINITY;
-			const bestPlayers = new Set<number>();
-
-			for (const pick of slotPicks) {
-				if (pick.player.betCount < minSportsbooks) continue;
-				const prob = pick.player[book];
-				if (prob === null) continue;
-
-				if (prob > bestProb + epsilon) {
-					bestProb = prob;
-					bestPlayers.clear();
-					bestPlayers.add(pick.player.playerId);
-				} else if (Math.abs(prob - bestProb) <= epsilon) {
-					bestPlayers.add(pick.player.playerId);
-				}
-			}
-
-			for (const playerId of bestPlayers) {
-				supportedByBook.set(playerId, (supportedByBook.get(playerId) ?? 0) + 1);
-			}
-		}
-		return supportedByBook;
-	};
-
-	const supportBySlot: Record<SlotKey, Map<number, number>> = {
-		'1': favoredBooksByPlayer(picks1),
-		'2': favoredBooksByPlayer(picks2),
-		'3': favoredBooksByPlayer(picks3),
-	};
 	const metricForBook = (combo: Pick<BestPicksResult, "1" | "2" | "3">, book: LogStatsKey, strategy: Strategy): number | null => {
 		const odd1 = combo['1'].player[book];
 		if (odd1 === null) return null;
@@ -1375,16 +1358,166 @@ export const bestPicks = async (
 		return (xg1 + xg2 + xg3) / 3;
 	};
 
-	const averageBookConsensus = (result: BestPicksResult): number => {
-		const support1 = supportBySlot['1'].get(result['1'].player.playerId) ?? 0;
-		const support2 = supportBySlot['2'].get(result['2'].player.playerId) ?? 0;
-		const support3 = supportBySlot['3'].get(result['3'].player.playerId) ?? 0;
-		return (support1 + support2 + support3) / 3;
+	// Ranked consensus keys derived from pool effectiveness: sort books by ticketWinPct descending
+	const poolAuditResults = auditResults[poolKey];
+	const booksByEffectiveness: Array<{ book: LogStatsKey; ticketWinPct: number }> = [];
+	for (const book of LogStatsKeys) {
+		if (poolAuditResults[book]) {
+			booksByEffectiveness.push({
+				book,
+				ticketWinPct: poolAuditResults[book].ticketWinPct,
+			});
+		}
+	}
+	booksByEffectiveness.sort((a, b) => b.ticketWinPct - a.ticketWinPct);
+	const rankedConsensusBooks: readonly LogStatsKey[] = booksByEffectiveness.map(b => b.book);
+
+	type BetSupport = Map<number, Map<LogStatsKey, number>>;
+	const populateBetSupport = (picks: Picks.PickOdds[]): BetSupport => {
+		const topBets = new Map<number, Map<LogStatsKey, number>>();
+		for (const book of rankedConsensusBooks) {
+			let max = Number.NEGATIVE_INFINITY;
+			const eligiblePlayers: Array<{ playerId: number; value: number }> = [];
+			for (const pick of picks) {
+				const player = pick.player;
+				const val = player[book];
+				if (val === null || player.betCount < minSportsbooks) continue;
+				eligiblePlayers.push({ playerId: player.playerId, value: val });
+				if (val > max) max = val;
+			}
+			if (eligiblePlayers.length === 0) continue;
+
+			for (const candidate of eligiblePlayers) {
+				if (Math.abs(candidate.value - max) > epsilon) continue;
+				let playerBets = topBets.get(candidate.playerId);
+				if (!playerBets) {
+					playerBets = new Map<LogStatsKey, number>();
+					topBets.set(candidate.playerId, playerBets);
+				}
+				playerBets.set(book, candidate.value);
+			}
+		}
+		return topBets;
+	}
+	const betSupport: { '1': BetSupport; '2': BetSupport; '3': BetSupport } = {
+		'1': populateBetSupport(picks1),
+		'2': populateBetSupport(picks2),
+		'3': populateBetSupport(picks3),
+	}
+
+	type SlotKey = '1' | '2' | '3';
+	type SlotConsensusProfile = {
+		topBookRank: number;
+		supportCount: number;
+		supportByBook: Map<LogStatsKey, number>;
+		allBookValues: Map<LogStatsKey, number | null>; // All books for this player in ranked order
 	};
+	type ConsensusProfile = Record<SlotKey, SlotConsensusProfile>;
+
+	const buildSlotConsensusProfile = (slot: SlotKey, playerId: number, picks: Picks.PickOdds[]): SlotConsensusProfile => {
+		const playerBooks = betSupport[slot].get(playerId);
+		const allBookValues = new Map<LogStatsKey, number | null>();
+		
+		// Build map of all book values for this player
+		let targetPlayer: Picks.Player | undefined;
+		for (const pick of picks) {
+			if (pick.player.playerId === playerId) {
+				targetPlayer = pick.player;
+				break;
+			}
+		}
+		
+		if (targetPlayer) {
+			for (const book of rankedConsensusBooks) {
+				allBookValues.set(book, targetPlayer[book]);
+			}
+		}
+		
+		if (!playerBooks) {
+			return {
+				topBookRank: Number.POSITIVE_INFINITY,
+				supportCount: 0,
+				supportByBook: new Map<LogStatsKey, number>(),
+				allBookValues,
+			};
+		}
+
+		let topBookRank = Number.POSITIVE_INFINITY;
+		for (let index = 0; index < rankedConsensusBooks.length; index++) {
+			if (playerBooks.has(rankedConsensusBooks[index])) {
+				topBookRank = index;
+				break;
+			}
+		}
+
+		return {
+			topBookRank,
+			supportCount: playerBooks.size,
+			supportByBook: playerBooks,
+			allBookValues,
+		};
+	};
+
+	const buildConsensusProfile = (result: BestPicksResult): ConsensusProfile => ({
+		'1': buildSlotConsensusProfile('1', result['1'].player.playerId, picks1),
+		'2': buildSlotConsensusProfile('2', result['2'].player.playerId, picks2),
+		'3': buildSlotConsensusProfile('3', result['3'].player.playerId, picks3),
+	});
 
 	const compareDesc = (left: number, right: number): number => {
 		if (left > right) return -1;
 		if (left < right) return 1;
+		return 0;
+	};
+	const compareAsc = (left: number, right: number): number => {
+		if (left < right) return -1;
+		if (left > right) return 1;
+		return 0;
+	};
+
+	const compareSlotConsensus = (left: SlotConsensusProfile, right: SlotConsensusProfile): number => {
+		// 5a) Earlier top-ranked book wins.
+		const topBookCompare = compareAsc(left.topBookRank, right.topBookRank);
+		if (topBookCompare !== 0) return topBookCompare;
+
+		// 5b) If top book rank ties, more agreeing books wins.
+		const supportCountCompare = compareDesc(left.supportCount, right.supportCount);
+		if (supportCountCompare !== 0) return supportCountCompare;
+
+		// 5c) If still tied, compare agreeing top-book values by ranked book order.
+		for (const book of rankedConsensusBooks) {
+			const leftValue = left.supportByBook.get(book);
+			const rightValue = right.supportByBook.get(book);
+			if (leftValue === undefined && rightValue === undefined) continue;
+			if (leftValue === undefined) return 1;
+			if (rightValue === undefined) return -1;
+			const valueCompare = compareDesc(leftValue, rightValue);
+			if (valueCompare !== 0) return valueCompare;
+		}
+
+		// 5d) If still tied, compare remaining (non-top) books in ranked order using all book values
+		for (let i = 0; i < rankedConsensusBooks.length; i++) {
+			if (i === left.topBookRank || i === right.topBookRank) continue; // skip top book(s) already compared in 5a/5c
+			const book = rankedConsensusBooks[i];
+			const leftValue = left.allBookValues.get(book) ?? null;
+			const rightValue = right.allBookValues.get(book) ?? null;
+			if (leftValue === null && rightValue === null) continue;
+			if (leftValue === null) return 1;
+			if (rightValue === null) return -1;
+			const valueCompare = compareDesc(leftValue, rightValue);
+			if (valueCompare !== 0) return valueCompare;
+		}
+
+		return 0;
+	};
+
+	const compareConsensusProfile = (left: ConsensusProfile, right: ConsensusProfile): number => {
+		// Compare pick1, then pick2, then pick3.
+		const slots: SlotKey[] = ['1', '2', '3'];
+		for (const slot of slots) {
+			const slotCompare = compareSlotConsensus(left[slot], right[slot]);
+			if (slotCompare !== 0) return slotCompare;
+		}
 		return 0;
 	};
 
@@ -1393,7 +1526,7 @@ export const bestPicks = async (
 		least1: number;
 		hits: number;
 		points: number;
-		consensus: number;
+		consensus: ConsensusProfile;
 		xg: number;
 	};
 
@@ -1402,7 +1535,7 @@ export const bestPicks = async (
 		least1: strategyTieScore(result, 'least1'),
 		hits: strategyTieScore(result, 'hits'),
 		points: strategyTieScore(result, 'points'),
-		consensus: averageBookConsensus(result),
+		consensus: buildConsensusProfile(result),
 		xg: averageTeamXg(result),
 	});
 
@@ -1411,7 +1544,7 @@ export const bestPicks = async (
 			&& Math.abs(left.least1 - right.least1) <= epsilon
 			&& Math.abs(left.hits - right.hits) <= epsilon
 			&& Math.abs(left.points - right.points) <= epsilon
-			&& Math.abs(left.consensus - right.consensus) <= epsilon
+			&& compareConsensusProfile(left.consensus, right.consensus) === 0
 			&& Math.abs(left.xg - right.xg) <= epsilon;
 	};
 
@@ -1420,7 +1553,7 @@ export const bestPicks = async (
 		if (Math.abs(current.least1 - previous.least1) > epsilon) return 'least1';
 		if (Math.abs(current.hits - previous.hits) > epsilon) return 'hits';
 		if (Math.abs(current.points - previous.points) > epsilon) return 'points';
-		if (Math.abs(current.consensus - previous.consensus) > epsilon) return 'consensus';
+		if (compareConsensusProfile(current.consensus, previous.consensus) !== 0) return 'consensus';
 		if (Math.abs(current.xg - previous.xg) > epsilon) return 'xg';
 		return 'tied';
 	};
@@ -1444,7 +1577,7 @@ export const bestPicks = async (
 		const pointsCompare = compareDesc(left.metrics.points, right.metrics.points);
 		if (pointsCompare !== 0) return pointsCompare;
 
-		const consensusCompare = compareDesc(left.metrics.consensus, right.metrics.consensus);
+		const consensusCompare = compareConsensusProfile(left.metrics.consensus, right.metrics.consensus);
 		if (consensusCompare !== 0) return consensusCompare;
 
 		const xgCompare = compareDesc(left.metrics.xg, right.metrics.xg);
@@ -1505,98 +1638,176 @@ export const bestPicks = async (
 	}
 
 	console.log(makeTitle(`*** Best Picks ${titleForPoolKey(poolKey)} ***`));
-	const rankOrder: Array<Exclude<BestPicksResult['rankedBy'], undefined>> = [
-		'top',
-		'strategies',
-		'least1',
-		'hits',
-		'points',
-		'consensus',
-		'xg',
-		'tied',
+
+	// --- Centralized rank metadata ---
+	const rankMeta = [
+		{
+			key: 'top',
+			label: 'Highest overall rank',
+		},
+		{
+			key: 'strategies',
+			label: 'More strategy matches',
+		},
+		{
+			key: 'least1',
+			label: 'Higher least1 score (streak)',
+		},
+		{
+			key: 'hits',
+			label: 'Higher hits score',
+		},
+		{
+			key: 'points',
+			label: 'Higher points score',
+		},
+		{
+			key: 'consensus',
+			label: 'Higher consensus by pick order and ranked book support/value',
+		},
+		{
+			key: 'xg',
+			label: 'Higher average team xG',
+		},
+		{
+			key: 'tied',
+			label: 'Fully tied on all rank metrics (original order kept)',
+		},
 	];
-	const rankCounts: Record<Exclude<BestPicksResult['rankedBy'], undefined>, number> = {
-		top: 0,
-		strategies: 0,
-		least1: 0,
-		hits: 0,
-		points: 0,
-		consensus: 0,
-		xg: 0,
-		tied: 0,
-	};
-	for (const result of results) {
-		if (result.rankedBy) rankCounts[result.rankedBy]++;
-	}
+	const rankReasonLabel = Object.fromEntries(rankMeta.map(m => [m.key, m.label]));
 
-	let tieEntries = 0;
-	for (const group of tieGroupByIndex) {
-		if (group !== null) tieEntries++;
-	}
-
-	const rankReasonLabel: Record<Exclude<BestPicksResult['rankedBy'], undefined>, string> = {
-		top: 'Highest overall rank',
-		strategies: 'More strategy matches',
-		least1: 'Higher least1 score (streak)',
-		hits: 'Higher hits score',
-		points: 'Higher points score',
-		consensus: 'Higher book consensus (favored by more books)',
-		xg: 'Higher average team xG',
-		tied: 'Fully tied on all rank metrics (original order kept)',
-	};
-
-	console.log('Rank summary:');
-	console.log(` • Total results: ${results.length}`);
-	console.log(` • Tied entries: ${tieEntries} (results tied with at least one adjacent result)`);
-	console.log(` • Tie groups: ${tieGroupCount} (contiguous clusters of fully-equal ranked results)`);
-	console.log(' • Rank decision counts:');
-	for (const rank of rankOrder) {
-		const count = rankCounts[rank];
-		if (count > 0) console.log(`   - ${rankReasonLabel[rank]}: ${count}`);
-	}
-
-	for (const [resultIndex, result] of results.entries()) {
+	// --- Precompute display payloads for ranking/logging ---
+	const displayPayloads = ranked.map((item, idx) => {
+		const { result, metrics } = item;
 		const bets: Set<LogStatsKey> = new Set();
 		const strategies: Set<Strategy> = new Set();
 		for (const strategy of result.strategies) {
 			for (const book of strategy.books) bets.add(book);
 			strategies.add(strategy.key);
 		}
-
-		for (const bet of bets) {
-			console.log(`${bookName(bet)}`);
-			if (result.rankedBy) {
-				const tieGroup = tieGroupByIndex[resultIndex];
-				const tieSuffix = tieGroup !== null ? ` | tie group #${tieGroup}` : '';
-				console.log(`→ Rank reason: ${rankReasonLabel[result.rankedBy]}${tieSuffix}`);
+		// Consensus details for each slot
+		const consensusDetails = Object.entries(metrics.consensus).map(([slot, prof]) => {
+			// Show topBookRank, supportCount, and top supporting book/value
+			let topBook = null, topValue = null;
+			if (prof.topBookRank !== Number.POSITIVE_INFINITY) {
+				topBook = rankedConsensusBooks[prof.topBookRank];
+				topValue = prof.supportByBook.get(topBook);
 			}
-			console.log(`1: ${format(result['1'], bet)}`);
-			console.log(`2: ${format(result['2'], bet)}`);
-			console.log(`3: ${format(result['3'], bet)}`);
+			return {
+				slot,
+				topBookRank: prof.topBookRank,
+				topBook,
+				topValue,
+				supportCount: prof.supportCount,
+				supportByBook: Object.fromEntries(prof.supportByBook),
+			};
+		});
+		return {
+			index: idx,
+			rankedBy: result.rankedBy,
+			isTied: result.isTied,
+			tieGroup: tieGroupByIndex[idx],
+			bets: Array.from(bets),
+			strategies: Array.from(strategies),
+			consensusDetails,
+			picks: [result['1'], result['2'], result['3']],
+		};
+	});
 
-			const odd1 = result['1'].player[bet];
-			if (odd1 === null) continue;
-			const odd2 = result['2'].player[bet];
-			if (odd2 === null) continue;
-			const odd3 = result['3'].player[bet];
-			if (odd3 === null) continue;
+	// --- Enhanced Rank summary and reason output ---
+	// --- Derive rank order from pool results: ticketWinPct > hitPct > avgPoints ---
+	const derivedRankOrder: Array<Exclude<BestPicksResult['rankedBy'], undefined>> = [];
+	const rankMetaMap = Object.fromEntries(rankMeta.map(m => [m.key, m])) as Record<string, typeof rankMeta[number]>;
+	
+	// Build comparison key: (ticketWinPct, hitPct, avgPoints) for each rank reason
+	const rankPerformance: Array<{ key: Exclude<BestPicksResult['rankedBy'], undefined>; ticketWinPct: number; hitPct: number; avgPoints: number; count: number }> = [];
+	for (const meta of rankMeta) {
+		const resultsForRank = results.filter(r => r.rankedBy === meta.key);
+		if (resultsForRank.length === 0) continue;
+		
+		// For this rank reason, get average performance from pool summary
+		let ticketWinPct = 0, hitPct = 0, avgPoints = 0;
+		if (meta.key === 'least1') {
+			ticketWinPct = summary[poolKey].topWin.actualTicketWinPct;
+			hitPct = summary[poolKey].topPickPct.actualHitPct;
+			avgPoints = summary[poolKey].topPoints.actualAvgPoints;
+		} else if (meta.key === 'hits') {
+			ticketWinPct = summary[poolKey].topWin.actualTicketWinPct;
+			hitPct = summary[poolKey].topPickPct.actualHitPct;
+			avgPoints = summary[poolKey].topPoints.actualAvgPoints;
+		} else if (meta.key === 'points') {
+			ticketWinPct = summary[poolKey].topWin.actualTicketWinPct;
+			hitPct = summary[poolKey].topPickPct.actualHitPct;
+			avgPoints = summary[poolKey].topPoints.actualAvgPoints;
+		} else if (meta.key === 'consensus') {
+			ticketWinPct = summary[poolKey].topWin.actualTicketWinPct;
+			hitPct = summary[poolKey].topPickPct.actualHitPct;
+			avgPoints = summary[poolKey].topPoints.actualAvgPoints;
+		} else {
+			// 'top', 'strategies', 'xg', 'tied' - use pool averages
+			ticketWinPct = summary[poolKey].topWin.actualTicketWinPct;
+			hitPct = summary[poolKey].topPickPct.actualHitPct;
+			avgPoints = summary[poolKey].topPoints.actualAvgPoints;
+		}
+		
+		rankPerformance.push({
+			key: meta.key as Exclude<BestPicksResult['rankedBy'], undefined>,
+			ticketWinPct,
+			hitPct,
+			avgPoints,
+			count: resultsForRank.length,
+		});
+	}
+	
+	// Sort by ticketWinPct desc, then hitPct desc, then avgPoints desc
+	rankPerformance.sort((a, b) => {
+		if (Math.abs(a.ticketWinPct - b.ticketWinPct) > epsilon) return b.ticketWinPct - a.ticketWinPct;
+		if (Math.abs(a.hitPct - b.hitPct) > epsilon) return b.hitPct - a.hitPct;
+		if (Math.abs(a.avgPoints - b.avgPoints) > epsilon) return b.avgPoints - a.avgPoints;
+		return 0;
+	});
+	
+	// Build derived order preserving 'top' and 'tied' at start/end
+	if (!derivedRankOrder.includes('top')) derivedRankOrder.push('top');
+	for (const perf of rankPerformance) {
+		if (perf.key !== 'top' && perf.key !== 'tied' && !derivedRankOrder.includes(perf.key)) {
+			derivedRankOrder.push(perf.key);
+		}
+	}
+	if (!derivedRankOrder.includes('tied')) derivedRankOrder.push('tied');
+	
+	console.log('Rank summary:');
+	console.log(` • Total results: ${results.length}`);
+	console.log(` • Tied entries: ${tieGroupByIndex.filter(g => g !== null).length} (results tied with at least one adjacent result)`);
+	console.log(` • Tie groups: ${tieGroupCount} (contiguous clusters of fully-equal ranked results)`);
+	console.log(` • Book ranking order (by pool effectiveness): ${rankedConsensusBooks.join(' > ')}`);
+	console.log(` • Pool ${poolKey} metrics - ticketWinPct=${summary[poolKey].topWin.actualTicketWinPct.toFixed(2)}%, hitPct=${summary[poolKey].topPickPct.actualHitPct.toFixed(2)}%, avgPts=${summary[poolKey].topPoints.actualAvgPoints.toFixed(2)}`);
+	console.log(' • Consensus tie-break order: (a) top-ranked book, (b) support count, (c) supporting values in ranked order, (d) remaining books in ranked order');
+	console.log(' • Rank reason distribution:');
+	for (const key of derivedRankOrder) {
+		const meta = rankMetaMap[key];
+		const count = results.filter(r => r.rankedBy === key).length;
+		if (count > 0 && meta) console.log(`   ${meta.label}: ${count}`);
+	}
 
-			const anyValue = calcAny(odd1, odd2, odd3);
-			const pntValue = calcPnt(odd1, odd2, odd3);
-			const hitValue = calcHit(odd1, odd2, odd3) / 3;
-
-			const comboPrecision = 2;
-			const any = roundToPercent(anyValue, comboPrecision);
-			const pnt = pntValue.toFixed(comboPrecision);
-			const hit = roundToPercent(hitValue, comboPrecision);
-
-			const anyBold = strategies.has('least1') ? '*' : '';
-			const pntBold = strategies.has('points') ? '*' : '';
-			const hitBold = strategies.has('hits') ? '*' : '';
-
-			console.log(`${anyBold}${StrategyLabels.least1}: ${any}`);
-			console.log(`${pntBold}${StrategyLabels.points}: ${pnt}`);
-			console.log(`${hitBold}${StrategyLabels.hits}: ${hit}`);
+	for (const payload of displayPayloads) {
+		for (const bet of payload.bets) {
+			console.log(`${bookName(bet)}`);
+			if (payload.rankedBy) {
+				const tieSuffix = payload.tieGroup !== null ? ` | tie group #${payload.tieGroup}` : '';
+				console.log(`→ Rank reason: ${rankReasonLabel[payload.rankedBy]}${tieSuffix}`);
+			}
+			// Consensus details for auditability
+			for (const slotDetail of payload.consensusDetails) {
+				const slotLabel = `Pick${slotDetail.slot}`;
+				const topBookStr = slotDetail.topBook !== undefined && slotDetail.topBook !== null ? `${slotDetail.topBook}` : 'none';
+				const topValueStr = slotDetail.topValue !== undefined && slotDetail.topValue !== null ? slotDetail.topValue.toFixed(3) : 'n/a';
+				console.log(`   [${slotLabel}] TopBook: ${topBookStr} (rank ${slotDetail.topBookRank}), Support: ${slotDetail.supportCount}, TopValue: ${topValueStr}`);
+			}
+			// Show picks
+			payload.picks.forEach((pick, i) => {
+				console.log(`${i + 1}: ${format(pick, bet)}`);
+			});
 		}
 	}
 
