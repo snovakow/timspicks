@@ -380,13 +380,7 @@ const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
 	return Array.from(timeGroups).sort();
 };
 
-const auditLabels: Record<LogStatsKey, string> = {
-	bet1: 'DraftKings (bet1)',
-	bet2: 'FanDuel (bet2)',
-	bet3: 'BetMGM (bet3)',
-	bet4: 'BetRivers (bet4)',
-	betAvg: 'Average',
-};
+const bookTitle = (key: LogStatsKey): string => (key === 'betAvg') ? 'Average' : Sportsbooks[key].title;
 
 const initAuditBucket = (): AuditBucket => ({
 	tickets: 0,
@@ -773,20 +767,13 @@ const calculateZScore = (actual: number, predicted: number, se: number): number 
 	return (actual - predicted) / se;
 };
 
-const formatMultiBookCIDiagnostics = (
-	actual: number,
-	total: number,
-	entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>,
-	getPredicted: (stat: HistoricalAuditStat) => number
-): string[] => {
-	const ci = calculateHitRateCI(actual, total);
-	const bookDiagnostics = entries.map((entry) => {
-		const predicted = getPredicted(entry.stat);
-		const zScore = calculateZScore(actual, predicted, ci.se);
-		const withinCI = predicted >= ci.lower && predicted <= ci.upper ? '✓' : '✗';
-		return `${entry.book}(z=${zScore.toFixed(2)} pred=${predicted.toFixed(2)}% ${withinCI})`;
-	});
-	return [`[${ci.lower.toFixed(2)}%-${ci.upper.toFixed(2)}%]`, ...bookDiagnostics];
+const titleForPoolKey = (poolKey: PoolSlots): string => {
+	switch (poolKey) {
+		case '1': return "Pool Slots: 1 Game";
+		case '2': return "Pool Slots: 2 Games";
+		case '3': return "Pool Slots: 3 Games";
+		case '4+': return "Pool Slots: 4+ Games";
+	}
 };
 
 export const runHistoricalStrategyAudit = async (
@@ -984,7 +971,7 @@ export const runHistoricalStrategyAudit = async (
 	};
 
 	if (correlationFactor <= 0) {
-		for (const bookKey of Object.keys(auditLabels) as LogStatsKey[]) {
+		for (const bookKey of LogStatsKeys) {
 			const top = results[bookKey].top;
 			results[bookKey].least1 = { ...top };
 			results[bookKey].points = { ...top };
@@ -993,51 +980,51 @@ export const runHistoricalStrategyAudit = async (
 	}
 
 	if (logResults) {
-		const display = Object.fromEntries((Object.keys(auditLabels) as LogStatsKey[]).map((bookKey) => {
-			const tickets = results[bookKey].top.tickets;
-			const picks = results[bookKey].top.totalPicks;
+		const makeDisplay = (
+			title: string,
+			percent: boolean,
+			hitsKey: 'ticketWinPct' | 'avgPoints' | 'hitPct',
+			hitsTotalKey: 'tickets' | 'totalPicks',
+			predictedKey: 'predictedTicketWinPct' | 'predictedAvgPoints' | 'predictedHitPct',
+		) => {
+			const display = Object.fromEntries((LogStatsKeys).map((bookKey) => {
+				const result = results[bookKey].top;
 
-			const table: Record<string, string> = {};
-			table[`${StrategyLabels.least1} Top (${tickets}) Pred`] =
-				`${formatAuditPercent(results[bookKey].top.ticketWinPct)} ` +
-				`(${round(results[bookKey].top.ticketWins)}) ` +
-				`${formatAuditPercent(results[bookKey].top.predictedTicketWinPct)}`;
-			if (correlationFactor > 0) table[`${StrategyLabels.least1} L% (${tickets}) Pred`] =
-				`${formatAuditPercent(results[bookKey].least1.ticketWinPct)} ` +
-				`(${round(results[bookKey].least1.ticketWins)}) ` +
-				`${formatAuditPercent(results[bookKey].least1.predictedTicketWinPct)}`;
-			table[`${StrategyLabels.points} Top (${tickets}) Pred`] =
-				`${formatAuditPoints(results[bookKey].top.avgPoints)} ` +
-				`${formatAuditPoints(results[bookKey].top.predictedAvgPoints)}`;
-			if (correlationFactor > 0) table[`${StrategyLabels.points} L% (${tickets}) Pred`] =
-				`${formatAuditPoints(results[bookKey].points.avgPoints)} ` +
-				`${formatAuditPoints(results[bookKey].points.predictedAvgPoints)}`;
-			table[`${StrategyLabels.hits} Top (${picks}) Pred`] =
-				`${formatAuditPercent(results[bookKey].top.hitPct)} ` +
-				`(${round(results[bookKey].top.hits)}) ` +
-				`${formatAuditPercent(results[bookKey].top.predictedHitPct)}`;
-			if (correlationFactor > 0) table[`${StrategyLabels.hits} L% (${picks}) Pred`] =
-				`${formatAuditPercent(results[bookKey].hits.hitPct)} ` +
-				`(${round(results[bookKey].hits.hits)}) ` +
-				`${formatAuditPercent(results[bookKey].hits.predictedHitPct)}`;
-			return [
-				auditLabels[bookKey], table
-			];
-		}));
-		console.table(display);
-		console.log(`Historical strategy audit: ${daysWithSlots.size} days`);
+				const hits = result[hitsKey];
+				const hitsTotal = result[hitsTotalKey];
+				const predicted = result[predictedKey];
+
+				const ci = calculateHitRateCI(hits, hitsTotal);
+				const zScore = calculateZScore(hits, predicted, ci.se);
+
+				const table = {} as Record<string, string | number>;
+
+				if (percent) {
+					table["%"] = formatAuditPercent(hits);
+					table["hits"] = `${round(result.ticketWins)}/${hitsTotal}`;
+					table["Odds %"] = formatAuditPercent(predicted);
+				} else {
+					table["#"] = formatAuditPoints(hits);
+					table["hits"] = hitsTotal;
+					table["Odds #"] = formatAuditPoints(predicted);
+				}
+
+				table["CI Lower"] = round(ci.lower, 2);
+				table["CI Upper"] = round(ci.upper, 2);
+				table["Z"] = round(zScore, 2);
+				return [
+					`${bookTitle(bookKey)} (${bookKey})`, table
+				];
+			}));
+			console.log(`\n=== ${title} ${titleForPoolKey(slots)} ===`);
+			console.table(display);
+		}
+		makeDisplay(StrategyLabels.least1, true, 'ticketWinPct', 'tickets', 'predictedTicketWinPct');
+		makeDisplay(StrategyLabels.points, false, 'avgPoints', 'tickets', 'predictedAvgPoints');
+		makeDisplay(StrategyLabels.hits, true, 'hitPct', 'totalPicks', 'predictedHitPct');
 	}
 
 	return results;
-};
-
-const titleForPoolKey = (poolKey: PoolSlots): string => {
-	switch (poolKey) {
-		case '1': return "1 Game Slots";
-		case '2': return "2 Game Slots";
-		case '3': return "3 Game Slots";
-		case '4+': return "4+ Game Slots";
-	}
 };
 
 export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<ComparePoolAccuracySummary> => {
@@ -1048,6 +1035,17 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 		`Correlation factor = ${correlationFactor}\n` +
 		`${GameType[formatFilter]}\n`
 	);
+
+	console.log(`\n=== Statistical Diagnostics: ${GameType[formatFilter]} ===`);
+	console.log(" • 95% CI (Confidence Interval): The range where the true hit rate likely falls with 95% confidence");
+	console.log("   ◦ Wider CI = smaller pool (more variance)");
+	console.log("   ◦ Narrower CI = larger pool (more stable results)");
+	console.log(" • Z-score: How many standard errors away from the predicted value");
+	console.log("   ◦ Z > 1.96 or Z < -1.96: Statistically significant at 95% level");
+	console.log("   ◦ Z between -1.96 and 1.96: Within expected random variance");
+	console.log(" • ✓/✗: Whether the predicted value falls within the 95% CI");
+	console.log("   ◦ ✓ = prediction is reasonable for the data");
+	console.log("   ◦ ✗ = significant deviation from prediction");
 
 	const pools: PoolSlots[] = ['1', '2', '3', '4+'];
 	type PoolResults = Record<PoolSlots, HistoricalAuditResults>;
@@ -1095,7 +1093,6 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	const summaryByPool = {} as ComparePoolAccuracySummary;
 
 	for (const pool of pools) {
-		console.log(`\n=== Pool ${titleForPoolKey(pool)} ===`);
 		const auditResult = await runHistoricalStrategyAudit({
 			minSportsbooks,
 			correlationFactor: correlationFactor,
@@ -1106,19 +1103,6 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 		results[pool] = auditResult;
 	}
 
-	console.log(`\n\n=== Statistical Diagnostics: ${GameType[formatFilter]} ===`);
-	console.log(" • 95% CI (Confidence Interval): The range where the true hit rate likely falls with 95% confidence");
-	console.log("   ◦ Wider CI = smaller pool (more variance)");
-	console.log("   ◦ Narrower CI = larger pool (more stable results)");
-	console.log(" • Z-score: How many standard errors away from the predicted value");
-	console.log("   ◦ Z > 1.96 or Z < -1.96: Statistically significant at 95% level");
-	console.log("   ◦ Z between -1.96 and 1.96: Within expected random variance");
-	console.log(" • ✓/✗: Whether the predicted value falls within the 95% CI");
-	console.log("   ◦ ✓ = prediction is reasonable for the data");
-	console.log("   ◦ ✗ = significant deviation from prediction");
-
-	console.log(`\n\n=== Summary: ${GameType[formatFilter]}, L%=${correlationFactor} ===`);
-	console.log('Top bet by pool and strategy:');
 	for (const pool of pools) {
 		const bestTopStreak = getTopBooksForMetric(results[pool], 'top', (stat) => stat.ticketWinPct);
 		const bestTopPoints = getTopBooksForMetric(results[pool], 'top', (stat) => stat.avgPoints);
@@ -1136,61 +1120,6 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 			if (current.result.stat.ticketWinPct > best.result.stat.ticketWinPct) return current;
 			return best;
 		});
-
-		const formatCI = (lines: string[], ci: string[]) => {
-			const indent = "\n\t\t";
-			return `\t${lines.join(" ")} CI ${ci.join(indent)}`;
-		}
-		const least1 = bestTopStreak.stat;
-		const points = bestTopPoints.stat;
-		const hits = bestTopPickPct.stat;
-		const least1_c = bestCorrelatedStreak.stat;
-		const points_c = bestCorrelatedPoints.stat;
-		const hits_c = bestCorrelatedPickPct.stat;
-
-		console.log(`Pool ${titleForPoolKey(pool)}:`);
-		console.log(
-			formatCI([
-				`${StrategyLabels.least1} Top:`, `${least1.ticketWinPct.toFixed(2)}%`, `(${formatTicketRatio(least1)})`,
-			], formatMultiBookCIDiagnostics(
-				least1.ticketWinPct, least1.tickets, bestTopStreak.entries, (stat) => stat.predictedTicketWinPct
-			))
-		);
-		if (correlationFactor > 0) console.log(
-			formatCI([
-				`${StrategyLabels.least1} L%:`, `${least1_c.ticketWinPct.toFixed(2)}%`, `(${formatTicketRatio(least1_c)})`,
-			], formatMultiBookCIDiagnostics(
-				least1_c.ticketWinPct, least1_c.tickets, bestCorrelatedStreak.entries, (stat) => stat.predictedTicketWinPct
-			))
-		);
-		console.log(
-			formatCI([
-				`${StrategyLabels.points} Top:`, `${points.avgPoints.toFixed(2)}`, `(${points.tickets})`,
-			], formatMultiBookCIDiagnostics(
-				points.avgPoints, points.tickets, bestTopPoints.entries, (stat) => stat.predictedAvgPoints
-			))
-		);
-		if (correlationFactor > 0) console.log(
-			formatCI([
-				`${StrategyLabels.points} L%:`, `${points_c.avgPoints.toFixed(2)}`, `(${points_c.tickets})`,
-			], formatMultiBookCIDiagnostics(
-				points_c.avgPoints, points_c.tickets, bestCorrelatedPoints.entries, (stat) => stat.predictedAvgPoints
-			))
-		);
-		console.log(
-			formatCI([
-				`${StrategyLabels.hits} Top:`, `${hits.hitPct.toFixed(2)}%`, `(${hits.ratio})`,
-			], formatMultiBookCIDiagnostics(
-				hits.hitPct, hits.totalPicks, bestTopPickPct.entries, (stat) => stat.predictedHitPct
-			))
-		);
-		if (correlationFactor > 0) console.log(
-			formatCI([
-				`${StrategyLabels.hits} L%:`, `${hits_c.hitPct.toFixed(2)}%`, `(${hits_c.ratio})`,
-			], formatMultiBookCIDiagnostics(
-				hits_c.hitPct, hits_c.totalPicks, bestCorrelatedPickPct.entries, (stat) => stat.predictedHitPct
-			))
-		);
 
 		const recommendedForWins = {
 			mode: bestModeForWins.mode,
@@ -1741,7 +1670,7 @@ export const bestPicks = async (
 	const makeTitle = (text: string) => `\n${text}\n${"-".repeat(text.length)}`;
 
 	const bookName = (book: LogStatsKey) => {
-		const name = book === 'betAvg' ? 'Average' : Sportsbooks[book].title;
+		const name = bookTitle(book);
 		return makeTitle(`${name}`);
 	}
 
