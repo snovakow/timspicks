@@ -2,10 +2,10 @@ import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
 import type { CorrelationData, CorrelationResult, CorrelationResults } from "./correlationData";
 import { deVig, oddsNameMap, removeAccentsNormalize } from "./dataProcessor";
-import type { ComboPattern, LogStatsKey, StrategyMode, Strategy, PoolSlots } from "./dataTypes";
+import type { ComboPattern, LogStatsKey, Strategy, PoolSlots } from "./dataTypes";
 import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies, Sportsbooks } from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
-import { selectStrategyCombos } from "./strategySelection";
+import { ComboGroup } from "./strategySelection";
 import * as Feature from './features';
 import { roundToPercent } from "./utility";
 
@@ -210,14 +210,6 @@ function oSet(player: HistoryPlayer, set: PlayerSet): PlayerSet {
 	return opposing;
 }
 
-/**
- * Simulate a pick combination according to the given strategy pattern.
- * @param set1 PlayerSet for pick 1
- * @param set2 PlayerSet for pick 2
- * @param set3 PlayerSet for pick 3
- * @param pattern strategyPattern string
- * @returns Result or null if a valid combo can't be formed
- */
 function simulateCombo(set1: PlayerSet, set2: PlayerSet, set3: PlayerSet, pattern: ComboPattern): Result | null {
 	const pick1 = getRandomEntry(set1);
 	if (!pick1) return null;
@@ -303,30 +295,76 @@ interface HistoricalAuditOptions extends AnalyzeOptions {
 	slots: PoolSlots;
 }
 
-export interface HistoricalAuditStat {
-	tickets: number;
-	hits: number;
-	totalPicks: number;
-	hitPct: number;
-	predictedHitPct: number;
-	ticketWins: number;
-	ticketWinPct: number;
-	predictedTicketWinPct: number;
-	avgPoints: number;
-	predictedAvgPoints: number;
-	ratio: string;
+type OutcomeStat = {
+	value: number;
+	predicted: number;
+};
+
+interface HistoricalAuditStat {
+	least1: OutcomeStat;
+	points: OutcomeStat;
+	hits: OutcomeStat;
+	slotCount: number;
+	totalSlots: number;
 }
 
-export type HistoricalAuditResults = Record<LogStatsKey, HistoricalAuditStat>;
+type HistoricalAuditResults = Record<LogStatsKey, HistoricalAuditStat>;
 
-type AuditBucket = {
-	tickets: number;
-	ticketWins: number;
-	totalHits: number;
-	totalPoints: number;
-	expectedTicketWins: number;
-	expectedHits: number;
-	expectedPoints: number;
+class ComboOutcome {
+	least1: OutcomeStat;
+	points: OutcomeStat;
+	hits: OutcomeStat;
+	constructor(prob1: number, prob2: number, prob3: number, hitCount: number) {
+		this.least1 = {
+			value: hitCount > 0 ? 1 : 0,
+			predicted: calcAny(prob1, prob2, prob3),
+		};
+		this.points = {
+			value: hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100,
+			predicted: calcPnt(prob1, prob2, prob3),
+		};
+		this.hits = {
+			value: hitCount,
+			predicted: calcHit(prob1, prob2, prob3),
+		};
+	}
+}
+
+class AuditBucket {
+	least1: OutcomeStat;
+	points: OutcomeStat;
+	hits: OutcomeStat;
+	slotCount: number;
+	totalSlots: number;
+	constructor() {
+		this.least1 = { value: 0, predicted: 0 };
+		this.points = { value: 0, predicted: 0 };
+		this.hits = { value: 0, predicted: 0 };
+		this.slotCount = 0;
+		this.totalSlots = 0;
+	}
+	add(outcome: ComboOutcome, slots: number) {
+		this.slotCount++;
+		this.totalSlots += slots;
+		this.least1.value += outcome.least1.value;
+		this.least1.predicted += outcome.least1.predicted;
+		this.points.value += outcome.points.value;
+		this.points.predicted += outcome.points.predicted;
+		this.hits.value += outcome.hits.value;
+		this.hits.predicted += outcome.hits.predicted;
+	}
+	addCombos(outcomes: ComboOutcome[]) {
+		this.slotCount++;
+		this.totalSlots += outcomes.length;
+		for (const outcome of outcomes) {
+			this.least1.value += outcome.least1.value;
+			this.least1.predicted += outcome.least1.predicted;
+			this.points.value += outcome.points.value;
+			this.points.predicted += outcome.points.predicted;
+			this.hits.value += outcome.hits.value;
+			this.hits.predicted += outcome.hits.predicted;
+		}
+	}
 };
 
 const fetchJson = async <T>(src: string): Promise<T> => {
@@ -380,43 +418,13 @@ const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
 
 const bookTitle = (key: LogStatsKey): string => (key === 'betAvg') ? 'Average' : Sportsbooks[key].title;
 
-const initAuditBucket = (): AuditBucket => ({
-	tickets: 0,
-	ticketWins: 0,
-	totalHits: 0,
-	totalPoints: 0,
-	expectedTicketWins: 0,
-	expectedHits: 0,
-	expectedPoints: 0,
+const createAuditBuckets = (): Record<LogStatsKey, AuditBucket> => ({
+	bet1: new AuditBucket(),
+	bet2: new AuditBucket(),
+	bet3: new AuditBucket(),
+	bet4: new AuditBucket(),
+	betAvg: new AuditBucket(),
 });
-
-const createAuditBuckets = (): Record<LogStatsKey, Record<StrategyMode, AuditBucket>> => ({
-	bet1: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
-	bet2: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
-	bet3: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
-	bet4: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
-	betAvg: { top: initAuditBucket(), least1: initAuditBucket(), points: initAuditBucket(), hits: initAuditBucket() },
-});
-
-type ComboOutcome = {
-	actualTicketWins: number;
-	actualHits: number;
-	actualPoints: number;
-	expectedLeast1: number;
-	expectedPoints: number;
-	expectedHits: number;
-};
-
-const applyAuditOutcome = (bucket: AuditBucket, outcome: ComboOutcome) => {
-	const { actualTicketWins, actualHits, actualPoints, expectedLeast1, expectedHits, expectedPoints } = outcome;
-	bucket.tickets++;
-	bucket.ticketWins += actualTicketWins;
-	bucket.totalHits += actualHits;
-	bucket.totalPoints += actualPoints;
-	bucket.expectedTicketWins += expectedLeast1;
-	bucket.expectedHits += expectedHits;
-	bucket.expectedPoints += expectedPoints;
-};
 
 const sameTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => left.team === right.team;
 const opponentTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => left.team === right.opponent;
@@ -447,7 +455,6 @@ const countGamesFromHelper = (
 	return gameCount;
 };
 
-
 const getSnapshotStrategy = (pick1: SnapshotOddsRow, pick2: SnapshotOddsRow, pick3: SnapshotOddsRow): ComboPattern | null => {
 	if (!sameGameSnapshot(pick1, pick2) && !sameGameSnapshot(pick2, pick3) && !sameGameSnapshot(pick1, pick3)) return 'iii';
 	if (sameTeamSnapshot(pick1, pick2) && sameTeamSnapshot(pick2, pick3)) return 'sss';
@@ -468,14 +475,9 @@ const getSnapshotStrategy = (pick1: SnapshotOddsRow, pick2: SnapshotOddsRow, pic
 	return null;
 };
 
-type StrategyScore = {
-	score: number;
-	outcome: ComboOutcome;
-};
-
 type BookComboEvaluation = {
 	topOutcome: ComboOutcome;
-	bestScores: Record<Strategy, StrategyScore | null>;
+	topSlots: number;
 };
 
 type BookPredictionSummary = {
@@ -483,39 +485,17 @@ type BookPredictionSummary = {
 	predicted: string;
 };
 
-type WinSummary = {
+type StartegySummary = {
 	books: LogStatsKey[];
-	actualTicketWinPct: number;
+	actualValue: number;
 	predictedByBook: BookPredictionSummary[];
-	ticketRatio: string;
-	tickets: number;
-};
-
-type PointsSummary = {
-	books: LogStatsKey[];
-	actualAvgPoints: number;
-	predictedByBook: BookPredictionSummary[];
-	tickets: number;
-};
-
-type HitPctSummary = {
-	books: LogStatsKey[];
-	actualHitPct: number;
-	predictedByBook: BookPredictionSummary[];
-	ratio: string;
-};
+	slotCount: number;
+}
 
 export type PoolAccuracySummary = {
-	recommendedForWins: {
-		books: LogStatsKey[];
-		actualTicketWinPct: number;
-		predictedByBook: BookPredictionSummary[];
-		ticketRatio: string;
-		tickets: number;
-	};
-	topWin: WinSummary;
-	topPoints: PointsSummary;
-	topPickPct: HitPctSummary;
+	topLeast1: StartegySummary;
+	topPoints: StartegySummary;
+	topHits: StartegySummary;
 };
 
 export type ComparePoolAccuracySummary = Record<PoolSlots, PoolAccuracySummary>;
@@ -524,73 +504,21 @@ export type ComparePoolAccuracyResult = {
 	results: Record<PoolSlots, HistoricalAuditResults>;
 };
 
-const createComboOutcome = (prob1: number, prob2: number, prob3: number, hitCount: number): ComboOutcome => ({
-	actualTicketWins: hitCount > 0 ? 1 : 0,
-	actualHits: hitCount,
-	actualPoints: hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100,
-	expectedLeast1: calcAny(prob1, prob2, prob3),
-	expectedPoints: calcPnt(prob1, prob2, prob3),
-	expectedHits: calcHit(prob1, prob2, prob3),
-});
-
-const selectionHitCount = <T extends { scored: boolean }>(selection: MergedSelection<T>): number => {
-	// Proportional/fractional hit counting for ties
+const aggregateSelectionOutcome = (selection: MergedSelection<SnapshotOddsRow>): AuditBucket | null => {
+	const result = new AuditBucket();
 	const { combos } = selection;
-	if (!combos || combos.length === 0) return 0;
-	let totalHits = 0;
+	if (!combos || combos.length === 0) return null;
+	const actualCombos = [];
 	for (const combo of combos) {
 		const hitCount = (combo.pick1.scored ? 1 : 0)
 			+ (combo.pick2.scored ? 1 : 0)
 			+ (combo.pick3.scored ? 1 : 0);
-		totalHits += hitCount;
+		const actual = new ComboOutcome(combo.prob1, combo.prob2, combo.prob3, hitCount);
+		actualCombos.push(actual);
 	}
-	// Divide by number of tied combos to get fractional credit
-	return totalHits / combos.length;
-};
+	result.addCombos(actualCombos);
 
-type ScoredSelection = {
-	selection: MergedSelection<SnapshotOddsRow>;
-	outcome: ComboOutcome;
-};
-
-const aggregateSelectionOutcome = (selections: ScoredSelection[]): ComboOutcome | null => {
-	// Accumulate each combo as a separate result
-	let totalCombos = 0;
-	let actualTicketWins = 0;
-	let actualHits = 0;
-	let actualPoints = 0;
-	let expectedLeast1 = 0;
-	let expectedHits = 0;
-	let expectedPoints = 0;
-
-	for (const { selection, outcome } of selections) {
-		const { combos } = selection;
-		if (!combos || combos.length === 0) continue;
-		for (const combo of combos) {
-			const hitCount = (combo.pick1.scored ? 1 : 0)
-				+ (combo.pick2.scored ? 1 : 0)
-				+ (combo.pick3.scored ? 1 : 0);
-			const actual = createComboOutcome(combo.prob1, combo.prob2, combo.prob3, hitCount);
-			actualHits += actual.actualHits;
-			actualPoints += actual.actualPoints;
-			actualTicketWins += actual.actualTicketWins;
-			totalCombos++;
-		}
-		expectedLeast1 += outcome.expectedLeast1;
-		expectedHits += outcome.expectedHits;
-		expectedPoints += outcome.expectedPoints;
-	}
-
-	if (totalCombos === 0) return null;
-
-	return {
-		actualTicketWins: actualTicketWins / totalCombos,
-		actualHits: actualHits / totalCombos,
-		actualPoints: actualPoints / totalCombos,
-		expectedLeast1: expectedLeast1 / selections.length,
-		expectedHits: expectedHits / selections.length,
-		expectedPoints: expectedPoints / selections.length,
-	};
+	return result;
 };
 
 const evaluateBookCombos = (
@@ -621,83 +549,19 @@ const evaluateBookCombos = (
 		}
 	}
 
-	const { top, strategies } = selectStrategyCombos(candidates);
+	const top: ComboGroup<SnapshotOddsRow> = new ComboGroup();
+	for (const candidate of candidates) top.add(candidate);
+
 	const topSelection = top.merge();
 	if (!topSelection) return null;
-
-	const rawTopOutcome = createComboOutcome(
-		topSelection.prob1,
-		topSelection.prob2,
-		topSelection.prob3,
-		selectionHitCount(topSelection)
-	);
-	const topOutcome = aggregateSelectionOutcome([{ selection: topSelection, outcome: rawTopOutcome }]);
+	const topSlots = topSelection.combos.length;
+	if (topSlots === 0) return null;
+	const topOutcome = aggregateSelectionOutcome(topSelection);
 	if (!topOutcome) return null;
-
-	const epsilon = 1e-12;
-	const bestSelections: Record<Strategy, { score: number; selections: ScoredSelection[] } | null> = {
-		least1: null,
-		points: null,
-		hits: null,
-	};
-
-	for (const combos of strategies.values()) {
-		const selection = combos.merge();
-		if (!selection) continue;
-
-		const outcome = createComboOutcome(
-			selection.prob1,
-			selection.prob2,
-			selection.prob3,
-			selectionHitCount(selection)
-		);
-		const correlatedOutcome: ComboOutcome = {
-			actualTicketWins: outcome.actualTicketWins,
-			actualHits: outcome.actualHits,
-			actualPoints: outcome.actualPoints,
-			expectedLeast1: outcome.expectedLeast1,
-			expectedHits: outcome.expectedHits,
-			expectedPoints: outcome.expectedPoints,
-		};
-
-		const scores: Record<Strategy, number> = {
-			least1: correlatedOutcome.expectedLeast1,
-			points: correlatedOutcome.expectedPoints,
-			hits: correlatedOutcome.expectedHits,
-		};
-
-		for (const metric of AllStrategies) {
-			const score = scores[metric];
-			const current = bestSelections[metric];
-			const scoredSelection = { selection, outcome: correlatedOutcome };
-			if (!current || score > current.score + epsilon) {
-				bestSelections[metric] = { score, selections: [scoredSelection] };
-			} else if (Math.abs(score - current.score) <= epsilon) {
-				current.selections.push(scoredSelection);
-			}
-		}
-	}
-
-	const bestScores: Record<Strategy, StrategyScore | null> = {
-		least1: null,
-		points: null,
-		hits: null,
-	};
-	for (const metric of AllStrategies) {
-		const best = bestSelections[metric];
-		if (!best) continue;
-		// For actual outcomes, aggregate over all tied best selections for full proportional credit.
-		const aggregatedOutcome = aggregateSelectionOutcome(best.selections);
-		if (!aggregatedOutcome) continue;
-		bestScores[metric] = {
-			score: best.score,
-			outcome: aggregatedOutcome,
-		};
-	}
 
 	return {
 		topOutcome,
-		bestScores,
+		topSlots,
 	};
 };
 
@@ -706,31 +570,17 @@ const round = (value: number, precision: number = 1): number => {
 	return Math.round(value * factor) / factor;
 };
 const formatAuditStat = (bucket: AuditBucket): HistoricalAuditStat => {
-	const totalPicks = bucket.tickets * 3;
-	const hitPct = totalPicks === 0 ? 0 : (100 * bucket.totalHits) / totalPicks;
-	const predictedHitPct = totalPicks === 0 ? 0 : (100 * bucket.expectedHits) / totalPicks;
-	const ticketWinPct = bucket.tickets === 0 ? 0 : (100 * bucket.ticketWins) / bucket.tickets;
-	const predictedTicketWinPct = bucket.tickets === 0 ? 0 : (100 * bucket.expectedTicketWins) / bucket.tickets;
-	const avgPoints = bucket.tickets === 0 ? 0 : bucket.totalPoints / bucket.tickets;
-	const predictedAvgPoints = bucket.tickets === 0 ? 0 : bucket.expectedPoints / bucket.tickets;
 	return {
-		tickets: bucket.tickets,
-		hits: bucket.totalHits,
-		totalPicks,
-		hitPct,
-		predictedHitPct,
-		ticketWins: bucket.ticketWins,
-		ticketWinPct,
-		predictedTicketWinPct,
-		avgPoints,
-		predictedAvgPoints,
-		ratio: `${round(bucket.totalHits)}/${totalPicks}`,
+		least1: { value: bucket.least1.value, predicted: bucket.least1.predicted },
+		points: { value: bucket.points.value, predicted: bucket.points.predicted },
+		hits: { value: bucket.hits.value, predicted: bucket.hits.predicted },
+		slotCount: bucket.slotCount,
+		totalSlots: bucket.totalSlots,
 	};
 };
 
 const formatAuditPercent = (value: number): string => `${value.toFixed(2)}%`;
 const formatAuditPoints = (value: number): string => value.toFixed(2);
-const formatTicketRatio = (stat: HistoricalAuditStat): string => `${round(stat.ticketWins)}/${stat.tickets}`;
 
 // Statistical diagnostic functions for pool variance analysis
 const calculateHitRateCI = (hitPct: number, totalPicks: number): { lower: number; upper: number; se: number } => {
@@ -891,7 +741,7 @@ export const runHistoricalStrategyAudit = async (
 
 					daysWithSlots.add(date);
 
-					for (const bookKey of [...SportsbookKeys, 'betAvg'] as LogStatsKey[]) {
+					for (const bookKey of LogStatsKeys) {
 						const set1 = rows.filter((row) => row.sid === '1' && row[bookKey] !== null && row.betCount >= minSportsbooks);
 						const set2 = rows.filter((row) => row.sid === '2' && row[bookKey] !== null && row.betCount >= minSportsbooks);
 						const set3 = rows.filter((row) => row.sid === '3' && row[bookKey] !== null && row.betCount >= minSportsbooks);
@@ -900,12 +750,7 @@ export const runHistoricalStrategyAudit = async (
 						const evaluation = evaluateBookCombos(set1, set2, set3, bookKey);
 						if (!evaluation) continue;
 
-						applyAuditOutcome(stats[bookKey].top, evaluation.topOutcome);
-
-						for (const strategy of AllStrategies) {
-							const result = evaluation.bestScores[strategy];
-							if (result) applyAuditOutcome(stats[bookKey][strategy], result.outcome);
-						}
+						stats[bookKey].add(evaluation.topOutcome, evaluation.topSlots);
 					}
 
 					if (findOne) break;
@@ -919,40 +764,46 @@ export const runHistoricalStrategyAudit = async (
 	}
 
 	const results: HistoricalAuditResults = {
-		bet1: formatAuditStat(stats.bet1.top),
-		bet2: formatAuditStat(stats.bet2.top),
-		bet3: formatAuditStat(stats.bet3.top),
-		bet4: formatAuditStat(stats.bet4.top),
-		betAvg: formatAuditStat(stats.betAvg.top),
+		bet1: formatAuditStat(stats.bet1),
+		bet2: formatAuditStat(stats.bet2),
+		bet3: formatAuditStat(stats.bet3),
+		bet4: formatAuditStat(stats.bet4),
+		betAvg: formatAuditStat(stats.betAvg),
 	};
 
 	if (logResults) {
 		const makeDisplay = (
 			title: string,
 			percent: boolean,
-			hitsKey: 'ticketWinPct' | 'avgPoints' | 'hitPct',
-			hitsTotalKey: 'tickets' | 'totalPicks',
-			predictedKey: 'predictedTicketWinPct' | 'predictedAvgPoints' | 'predictedHitPct',
+			hitsKey: 'least1' | 'points' | 'hits',
 		) => {
 			const display = Object.fromEntries((LogStatsKeys).map((bookKey) => {
 				const result = results[bookKey];
 
-				const hits = result[hitsKey];
-				const hitsTotal = result[hitsTotalKey];
-				const predicted = result[predictedKey];
+				const stats = result[hitsKey];
+				const hitsTotal = hitsKey === 'hits' ? result.totalSlots * 3 : result.totalSlots;
+				const actualValue = stats.value;
+				const predictedValue = stats.predicted;
+				let actualPct = hitsTotal === 0 ? 0 : (100 * actualValue) / hitsTotal;
+				let predictedPct = hitsTotal === 0 ? 0 : (100 * predictedValue) / hitsTotal;
+				if (hitsKey === 'points') {
+					actualPct = hitsTotal === 0 ? 0 : actualValue / hitsTotal;
+					predictedPct = hitsTotal === 0 ? 0 : predictedValue / hitsTotal;
+				}
 
-				const ci = calculateHitRateCI(hits, hitsTotal);
-				const zScore = calculateZScore(hits, predicted, ci.se);
+				const ci = calculateHitRateCI(actualPct, hitsTotal);
+				const zScore = calculateZScore(actualPct, predictedPct, ci.se);
 
 				const table = {} as Record<string, string | number>;
 
+				table["key"] = bookKey;
 				if (percent) {
-					table["%"] = formatAuditPercent(hits);
-					table["Odds %"] = formatAuditPercent(predicted);
-					table["hits"] = `${round(result.ticketWins)}/${hitsTotal}`;
+					table["%"] = formatAuditPercent(actualPct);
+					table["Odds %"] = formatAuditPercent(predictedPct);
+					table["hits"] = `${round(actualValue)}/${hitsTotal}`;
 				} else {
-					table["#"] = formatAuditPoints(hits);
-					table["Odds #"] = formatAuditPoints(predicted);
+					table["#"] = formatAuditPoints(actualValue / hitsTotal);
+					table["Odds #"] = formatAuditPoints(predictedValue / hitsTotal);
 					table["hits"] = hitsTotal;
 				}
 
@@ -960,15 +811,15 @@ export const runHistoricalStrategyAudit = async (
 				table["CI Upper"] = round(ci.upper, 2);
 				table["Z"] = round(zScore, 2);
 				return [
-					`${bookTitle(bookKey)} (${bookKey})`, table
+					bookTitle(bookKey), table
 				];
 			}));
 			console.log(`\n=== ${title} ${titleForPoolKey(slots)} ===`);
 			console.table(display);
 		}
-		makeDisplay(StrategyLabels.least1, true, 'ticketWinPct', 'tickets', 'predictedTicketWinPct');
-		makeDisplay(StrategyLabels.points, false, 'avgPoints', 'tickets', 'predictedAvgPoints');
-		makeDisplay(StrategyLabels.hits, true, 'hitPct', 'totalPicks', 'predictedHitPct');
+		makeDisplay(StrategyLabels.least1, true, 'least1');
+		makeDisplay(StrategyLabels.points, false, 'points');
+		makeDisplay(StrategyLabels.hits, true, 'hits');
 	}
 
 	return results;
@@ -1048,45 +899,28 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	}
 
 	for (const pool of pools) {
-		const bestTopStreak = getTopBooksForMetric(results[pool], (stat) => stat.ticketWinPct);
-		const bestTopPoints = getTopBooksForMetric(results[pool], (stat) => stat.avgPoints);
-		const bestTopPickPct = getTopBooksForMetric(results[pool], (stat) => stat.hitPct);
-
-		const bestModeForWins: { result: { entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>; stat: HistoricalAuditStat } } = [
-			{ result: getTopBooksForMetric(results[pool], (stat) => stat.ticketWinPct) },
-		].reduce((best, current) => {
-			if (current.result.stat.ticketWinPct > best.result.stat.ticketWinPct) return current;
-			return best;
-		});
-
-		const recommendedForWins = {
-			books: bestModeForWins.result.entries.map((entry) => entry.book),
-			actualTicketWinPct: bestModeForWins.result.stat.ticketWinPct,
-			predictedByBook: summarizeEntries(bestModeForWins.result.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
-			ticketRatio: formatTicketRatio(bestModeForWins.result.stat),
-			tickets: bestModeForWins.result.stat.tickets,
-		};
+		const bestTopLeast1 = getTopBooksForMetric(results[pool], (stat) => stat.totalSlots === 0 ? 0 : (100 * stat.least1.value) / stat.totalSlots);
+		const bestTopPoints = getTopBooksForMetric(results[pool], (stat) => stat.totalSlots === 0 ? 0 : stat.points.value / stat.totalSlots);
+		const bestTopHits = getTopBooksForMetric(results[pool], (stat) => stat.totalSlots === 0 ? 0 : (100 * stat.hits.value) / stat.totalSlots);
 
 		summaryByPool[pool] = {
-			recommendedForWins,
-			topWin: {
-				books: bestTopStreak.entries.map((entry) => entry.book),
-				actualTicketWinPct: bestTopStreak.stat.ticketWinPct,
-				predictedByBook: summarizeEntries(bestTopStreak.entries, (stat) => `${stat.predictedTicketWinPct.toFixed(2)}%`),
-				ticketRatio: formatTicketRatio(bestTopStreak.stat),
-				tickets: bestTopStreak.stat.tickets,
+			topLeast1: {
+				books: bestTopLeast1.entries.map((entry) => entry.book),
+				actualValue: bestTopLeast1.stat.totalSlots === 0 ? 0 : (100 * bestTopLeast1.stat.least1.value) / bestTopLeast1.stat.totalSlots,
+				predictedByBook: summarizeEntries(bestTopLeast1.entries, (stat) => `${(stat.totalSlots === 0 ? 0 : (100 * stat.least1.predicted) / stat.totalSlots).toFixed(2)}%`),
+				slotCount: bestTopLeast1.stat.slotCount,
 			},
 			topPoints: {
 				books: bestTopPoints.entries.map((entry) => entry.book),
-				actualAvgPoints: bestTopPoints.stat.avgPoints,
-				predictedByBook: summarizeEntries(bestTopPoints.entries, (stat) => stat.predictedAvgPoints.toFixed(2)),
-				tickets: bestTopPoints.stat.tickets,
+				actualValue: bestTopPoints.stat.totalSlots === 0 ? 0 : bestTopPoints.stat.points.value / bestTopPoints.stat.totalSlots,
+				predictedByBook: summarizeEntries(bestTopPoints.entries, (stat) => (stat.totalSlots === 0 ? 0 : stat.points.predicted / stat.totalSlots).toFixed(2)),
+				slotCount: bestTopPoints.stat.slotCount,
 			},
-			topPickPct: {
-				books: bestTopPickPct.entries.map((entry) => entry.book),
-				actualHitPct: bestTopPickPct.stat.hitPct,
-				predictedByBook: summarizeEntries(bestTopPickPct.entries, (stat) => `${stat.predictedHitPct.toFixed(2)}%`),
-				ratio: bestTopPickPct.stat.ratio,
+			topHits: {
+				books: bestTopHits.entries.map((entry) => entry.book),
+				actualValue: bestTopHits.stat.totalSlots === 0 ? 0 : (100 * bestTopHits.stat.hits.value) / bestTopHits.stat.totalSlots,
+				predictedByBook: summarizeEntries(bestTopHits.entries, (stat) => `${(stat.totalSlots === 0 ? 0 : (100 * stat.hits.predicted) / stat.totalSlots).toFixed(2)}%`),
+				slotCount: bestTopHits.stat.slotCount,
 			},
 		};
 	}
@@ -1182,11 +1016,11 @@ export const bestPicks = async (
 	// Compare and decide for each strategy
 	for (const strategy of AllStrategies) {
 		if (strategy === 'least1') {
-			strategyConfig[strategy] = summary[poolKey].topWin.books;
+			strategyConfig[strategy] = summary[poolKey].topLeast1.books;
 		} else if (strategy === 'points') {
 			strategyConfig[strategy] = summary[poolKey].topPoints.books;
 		} else { // hits
-			strategyConfig[strategy] = summary[poolKey].topPickPct.books;
+			strategyConfig[strategy] = summary[poolKey].topHits.books;
 		}
 	}
 
@@ -1200,7 +1034,6 @@ export const bestPicks = async (
 	for (const strategy of AllStrategies) {
 		const candidateBooks = strategyConfig[strategy];
 
-		let bestScore = Number.NEGATIVE_INFINITY;
 		const bestCombos = new Map<string, Pick<BestPicksResult, "1" | "2" | "3">>();
 
 		for (const book of candidateBooks) {
@@ -1224,32 +1057,6 @@ export const bestPicks = async (
 							prob3,
 							strategy: getPlayerStrategy(pick1.player, pick2.player, pick3.player),
 						});
-					}
-				}
-			}
-
-			const { strategies } = selectStrategyCombos(candidates);
-			for (const combos of strategies.values()) {
-				const selection = combos.merge();
-				if (!selection) continue;
-
-				const score = strategy === 'least1'
-					? calcAny(selection.prob1, selection.prob2, selection.prob3)
-					: strategy === 'points'
-						? calcPnt(selection.prob1, selection.prob2, selection.prob3)
-						: calcHit(selection.prob1, selection.prob2, selection.prob3);
-
-				if (score > bestScore + epsilon) {
-					bestScore = score;
-					bestCombos.clear();
-					for (const combo of selection.combos) {
-						const resultCombo: Pick<BestPicksResult, "1" | "2" | "3"> = { "1": combo.pick1, "2": combo.pick2, "3": combo.pick3 };
-						bestCombos.set(comboCode(resultCombo), resultCombo);
-					}
-				} else if (Math.abs(score - bestScore) <= epsilon) {
-					for (const combo of selection.combos) {
-						const resultCombo: Pick<BestPicksResult, "1" | "2" | "3"> = { "1": combo.pick1, "2": combo.pick2, "3": combo.pick3 };
-						bestCombos.set(comboCode(resultCombo), resultCombo);
 					}
 				}
 			}
@@ -1289,17 +1096,24 @@ export const bestPicks = async (
 	}
 
 	/*
-		Ranking priority (derived from pool results):
-		- Primary sort: strategies, least1, hits, points, consensus, xg (in fixed order)
-		- Within tied combos, use consensus book support as tie-breaker:
+		Ranking priority (determines which pick is best by comparing in this order):
+		1. More agreeing strategies (strategies.size)
+		2. Higher least1 (streak) tie score
+		3. Higher hits tie score
+		4. Higher points tie score
+		5. Higher book consensus (compared by slot: pick1, pick2, pick3):
 		   a) Earlier top-ranked supporting book wins
 		   b) If tied, more supporting books wins
-		   c) If tied, compare supporting values in ranked order (bet1, bet2, bet3, bet4, betAvg)
+		   c) If tied, compare supporting values in ranked book order (bet1, bet2, bet3, bet4, betAvg)
 		   d) If still tied, compare remaining (non-top) books in ranked order (bet1, bet2, bet3, bet4, betAvg)
-		- Final tie-breaker: higher average team xG
-		
-		Display order for rank reasons reflects pool performance:
-		- Ordered by: ticketWinPct (primary), hitPct (secondary), avgPoints (tertiary)
+		6. Higher average team xG
+
+		Log display order (metrics shown for each rank reason, reflecting pool performance):
+		- Reason least1: display primary=least1%, secondary=hits%, tertiary=points%
+		- Reason hits: display primary=hits%, secondary=least1%, tertiary=points%
+		- Reason points: display primary=points%, secondary=least1%, tertiary=hits%
+		- Reason consensus: display primary=least1%, secondary=hits%, tertiary=points% (5a-5d book agreement compared separately)
+		- Reasons strategies/top/xg/tied: display primary=least1%, secondary=hits%, tertiary=points%
 	*/
 	const metricForBook = (combo: Pick<BestPicksResult, "1" | "2" | "3">, book: LogStatsKey, strategy: Strategy): number | null => {
 		const odd1 = combo['1'].player[book];
@@ -1342,18 +1156,18 @@ export const bestPicks = async (
 		return (xg1 + xg2 + xg3) / 3;
 	};
 
-	// Ranked consensus keys derived from pool effectiveness: sort books by ticketWinPct descending
+	// Ranked consensus keys derived from pool effectiveness: sort books by least1 descending
 	const poolAuditResults = auditResults[poolKey];
-	const booksByEffectiveness: Array<{ book: LogStatsKey; ticketWinPct: number }> = [];
+	const booksByEffectiveness: Array<{ book: LogStatsKey; least1: number }> = [];
 	for (const book of LogStatsKeys) {
 		if (poolAuditResults[book]) {
 			booksByEffectiveness.push({
 				book,
-				ticketWinPct: poolAuditResults[book].ticketWinPct,
+				least1: poolAuditResults[book].least1.value,
 			});
 		}
 	}
-	booksByEffectiveness.sort((a, b) => b.ticketWinPct - a.ticketWinPct);
+	booksByEffectiveness.sort((a, b) => b.least1 - a.least1);
 	const rankedConsensusBooks: readonly LogStatsKey[] = booksByEffectiveness.map(b => b.book);
 
 	type BetSupport = Map<number, Map<LogStatsKey, number>>;
@@ -1401,7 +1215,7 @@ export const bestPicks = async (
 	const buildSlotConsensusProfile = (slot: SlotKey, playerId: number, picks: Picks.PickOdds[]): SlotConsensusProfile => {
 		const playerBooks = betSupport[slot].get(playerId);
 		const allBookValues = new Map<LogStatsKey, number | null>();
-		
+
 		// Build map of all book values for this player
 		let targetPlayer: Picks.Player | undefined;
 		for (const pick of picks) {
@@ -1410,13 +1224,13 @@ export const bestPicks = async (
 				break;
 			}
 		}
-		
+
 		if (targetPlayer) {
 			for (const book of rankedConsensusBooks) {
 				allBookValues.set(book, targetPlayer[book]);
 			}
 		}
-		
+
 		if (!playerBooks) {
 			return {
 				topBookRank: Number.POSITIVE_INFINITY,
@@ -1699,58 +1513,58 @@ export const bestPicks = async (
 	});
 
 	// --- Enhanced Rank summary and reason output ---
-	// --- Derive rank order from pool results: ticketWinPct > hitPct > avgPoints ---
+	// --- Derive rank order from pool results: each rank reason's primary metric > secondary > tertiary ---
 	const derivedRankOrder: Array<Exclude<BestPicksResult['rankedBy'], undefined>> = [];
 	const rankMetaMap = Object.fromEntries(rankMeta.map(m => [m.key, m])) as Record<string, typeof rankMeta[number]>;
-	
-	// Build comparison key: (ticketWinPct, hitPct, avgPoints) for each rank reason
-	const rankPerformance: Array<{ key: Exclude<BestPicksResult['rankedBy'], undefined>; ticketWinPct: number; hitPct: number; avgPoints: number; count: number }> = [];
+
+	// Build comparison key: (primary, secondary, tertiary) for each rank reason
+	// Each rank reason has its own primary metric reflecting its ranking focus
+	const rankPerformance: Array<{ key: Exclude<BestPicksResult['rankedBy'], undefined>; primary: number; secondary: number; tertiary: number; count: number }> = [];
+	const poolLeast1 = summary[poolKey].topLeast1.actualValue;
+	const poolHits = summary[poolKey].topHits.actualValue;
+	const poolPoints = summary[poolKey].topPoints.actualValue;
+	const getRankPerformance = (key: Exclude<BestPicksResult['rankedBy'], undefined>) => {
+		switch (key) {
+			case 'least1':
+				// Rank reason: least1 score is primary, then hits, then points
+				return { primary: poolLeast1, secondary: poolHits, tertiary: poolPoints };
+			case 'hits':
+				// Rank reason: hits score is primary, then least1, then points
+				return { primary: poolHits, secondary: poolLeast1, tertiary: poolPoints };
+			case 'points':
+				// Rank reason: points score is primary, then least1, then hits
+				return { primary: poolPoints, secondary: poolLeast1, tertiary: poolHits };
+			case 'consensus':
+				// Rank reason: more books agreeing (already compared in consensus logic), use pool baseline
+				return { primary: poolLeast1, secondary: poolHits, tertiary: poolPoints };
+			default:
+				// 'top', 'strategies', 'xg', 'tied': use pool baseline
+				return { primary: poolLeast1, secondary: poolHits, tertiary: poolPoints };
+		}
+	};
 	for (const meta of rankMeta) {
 		const resultsForRank = results.filter(r => r.rankedBy === meta.key);
 		if (resultsForRank.length === 0) continue;
-		
-		// For this rank reason, get average performance from pool summary
-		let ticketWinPct = 0, hitPct = 0, avgPoints = 0;
-		if (meta.key === 'least1') {
-			ticketWinPct = summary[poolKey].topWin.actualTicketWinPct;
-			hitPct = summary[poolKey].topPickPct.actualHitPct;
-			avgPoints = summary[poolKey].topPoints.actualAvgPoints;
-		} else if (meta.key === 'hits') {
-			ticketWinPct = summary[poolKey].topWin.actualTicketWinPct;
-			hitPct = summary[poolKey].topPickPct.actualHitPct;
-			avgPoints = summary[poolKey].topPoints.actualAvgPoints;
-		} else if (meta.key === 'points') {
-			ticketWinPct = summary[poolKey].topWin.actualTicketWinPct;
-			hitPct = summary[poolKey].topPickPct.actualHitPct;
-			avgPoints = summary[poolKey].topPoints.actualAvgPoints;
-		} else if (meta.key === 'consensus') {
-			ticketWinPct = summary[poolKey].topWin.actualTicketWinPct;
-			hitPct = summary[poolKey].topPickPct.actualHitPct;
-			avgPoints = summary[poolKey].topPoints.actualAvgPoints;
-		} else {
-			// 'top', 'strategies', 'xg', 'tied' - use pool averages
-			ticketWinPct = summary[poolKey].topWin.actualTicketWinPct;
-			hitPct = summary[poolKey].topPickPct.actualHitPct;
-			avgPoints = summary[poolKey].topPoints.actualAvgPoints;
-		}
-		
+
+		const perf = getRankPerformance(meta.key as Exclude<BestPicksResult['rankedBy'], undefined>);
+
 		rankPerformance.push({
 			key: meta.key as Exclude<BestPicksResult['rankedBy'], undefined>,
-			ticketWinPct,
-			hitPct,
-			avgPoints,
+			primary: perf.primary,
+			secondary: perf.secondary,
+			tertiary: perf.tertiary,
 			count: resultsForRank.length,
 		});
 	}
-	
-	// Sort by ticketWinPct desc, then hitPct desc, then avgPoints desc
+
+	// Sort by primary desc, then secondary desc, then tertiary desc
 	rankPerformance.sort((a, b) => {
-		if (Math.abs(a.ticketWinPct - b.ticketWinPct) > epsilon) return b.ticketWinPct - a.ticketWinPct;
-		if (Math.abs(a.hitPct - b.hitPct) > epsilon) return b.hitPct - a.hitPct;
-		if (Math.abs(a.avgPoints - b.avgPoints) > epsilon) return b.avgPoints - a.avgPoints;
+		if (Math.abs(a.primary - b.primary) > epsilon) return b.primary - a.primary;
+		if (Math.abs(a.secondary - b.secondary) > epsilon) return b.secondary - a.secondary;
+		if (Math.abs(a.tertiary - b.tertiary) > epsilon) return b.tertiary - a.tertiary;
 		return 0;
 	});
-	
+
 	// Build derived order preserving 'top' and 'tied' at start/end
 	if (!derivedRankOrder.includes('top')) derivedRankOrder.push('top');
 	for (const perf of rankPerformance) {
@@ -1759,14 +1573,14 @@ export const bestPicks = async (
 		}
 	}
 	if (!derivedRankOrder.includes('tied')) derivedRankOrder.push('tied');
-	
+
 	console.log('Rank summary:');
 	console.log(` • Total results: ${results.length}`);
 	console.log(` • Tied entries: ${tieGroupByIndex.filter(g => g !== null).length} (results tied with at least one adjacent result)`);
 	console.log(` • Tie groups: ${tieGroupCount} (contiguous clusters of fully-equal ranked results)`);
 	console.log(` • Consensus rank order: ${rankedConsensusBooks.join(' > ')}`);
-	console.log(' • Consensus tie-break order: (1) top-ranked book, (2) support count, (3) ranked book values, (4) remaining books in order');
-	console.log(` • Rank decision order (by pool effectiveness: ticketWinPct=${summary[poolKey].topWin.actualTicketWinPct.toFixed(2)}%, hitPct=${summary[poolKey].topPickPct.actualHitPct.toFixed(2)}%, avgPts=${summary[poolKey].topPoints.actualAvgPoints.toFixed(2)}):`);
+	console.log(' • Consensus tie-break order: (1) top-ranked book, (2) more supporting books wins, (3) ranked book values, (4) remaining books in order');
+	console.log(` • Pool effectiveness baseline: least1=${poolLeast1.toFixed(2)}%, hits=${poolHits.toFixed(2)}%, points=${poolPoints.toFixed(2)}`);
 	for (const key of derivedRankOrder) {
 		const meta = rankMetaMap[key];
 		const count = results.filter(r => r.rankedBy === key).length;
