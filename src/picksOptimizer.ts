@@ -295,22 +295,12 @@ interface HistoricalAuditOptions extends AnalyzeOptions {
 	slots: PoolSlots;
 }
 
-type OutcomeStat = {
+interface OutcomeStat {
 	value: number;
 	predicted: number;
+	count: number;
 };
-
-interface HistoricalAuditStat {
-	least1: OutcomeStat;
-	points: OutcomeStat;
-	hits: OutcomeStat;
-	slotCount: number;
-	totalSlots: number;
-}
-
-type HistoricalAuditResults = Record<LogStatsKey, HistoricalAuditStat>;
-
-class ComboOutcome {
+class Outcome {
 	least1: OutcomeStat;
 	points: OutcomeStat;
 	hits: OutcomeStat;
@@ -318,54 +308,48 @@ class ComboOutcome {
 		this.least1 = {
 			value: hitCount > 0 ? 1 : 0,
 			predicted: calcAny(prob1, prob2, prob3),
+			count: 1,
 		};
 		this.points = {
 			value: hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100,
 			predicted: calcPnt(prob1, prob2, prob3),
+			count: 1,
 		};
 		this.hits = {
 			value: hitCount,
 			predicted: calcHit(prob1, prob2, prob3),
+			count: 3,
 		};
 	}
 }
 
-class AuditBucket {
+class AccumulateOutcome {
 	least1: OutcomeStat;
 	points: OutcomeStat;
 	hits: OutcomeStat;
 	slotCount: number;
-	totalSlots: number;
 	constructor() {
-		this.least1 = { value: 0, predicted: 0 };
-		this.points = { value: 0, predicted: 0 };
-		this.hits = { value: 0, predicted: 0 };
+		this.least1 = { value: 0, predicted: 0, count: 0 };
+		this.points = { value: 0, predicted: 0, count: 0 };
+		this.hits = { value: 0, predicted: 0, count: 0 };
 		this.slotCount = 0;
-		this.totalSlots = 0;
 	}
-	add(outcome: ComboOutcome, slots: number) {
-		this.slotCount++;
-		this.totalSlots += slots;
-		this.least1.value += outcome.least1.value;
-		this.least1.predicted += outcome.least1.predicted;
-		this.points.value += outcome.points.value;
-		this.points.predicted += outcome.points.predicted;
-		this.hits.value += outcome.hits.value;
-		this.hits.predicted += outcome.hits.predicted;
+	accumulate(outcome: Outcome, normalize: number) {
+		this.least1.value += outcome.least1.value / normalize;
+		this.least1.predicted += outcome.least1.predicted / normalize;
+		this.least1.count += outcome.least1.count / normalize;
+
+		this.points.value += outcome.points.value / normalize;
+		this.points.predicted += outcome.points.predicted / normalize;
+		this.points.count += outcome.points.count / normalize;
+
+		this.hits.value += outcome.hits.value / normalize;
+		this.hits.predicted += outcome.hits.predicted / normalize;
+		this.hits.count += outcome.hits.count / normalize;
 	}
-	addCombos(outcomes: ComboOutcome[]) {
-		this.slotCount++;
-		this.totalSlots += outcomes.length;
-		for (const outcome of outcomes) {
-			this.least1.value += outcome.least1.value;
-			this.least1.predicted += outcome.least1.predicted;
-			this.points.value += outcome.points.value;
-			this.points.predicted += outcome.points.predicted;
-			this.hits.value += outcome.hits.value;
-			this.hits.predicted += outcome.hits.predicted;
-		}
-	}
-};
+}
+
+type HistoricalAuditResults = Record<LogStatsKey, AccumulateOutcome>;
 
 const fetchJson = async <T>(src: string): Promise<T> => {
 	const response = await fetch(src);
@@ -418,12 +402,12 @@ const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
 
 const bookTitle = (key: LogStatsKey): string => (key === 'betAvg') ? 'Average' : Sportsbooks[key].title;
 
-const createAuditBuckets = (): Record<LogStatsKey, AuditBucket> => ({
-	bet1: new AuditBucket(),
-	bet2: new AuditBucket(),
-	bet3: new AuditBucket(),
-	bet4: new AuditBucket(),
-	betAvg: new AuditBucket(),
+const createAuditBuckets = (): Record<LogStatsKey, AccumulateOutcome> => ({
+	bet1: new AccumulateOutcome(),
+	bet2: new AccumulateOutcome(),
+	bet3: new AccumulateOutcome(),
+	bet4: new AccumulateOutcome(),
+	betAvg: new AccumulateOutcome(),
 });
 
 const sameTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => left.team === right.team;
@@ -476,7 +460,7 @@ const getSnapshotStrategy = (pick1: SnapshotOddsRow, pick2: SnapshotOddsRow, pic
 };
 
 type BookComboEvaluation = {
-	topOutcome: ComboOutcome;
+	topOutcome: AccumulateOutcome;
 	topSlots: number;
 };
 
@@ -504,20 +488,18 @@ export type ComparePoolAccuracyResult = {
 	results: Record<PoolSlots, HistoricalAuditResults>;
 };
 
-const aggregateSelectionOutcome = (selection: MergedSelection<SnapshotOddsRow>): AuditBucket | null => {
-	const result = new AuditBucket();
+const aggregateSelectionOutcome = (selection: MergedSelection<SnapshotOddsRow>): AccumulateOutcome | null => {
+	const result = new AccumulateOutcome();
 	const { combos } = selection;
 	if (!combos || combos.length === 0) return null;
-	const actualCombos = [];
 	for (const combo of combos) {
 		const hitCount = (combo.pick1.scored ? 1 : 0)
 			+ (combo.pick2.scored ? 1 : 0)
 			+ (combo.pick3.scored ? 1 : 0);
-		const actual = new ComboOutcome(combo.prob1, combo.prob2, combo.prob3, hitCount);
-		actualCombos.push(actual);
+		const actual = new Outcome(combo.prob1, combo.prob2, combo.prob3, hitCount);
+		result.accumulate(actual, combos.length);
 	}
-	result.addCombos(actualCombos);
-
+	result.slotCount=1;
 	return result;
 };
 
@@ -568,15 +550,6 @@ const evaluateBookCombos = (
 const round = (value: number, precision: number = 1): number => {
 	const factor = 10 ** precision;
 	return Math.round(value * factor) / factor;
-};
-const formatAuditStat = (bucket: AuditBucket): HistoricalAuditStat => {
-	return {
-		least1: { value: bucket.least1.value, predicted: bucket.least1.predicted },
-		points: { value: bucket.points.value, predicted: bucket.points.predicted },
-		hits: { value: bucket.hits.value, predicted: bucket.hits.predicted },
-		slotCount: bucket.slotCount,
-		totalSlots: bucket.totalSlots,
-	};
 };
 
 const formatAuditPercent = (value: number): string => `${value.toFixed(2)}%`;
@@ -750,7 +723,11 @@ export const runHistoricalStrategyAudit = async (
 						const evaluation = evaluateBookCombos(set1, set2, set3, bookKey);
 						if (!evaluation) continue;
 
-						stats[bookKey].add(evaluation.topOutcome, evaluation.topSlots);
+						const outcome = stats[bookKey];
+						// Accumulate normalized stats from topOutcome (already weighted for ties)
+						outcome.accumulate(evaluation.topOutcome, 1);
+						// Each pick set increments slotCount by 1 (or fractionally for ties)
+						outcome.slotCount += evaluation.topOutcome.slotCount;
 					}
 
 					if (findOne) break;
@@ -763,14 +740,6 @@ export const runHistoricalStrategyAudit = async (
 		}
 	}
 
-	const results: HistoricalAuditResults = {
-		bet1: formatAuditStat(stats.bet1),
-		bet2: formatAuditStat(stats.bet2),
-		bet3: formatAuditStat(stats.bet3),
-		bet4: formatAuditStat(stats.bet4),
-		betAvg: formatAuditStat(stats.betAvg),
-	};
-
 	if (logResults) {
 		const makeDisplay = (
 			title: string,
@@ -778,14 +747,14 @@ export const runHistoricalStrategyAudit = async (
 			hitsKey: 'least1' | 'points' | 'hits',
 		) => {
 			const display = Object.fromEntries((LogStatsKeys).map((bookKey) => {
-				const result = results[bookKey];
+				const result = stats[bookKey];
 
-				const stats = result[hitsKey];
-				const hitsTotal = hitsKey === 'hits' ? result.totalSlots * 3 : result.totalSlots;
-				const actualValue = stats.value;
-				const predictedValue = stats.predicted;
-				let actualPct = hitsTotal === 0 ? 0 : (100 * actualValue) / hitsTotal;
-				let predictedPct = hitsTotal === 0 ? 0 : (100 * predictedValue) / hitsTotal;
+				const stat = result[hitsKey];
+				const hitsTotal = stat.count;
+				const actualValue = stat.value;
+				const predictedValue = stat.predicted;
+				let actualPct = hitsTotal === 0 ? 0 : 100 * actualValue / hitsTotal;
+				let predictedPct = hitsTotal === 0 ? 0 : 100 * predictedValue / hitsTotal;
 				if (hitsKey === 'points') {
 					actualPct = hitsTotal === 0 ? 0 : actualValue / hitsTotal;
 					predictedPct = hitsTotal === 0 ? 0 : predictedValue / hitsTotal;
@@ -822,7 +791,7 @@ export const runHistoricalStrategyAudit = async (
 		makeDisplay(StrategyLabels.hits, true, 'hits');
 	}
 
-	return results;
+	return stats;
 };
 
 export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<ComparePoolAccuracyResult> => {
@@ -852,12 +821,12 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	}
 
 	interface StrategyMetric {
-		entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>;
-		stat: HistoricalAuditStat
+		entries: Array<{ book: LogStatsKey; stat: AccumulateOutcome }>;
+		stat: AccumulateOutcome
 	};
 	const getTopBooksForMetric = (
 		poolResult: HistoricalAuditResults,
-		metric: (stat: HistoricalAuditStat) => number
+		metric: (stat: AccumulateOutcome) => number
 	): StrategyMetric => {
 		let bestBooks: LogStatsKey[] = [LogStatsKeys[0]];
 		let bestValue = metric(poolResult[LogStatsKeys[0]]);
@@ -879,8 +848,8 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	};
 
 	const summarizeEntries = (
-		entries: Array<{ book: LogStatsKey; stat: HistoricalAuditStat }>,
-		metric: (stat: HistoricalAuditStat) => string
+		entries: Array<{ book: LogStatsKey; stat: AccumulateOutcome }>,
+		metric: (stat: AccumulateOutcome) => string
 	) => entries.map((entry) => ({
 		book: entry.book,
 		predicted: metric(entry.stat),
@@ -898,28 +867,32 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 		results[pool] = auditResult;
 	}
 
+	const avg = (count: number, total: number): number => total > 0 ? count / total : 0;
+	const avgValue = (stat: OutcomeStat): number => avg(stat.value, stat.count);
+	const avgPredicted = (stat: OutcomeStat): number => avg(stat.predicted, stat.count);
+
 	for (const pool of pools) {
-		const bestTopLeast1 = getTopBooksForMetric(results[pool], (stat) => stat.totalSlots === 0 ? 0 : (100 * stat.least1.value) / stat.totalSlots);
-		const bestTopPoints = getTopBooksForMetric(results[pool], (stat) => stat.totalSlots === 0 ? 0 : stat.points.value / stat.totalSlots);
-		const bestTopHits = getTopBooksForMetric(results[pool], (stat) => stat.totalSlots === 0 ? 0 : (100 * stat.hits.value) / stat.totalSlots);
+		const bestTopLeast1 = getTopBooksForMetric(results[pool], (stat) => 100 * avgValue(stat.least1));
+		const bestTopPoints = getTopBooksForMetric(results[pool], (stat) => avgValue(stat.points));
+		const bestTopHits = getTopBooksForMetric(results[pool], (stat) => 100 * avgValue(stat.hits));
 
 		summaryByPool[pool] = {
 			topLeast1: {
 				books: bestTopLeast1.entries.map((entry) => entry.book),
-				actualValue: bestTopLeast1.stat.totalSlots === 0 ? 0 : (100 * bestTopLeast1.stat.least1.value) / bestTopLeast1.stat.totalSlots,
-				predictedByBook: summarizeEntries(bestTopLeast1.entries, (stat) => `${(stat.totalSlots === 0 ? 0 : (100 * stat.least1.predicted) / stat.totalSlots).toFixed(2)}%`),
+				actualValue: 100 * avgValue(bestTopLeast1.stat.least1),
+				predictedByBook: summarizeEntries(bestTopLeast1.entries, (stat) => `${(100 * avgPredicted(stat.least1)).toFixed(2)}%`),
 				slotCount: bestTopLeast1.stat.slotCount,
 			},
 			topPoints: {
 				books: bestTopPoints.entries.map((entry) => entry.book),
-				actualValue: bestTopPoints.stat.totalSlots === 0 ? 0 : bestTopPoints.stat.points.value / bestTopPoints.stat.totalSlots,
-				predictedByBook: summarizeEntries(bestTopPoints.entries, (stat) => (stat.totalSlots === 0 ? 0 : stat.points.predicted / stat.totalSlots).toFixed(2)),
+				actualValue: avgValue(bestTopPoints.stat.points),
+				predictedByBook: summarizeEntries(bestTopPoints.entries, (stat) => avgPredicted(stat.points).toFixed(2)),
 				slotCount: bestTopPoints.stat.slotCount,
 			},
 			topHits: {
 				books: bestTopHits.entries.map((entry) => entry.book),
-				actualValue: bestTopHits.stat.totalSlots === 0 ? 0 : (100 * bestTopHits.stat.hits.value) / bestTopHits.stat.totalSlots,
-				predictedByBook: summarizeEntries(bestTopHits.entries, (stat) => `${(stat.totalSlots === 0 ? 0 : (100 * stat.hits.predicted) / stat.totalSlots).toFixed(2)}%`),
+				actualValue: 100 * avgValue(bestTopHits.stat.hits),
+				predictedByBook: summarizeEntries(bestTopHits.entries, (stat) => `${(100 * avgPredicted(stat.hits)).toFixed(2)}%`),
 				slotCount: bestTopHits.stat.slotCount,
 			},
 		};
