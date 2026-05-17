@@ -334,7 +334,7 @@ class AccumulateOutcome {
 		this.hits = { value: 0, predicted: 0, count: 0 };
 		this.slotCount = 0;
 	}
-	accumulate(outcome: Outcome, normalize: number) {
+	accumulate(outcome: Pick<AccumulateOutcome, 'least1' | 'points' | 'hits'>, normalize: number = 1) {
 		this.least1.value += outcome.least1.value / normalize;
 		this.least1.predicted += outcome.least1.predicted / normalize;
 		this.least1.count += outcome.least1.count / normalize;
@@ -461,7 +461,6 @@ const getSnapshotStrategy = (pick1: SnapshotOddsRow, pick2: SnapshotOddsRow, pic
 
 type BookComboEvaluation = {
 	topOutcome: AccumulateOutcome;
-	topSlots: number;
 };
 
 type BookPredictionSummary = {
@@ -492,14 +491,17 @@ const aggregateSelectionOutcome = (selection: MergedSelection<SnapshotOddsRow>):
 	const result = new AccumulateOutcome();
 	const { combos } = selection;
 	if (!combos || combos.length === 0) return null;
+	const comboCount = combos.length;
 	for (const combo of combos) {
 		const hitCount = (combo.pick1.scored ? 1 : 0)
 			+ (combo.pick2.scored ? 1 : 0)
 			+ (combo.pick3.scored ? 1 : 0);
 		const actual = new Outcome(combo.prob1, combo.prob2, combo.prob3, hitCount);
-		result.accumulate(actual, combos.length);
+		result.accumulate(actual, comboCount);
 	}
-	result.slotCount=1;
+	// A merged selection always represents one pick set (ticket/slot),
+	// while combo stats above are equally weighted across ties.
+	result.slotCount = 1;
 	return result;
 };
 
@@ -536,14 +538,11 @@ const evaluateBookCombos = (
 
 	const topSelection = top.merge();
 	if (!topSelection) return null;
-	const topSlots = topSelection.combos.length;
-	if (topSlots === 0) return null;
 	const topOutcome = aggregateSelectionOutcome(topSelection);
 	if (!topOutcome) return null;
 
 	return {
 		topOutcome,
-		topSlots,
 	};
 };
 
@@ -724,9 +723,9 @@ export const runHistoricalStrategyAudit = async (
 						if (!evaluation) continue;
 
 						const outcome = stats[bookKey];
-						// Accumulate normalized stats from topOutcome (already weighted for ties)
-						outcome.accumulate(evaluation.topOutcome, 1);
-						// Each pick set increments slotCount by 1 (or fractionally for ties)
+						// topOutcome is already tie-normalized within this pick set.
+						outcome.accumulate(evaluation.topOutcome);
+						// Count one processed pick set (ticket/slot).
 						outcome.slotCount += evaluation.topOutcome.slotCount;
 					}
 
@@ -809,9 +808,6 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	console.log(" • Z-score: How many standard errors away from the predicted value");
 	console.log("   ◦ Z > 1.96 or Z < -1.96: Statistically significant at 95% level");
 	console.log("   ◦ Z between -1.96 and 1.96: Within expected random variance");
-	console.log(" • ✓/✗: Whether the predicted value falls within the 95% CI");
-	console.log("   ◦ ✓ = prediction is reasonable for the data");
-	console.log("   ◦ ✗ = significant deviation from prediction");
 
 	const pools: PoolSlots[] = ['1', '2', '3', '4+'];
 	type PoolResults = Record<PoolSlots, HistoricalAuditResults>;
