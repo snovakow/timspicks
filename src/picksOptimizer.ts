@@ -38,7 +38,6 @@ interface HistoryPlayer {
 }
 
 type CorrelationCount = Record<typeof AllCombos[number], number>;
-type BaselineKey = 'random' | 'iii';
 
 export interface Total {
 	least1: number;
@@ -60,10 +59,8 @@ class Correlation {
 		hits: 0,
 		count: 0
 	};
-	baselineKey: BaselineKey;
 
-	constructor(baselineKey: BaselineKey) {
-		this.baselineKey = baselineKey;
+	constructor() {
 		for (const combo of AllCombos) {
 			this.strategy.least1[combo] = null;
 			this.strategy.points[combo] = null;
@@ -83,10 +80,10 @@ class Correlation {
 			this.strategy.count[combo] += result[combo].count;
 		}
 
-		this.baseline.least1 += result[this.baselineKey].least1;
-		this.baseline.points += result[this.baselineKey].points;
-		this.baseline.hits += result[this.baselineKey].hits;
-		this.baseline.count += result[this.baselineKey].count;
+		this.baseline.least1 += result.baseline.least1;
+		this.baseline.points += result.baseline.points;
+		this.baseline.hits += result.baseline.hits;
+		this.baseline.count += result.baseline.count;
 	}
 	calculate() {
 		if (this.baseline.count === 0) return;
@@ -120,10 +117,10 @@ class Correlation {
 };
 
 const compileSimItems = (simItems: SimItem[]): CorrelationResults => {
-	const game1 = new Correlation('random');
-	const game2 = new Correlation('random');
-	const game3 = new Correlation('random');
-	const game4 = new Correlation('random');
+	const game1 = new Correlation();
+	const game2 = new Correlation();
+	const game3 = new Correlation();
+	const game4 = new Correlation();
 	for (const item of simItems) {
 		if (item.gameCount === 1) game1.add(item.totals);
 		else if (item.gameCount === 2) game2.add(item.totals);
@@ -174,7 +171,7 @@ class ResultTotal implements Total {
 	}
 }
 
-export type SimTotal = Record<ComboPattern | 'random', Total>;
+export type SimTotal = Record<ComboPattern | 'baseline', Total>;
 interface SimItem {
 	slotTotal: number;
 	slotIndex: number;
@@ -1725,7 +1722,7 @@ export const runSimulation = async () => {
 					);
 					const baseline = new ResultTotal();
 					baseline.add(topResult);
-					totals.random = { ...baseline };
+					totals.baseline = { ...baseline };
 
 					for (const comboPattern of AllCombos) {
 						const groupTop = new ComboGroup<SnapshotOddsRow>();
