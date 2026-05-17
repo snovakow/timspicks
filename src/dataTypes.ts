@@ -20,7 +20,7 @@ export const AllCombos = [
     'iii', 'sss',
     'iss', 'sis', 'ssi',
     'ioo', 'oio', 'ooi',
-    'oso', 'soo', 'sos', 'oss'
+    'oss', 'sos', 'sso',
 ] as const;
 export type ComboPattern = typeof AllCombos[number];
 

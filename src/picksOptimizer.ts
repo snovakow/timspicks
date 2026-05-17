@@ -5,7 +5,7 @@ import { deVig, oddsNameMap, removeAccentsNormalize } from "./dataProcessor";
 import type { ComboPattern, LogStatsKey, Strategy, PoolSlots } from "./dataTypes";
 import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies, Sportsbooks } from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
-import { ComboGroup } from "./strategySelection";
+import { ComboGroup, getStrategy } from "./strategySelection";
 import * as Feature from './features';
 import { roundToPercent } from "./utility";
 
@@ -122,8 +122,8 @@ class Correlation {
 const compileSimItems = (simItems: SimItem[]): CorrelationResults => {
 	const game1 = new Correlation('random');
 	const game2 = new Correlation('random');
-	const game3 = new Correlation('iii');
-	const game4 = new Correlation('iii');
+	const game3 = new Correlation('random');
+	const game4 = new Correlation('random');
 	for (const item of simItems) {
 		if (item.gameCount === 1) game1.add(item.totals);
 		else if (item.gameCount === 2) game2.add(item.totals);
@@ -141,12 +141,6 @@ const compileSimItems = (simItems: SimItem[]): CorrelationResults => {
 		"3": game3.results(),
 		"4+": game4.results(),
 	}
-}
-
-type PlayerSet = Array<HistoryPlayer>;
-function getRandomEntry(entries: PlayerSet = []): HistoryPlayer | undefined {
-	const randomEntry = entries[Math.floor(Math.random() * entries.length)];
-	return randomEntry;
 }
 
 class Result {
@@ -188,75 +182,6 @@ interface SimItem {
 	totals: SimTotal;
 }
 
-const simulateRandom = (set1: PlayerSet, set2: PlayerSet, set3: PlayerSet): Result | null => {
-	const pick1 = getRandomEntry(set1);
-	if (!pick1) return null;
-	const pick2 = getRandomEntry(set2);
-	if (!pick2) return null;
-	const pick3 = getRandomEntry(set3);
-	if (!pick3) return null;
-	return new Result(pick1.scored, pick2.scored, pick3.scored);
-}
-function iSet(player: HistoryPlayer, set: PlayerSet): PlayerSet {
-	const independent = set.filter((p) => p.team !== player.team && p.opponent !== player.team);
-	return independent;
-}
-function sSet(player: HistoryPlayer, set: PlayerSet): PlayerSet {
-	const stacked = set.filter((p) => p.team === player.team);
-	return stacked;
-}
-function oSet(player: HistoryPlayer, set: PlayerSet): PlayerSet {
-	const opposing = set.filter((p) => p.team === player.opponent);
-	return opposing;
-}
-
-function simulateCombo(set1: PlayerSet, set2: PlayerSet, set3: PlayerSet, pattern: ComboPattern): Result | null {
-	const pick1 = getRandomEntry(set1);
-	if (!pick1) return null;
-	let pick2: HistoryPlayer | undefined;
-	let pick3: HistoryPlayer | undefined;
-	if (pattern === 'iii') {
-		pick2 = getRandomEntry(iSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(iSet(pick2, iSet(pick1, set3)));
-	} else if (pattern === 'sss') {
-		pick2 = getRandomEntry(sSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(sSet(pick2, set3));
-	} else if (pattern === 'iss') {
-		pick2 = getRandomEntry(iSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(sSet(pick2, set3));
-	} else if (pattern === 'sis') {
-		pick2 = getRandomEntry(iSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(sSet(pick1, set3));
-	} else if (pattern === 'ssi') {
-		pick2 = getRandomEntry(sSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(iSet(pick1, set3));
-	} else if (pattern === 'ioo') {
-		pick2 = getRandomEntry(iSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(oSet(pick2, set3));
-	} else if (pattern === 'oio') {
-		pick2 = getRandomEntry(iSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(oSet(pick1, set3));
-	} else if (pattern === 'ooi') {
-		pick2 = getRandomEntry(oSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(iSet(pick1, set3));
-	} else if (pattern === 'oso') {
-		pick2 = getRandomEntry(sSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(oSet(pick1, set3));
-	} else if (pattern === 'soo') {
-		pick2 = getRandomEntry(sSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(oSet(pick2, set3));
-	} else if (pattern === 'sos') {
-		pick2 = getRandomEntry(oSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(sSet(pick1, set3));
-	} else if (pattern === 'oss') {
-		pick2 = getRandomEntry(oSet(pick1, set2));
-		if (pick2) pick3 = getRandomEntry(sSet(pick2, set3));
-	}
-	if (!pick2) return null;
-	if (!pick3) return null;
-	return new Result(pick1.scored, pick2.scored, pick3.scored);
-}
-
 interface HistoryManifestItem {
 	season: string;
 	format: string;
@@ -265,7 +190,7 @@ interface HistoryManifestItem {
 	files: string[];
 }
 
-interface SnapshotOddsRow {
+interface SnapshotOddsRowType {
 	sid: '1' | '2' | '3';
 	team: string;
 	opponent: string;
@@ -276,6 +201,40 @@ interface SnapshotOddsRow {
 	bet4: number | null;
 	betAvg: number | null;
 	betCount: number;
+}
+
+class SnapshotOddsRow {
+	sid: '1' | '2' | '3';
+	team: string;
+	opponent: string;
+	scored: boolean;
+	bet1: number | null;
+	bet2: number | null;
+	bet3: number | null;
+	bet4: number | null;
+	betAvg: number | null;
+	betCount: number;
+	constructor(row: SnapshotOddsRowType) {
+		this.sid = row.sid;
+		this.team = row.team;
+		this.opponent = row.opponent;
+		this.scored = row.scored;
+		this.bet1 = row.bet1;
+		this.bet2 = row.bet2;
+		this.bet3 = row.bet3;
+		this.bet4 = row.bet4;
+		this.betAvg = row.betAvg;
+		this.betCount = row.betCount;
+	}
+	sameTeam(other: SnapshotOddsRow): boolean {
+		return this.team === other.team;
+	}
+	opponentTeam(other: SnapshotOddsRow): boolean {
+		return this.team === other.opponent;
+	}
+	sameGame(other: SnapshotOddsRow): boolean {
+		return this.sameTeam(other) || this.opponentTeam(other);
+	}
 }
 
 type ItemFormat = 'regular' | 'playoff';
@@ -410,10 +369,6 @@ const createAuditBuckets = (): Record<LogStatsKey, AccumulateOutcome> => ({
 	betAvg: new AccumulateOutcome(),
 });
 
-const sameTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => left.team === right.team;
-const opponentTeamSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => left.team === right.opponent;
-const sameGameSnapshot = (left: SnapshotOddsRow, right: SnapshotOddsRow): boolean => sameTeamSnapshot(left, right) || opponentTeamSnapshot(left, right);
-
 const countGamesFromHelper = (
 	helper: Record<'1' | '2' | '3', Picks.OddsItem[]>,
 	playerSets: Map<string, Map<number, HistoryPlayer>>
@@ -437,26 +392,6 @@ const countGamesFromHelper = (
 	}
 
 	return gameCount;
-};
-
-const getSnapshotStrategy = (pick1: SnapshotOddsRow, pick2: SnapshotOddsRow, pick3: SnapshotOddsRow): ComboPattern | null => {
-	if (!sameGameSnapshot(pick1, pick2) && !sameGameSnapshot(pick2, pick3) && !sameGameSnapshot(pick1, pick3)) return 'iii';
-	if (sameTeamSnapshot(pick1, pick2) && sameTeamSnapshot(pick2, pick3)) return 'sss';
-
-	if (sameTeamSnapshot(pick2, pick3) && !sameGameSnapshot(pick1, pick2)) return 'iss';
-	if (sameTeamSnapshot(pick1, pick3) && !sameGameSnapshot(pick2, pick1)) return 'sis';
-	if (sameTeamSnapshot(pick1, pick2) && !sameGameSnapshot(pick3, pick1)) return 'ssi';
-
-	if (opponentTeamSnapshot(pick2, pick3) && !sameGameSnapshot(pick1, pick2)) return 'ioo';
-	if (opponentTeamSnapshot(pick1, pick3) && !sameGameSnapshot(pick2, pick1)) return 'oio';
-	if (opponentTeamSnapshot(pick1, pick2) && !sameGameSnapshot(pick3, pick1)) return 'ooi';
-
-	if (sameTeamSnapshot(pick1, pick2) && opponentTeamSnapshot(pick3, pick1)) return 'oso';
-	if (sameTeamSnapshot(pick1, pick2) && opponentTeamSnapshot(pick3, pick2)) return 'soo';
-	if (sameTeamSnapshot(pick1, pick3) && opponentTeamSnapshot(pick1, pick2)) return 'sos';
-	if (sameTeamSnapshot(pick2, pick3) && opponentTeamSnapshot(pick1, pick2)) return 'oss';
-
-	return null;
 };
 
 type BookComboEvaluation = {
@@ -527,7 +462,7 @@ const evaluateBookCombos = (
 					prob1,
 					prob2,
 					prob3,
-					strategy: getSnapshotStrategy(pick1, pick2, pick3),
+					strategy: getStrategy(pick1, pick2, pick3),
 				});
 			}
 		}
@@ -668,7 +603,7 @@ export const runHistoricalStrategyAudit = async (
 								}
 							}
 
-							rows.push({
+							rows.push(new SnapshotOddsRow({
 								sid,
 								team: player.team,
 								opponent: player.opponent,
@@ -679,7 +614,7 @@ export const runHistoricalStrategyAudit = async (
 								bet4: probs[3],
 								betAvg: null,
 								betCount: 0,
-							});
+							}));
 						}
 					}
 
@@ -920,26 +855,6 @@ export const resolvePoolKey = (gameCount: number): PoolSlots => {
 	if (gameCount === 3) return '3';
 	return '4+';
 }
-
-const getPlayerStrategy = (pick1: Picks.Player, pick2: Picks.Player, pick3: Picks.Player): ComboPattern | null => {
-	if (!pick1.sameGame(pick2) && !pick2.sameGame(pick3) && !pick1.sameGame(pick3)) return 'iii';
-	if (pick1.sameTeam(pick2) && pick2.sameTeam(pick3)) return 'sss';
-
-	if (pick2.sameTeam(pick3) && !pick1.sameGame(pick2)) return 'iss';
-	if (pick1.sameTeam(pick3) && !pick2.sameGame(pick1)) return 'sis';
-	if (pick1.sameTeam(pick2) && !pick3.sameGame(pick1)) return 'ssi';
-
-	if (pick2.opponentTeam(pick3) && !pick1.sameGame(pick2)) return 'ioo';
-	if (pick1.opponentTeam(pick3) && !pick2.sameGame(pick1)) return 'oio';
-	if (pick1.opponentTeam(pick2) && !pick3.sameGame(pick1)) return 'ooi';
-
-	if (pick1.sameTeam(pick2) && pick3.opponentTeam(pick1)) return 'oso';
-	if (pick1.sameTeam(pick2) && pick3.opponentTeam(pick2)) return 'soo';
-	if (pick1.sameTeam(pick3) && pick1.opponentTeam(pick2)) return 'sos';
-	if (pick2.sameTeam(pick3) && pick1.opponentTeam(pick2)) return 'oss';
-
-	return null;
-};
 
 const comboCode = (combo: Pick<BestPicksResult, "1" | "2" | "3">): string => `${combo["1"].player.playerId}:${combo["2"].player.playerId}:${combo["3"].player.playerId}`;
 
@@ -1657,114 +1572,194 @@ export const bestPicks = async (
 	return results;
 }
 
-export const runSimulation = async (iterations: number) => {
-	const response = await fetch('./history/history.json');
-	const data = await response.json();
+export const runSimulation = async () => {
+	const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
+	const oldestDate = new Date("2026-04-09");
+	const historyByDate = new Map<string, string>();
 
-	class PickIndex {
-		readonly slotTotal: number;
-		readonly slotIndex: number;
-		readonly gameCount: number;
-		constructor(slotTotal: number, slotIndex: number, gameCount: number) {
-			this.slotTotal = slotTotal;
-			this.slotIndex = slotIndex;
-			this.gameCount = gameCount;
-		}
-	}
-	const codeForIndex = (slotTotal: number, slotIndex: number, gameCount: number) => {
-		return `${slotTotal} ${slotIndex} ${gameCount}`;
-	}
-	const indexes: Map<string, PickIndex> = new Map();
-
-	class GameResult {
-		randomResults = new ResultTotal();
-		strategyResults: Map<ComboPattern, ResultTotal> = new Map();
-
-		constructor() {
-			for (const strategy of AllCombos) {
-				this.strategyResults.set(strategy, new ResultTotal());
-			}
-		}
-	}
-
-	const gameResults: Map<PickIndex, GameResult> = new Map();
-
-	for (const item of data) {
-		// if (item.format !== 'regular') continue;
+	for (const item of historyManifest) {
 		for (const file of item.files) {
-			const response = await fetch(`./history/${file}`);
-			const fileData = await response.json();
+			const components = file.split('_');
+			if (components.length !== 3) continue;
+			const name = components[1];
+			const date = new Date(name);
+			if (isNaN(date.valueOf())) continue;
+			if (date < oldestDate) continue;
+			historyByDate.set(name, file);
+		}
+	}
 
-			const slotTotal = fileData.availableTimes.length;
-			for (let slotIndex = 0; slotIndex < slotTotal; slotIndex++) {
-				const availableTime = fileData.availableTimes[slotIndex];
+	const minSportsbooks = 1;
+	const simItems: SimItem[] = [];
 
-				const set1: Map<number, HistoryPlayer> = new Map();
-				const set2: Map<number, HistoryPlayer> = new Map();
-				const set3: Map<number, HistoryPlayer> = new Map();
-				const teams = new Set<string>();
-				let gameCount = 0;
-				for (const playerList of fileData.playerLists) {
-					const set = playerList.id === 1 ? set1 : playerList.id === 2 ? set2 : set3;
-					for (const player of playerList.players) {
-						const playsAtTime = player.availableTimes.includes(availableTime);
-						if (!playsAtTime) continue;
+	for (const [date, historyFile] of historyByDate) {
+		try {
+			const history = await fetchJson<{
+				playerLists: Array<{ id: number; players: HistoryPlayer[] }>;
+			}>(`./history/${historyFile}`);
 
-						set.set(player.nhlPlayerId, player);
-						if (!teams.has(player.team)) {
-							gameCount++;
-							teams.add(player.team);
-							teams.add(player.opponent);
+			const playerSets = new Map<string, Map<number, HistoryPlayer>>();
+			for (const list of history.playerLists) {
+				playerSets.set(String(list.id), new Map(list.players.map((player) => [player.nhlPlayerId, player])));
+			}
+
+			const gameStartTimes = await getGameStartTimeGroups(date);
+
+			for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
+				try {
+					const folderTime = gameStartTimes[slotIndex];
+					const folder = `./data/${date}/${folderTime}`;
+
+					const helper = await fetchOptionalJson<Record<'1' | '2' | '3', Picks.OddsItem[]>>(`${folder}/helper.json`);
+					if (!helper) continue;
+
+					const bookOdds = await Promise.all(SportsbookKeys.map(async (key) => {
+						const items = await fetchOptionalJson<Array<{ name: string; odds: number }>>(`${folder}/${key}.json`);
+						return items;
+					}));
+					if (bookOdds.some((items) => items === null)) continue;
+
+					const oddsMaps = bookOdds.map((items) => {
+						const oddsMap = new Map<string, number>();
+						for (const item of items ?? []) oddsMap.set(removeAccentsNormalize(item.name), item.odds);
+						return oddsMap;
+					});
+
+					const rows: SnapshotOddsRow[] = [];
+					for (const sid of ['1', '2', '3'] as const) {
+						const outcomes = playerSets.get(sid);
+						if (!outcomes) continue;
+
+						for (const item of helper[sid] ?? []) {
+							const player = outcomes.get(Math.abs(item.playerId));
+							if (!player) continue;
+
+							const fullName = `${item.firstName} ${item.lastName}`;
+							const candidates = [fullName, oddsNameMap.get(fullName)].filter((name): name is string => Boolean(name));
+							const probs: Array<number | null> = [null, null, null, null];
+
+							for (let index = 0; index < oddsMaps.length; index++) {
+								for (const candidate of candidates) {
+									const odds = oddsMaps[index].get(removeAccentsNormalize(candidate));
+									if (odds !== undefined) {
+										probs[index] = 1 / odds;
+										break;
+									}
+								}
+							}
+
+							rows.push(new SnapshotOddsRow({
+								sid,
+								team: player.team,
+								opponent: player.opponent,
+								scored: player.scored,
+								bet1: probs[0],
+								bet2: probs[1],
+								bet3: probs[2],
+								bet4: probs[3],
+								betAvg: null,
+								betCount: 0,
+							}));
 						}
 					}
-				}
 
-				if (set1.size === 0 || set2.size === 0 || set3.size === 0) continue;
+					if (rows.length === 0) continue;
 
-				const indexKey = codeForIndex(slotTotal, slotIndex, gameCount);
-				let index = indexes.get(indexKey);
-				if (!index) {
-					index = new PickIndex(slotTotal, slotIndex, gameCount);
-					indexes.set(indexKey, index);
-				}
-				let gameResult = gameResults.get(index);
-				if (!gameResult) {
-					gameResult = new GameResult();
-					gameResults.set(index, gameResult);
-				}
+					if (Feature.normalizeSportsbooks) deVig(rows as unknown as Picks.Player[]);
 
-				const array1 = Array.from(set1.values());
-				const array2 = Array.from(set2.values());
-				const array3 = Array.from(set3.values());
-
-				for (let i = 0; i < iterations; i++) {
-					const resultRandom = simulateRandom(array1, array2, array3);
-					if (resultRandom !== null) gameResult.randomResults.add(resultRandom);
-					for (const [type, strategy] of gameResult.strategyResults) {
-						const result = simulateCombo(array1, array2, array3, type);
-						if (result !== null) strategy.add(result);
+					for (const row of rows) {
+						const values = SportsbookKeys
+							.map((key) => row[key])
+							.filter((value): value is number => value !== null);
+						row.betCount = values.length;
+						row.betAvg = values.length >= minSportsbooks
+							? values.reduce((sum, value) => sum + value, 0) / values.length
+							: null;
 					}
+
+					const gameCount = countGamesFromHelper(helper, playerSets);
+					if (gameCount === 0) continue;
+
+					const set1 = rows.filter((row) => row.sid === '1' && row.betAvg !== null && row.betCount >= minSportsbooks);
+					const set2 = rows.filter((row) => row.sid === '2' && row.betAvg !== null && row.betCount >= minSportsbooks);
+					const set3 = rows.filter((row) => row.sid === '3' && row.betAvg !== null && row.betCount >= minSportsbooks);
+					if (set1.length === 0 || set2.length === 0 || set3.length === 0) continue;
+
+					const candidates: SelectionCandidate<SnapshotOddsRow>[] = [];
+					for (const pick1 of set1) {
+						for (const pick2 of set2) {
+							for (const pick3 of set3) {
+								const prob1 = pick1.betAvg;
+								const prob2 = pick2.betAvg;
+								const prob3 = pick3.betAvg;
+								if (prob1 === null || prob2 === null || prob3 === null) continue;
+
+								const strategy = getStrategy(pick1, pick2, pick3);
+
+								candidates.push({
+									pick1,
+									pick2,
+									pick3,
+									prob1,
+									prob2,
+									prob3,
+									strategy,
+								});
+							}
+						}
+					}
+
+					if (candidates.length === 0) continue;
+
+					const totals = {} as SimTotal;
+
+					const topOverall = new ComboGroup<SnapshotOddsRow>();
+					for (const candidate of candidates) topOverall.add(candidate);
+					const topSelection = topOverall.merge();
+					if (!topSelection) continue;
+
+					const topResult = new Result(
+						topSelection.representative.pick1.scored,
+						topSelection.representative.pick2.scored,
+						topSelection.representative.pick3.scored,
+					);
+					const baseline = new ResultTotal();
+					baseline.add(topResult);
+					totals.random = { ...baseline };
+
+					for (const comboPattern of AllCombos) {
+						const groupTop = new ComboGroup<SnapshotOddsRow>();
+						for (const candidate of candidates) {
+							if (candidate.strategy === comboPattern) groupTop.add(candidate);
+						}
+
+						const groupResult = new ResultTotal();
+						const groupSelection = groupTop.merge();
+						if (groupSelection) {
+							groupResult.add(new Result(
+								groupSelection.representative.pick1.scored,
+								groupSelection.representative.pick2.scored,
+								groupSelection.representative.pick3.scored,
+							));
+						}
+
+						totals[comboPattern] = { ...groupResult };
+					}
+
+					simItems.push({
+						slotTotal: gameStartTimes.length,
+						slotIndex,
+						gameCount,
+						totals,
+					});
+				} catch (error) {
+					console.warn(`Skipping simulation snapshot ${date} ${gameStartTimes[slotIndex]}:`, error);
 				}
 			}
+		} catch (error) {
+			console.warn(`Skipping simulation date ${date}:`, error);
 		}
 	}
 
-	const compile = (): CorrelationResults => {
-		const results: SimItem[] = [];
-		for (const [index, result] of gameResults) {
-			const totals = {} as SimTotal;
-			totals.random = { ...result.randomResults };
-			for (const [type, strategy] of result.strategyResults) {
-				totals[type] = { ...strategy };
-			}
-
-			results.push({
-				totals,
-				...index
-			});
-		}
-		return compileSimItems(results);
-	}
-
-	return compile();
+	return compileSimItems(simItems);
 }

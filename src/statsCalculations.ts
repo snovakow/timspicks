@@ -9,7 +9,7 @@ import type {
 } from './dataTypes';
 import { LogStatsKeys, Sportsbooks, StrategyLabels } from './dataTypes';
 import type { MergedSelection, SelectionCandidate } from './strategySelection';
-import { selectStrategyCombos } from './strategySelection';
+import { getStrategy, selectStrategyCombos } from './strategySelection';
 import * as Feature from './features';
 
 const precision = Picks.precision;
@@ -138,21 +138,6 @@ const calculateStats = (
 		}
 	}
 
-	/*	
-		iii = independent
-		sss = stacked
-		iss = stacked + independent
-		sis = stacked + independent
-		ssi = stacked + independent
-		ioo = opposing + independent
-		oio = opposing + independent
-		ooi = opposing + independent
-		oso = ss + o to 1
-		soo = ss + o to 2
-		sos = oo + s as 1
-		oss = oo + s as 2
-	*/
-
 	const strategyTitle = (strategy: ComboPattern): string => {
 		if (strategy === 'iii') return "All Independent";
 		if (strategy === 'sss') return "All Stacked";
@@ -162,32 +147,12 @@ const calculateStats = (
 		if (strategy === 'ioo') return "2-3 Opposing, 1 Independent";
 		if (strategy === 'oio') return "1-3 Opposing, 2 Independent";
 		if (strategy === 'ooi') return "1-2 Opposing, 3 Independent";
-		if (strategy === 'oso') return "1-2 Stacked, 1-3 Opposing";
-		if (strategy === 'soo') return "1-2 Stacked, 2-3 Opposing";
-		if (strategy === 'sos') return "1-2 Opposing, 1-3 Stacked";
-		if (strategy === 'oss') return "1-2 Opposing, 2-3 Stacked";
+		if (strategy === 'oss') return "2-3 Stacked, 1 Opposing";
+		if (strategy === 'sos') return "1-3 Stacked, 2 Opposing";
+		if (strategy === 'sso') return "1-2 Stacked, 3 Opposing";
 		return strategy;
 	}
 
-	const getStrategy = (pick1: Picks.Player, pick2: Picks.Player, pick3: Picks.Player): ComboPattern | null => {
-		if (!pick1.sameGame(pick2) && !pick2.sameGame(pick3) && !pick1.sameGame(pick3)) return 'iii';
-		if (pick1.sameTeam(pick2) && pick2.sameTeam(pick3)) return 'sss';
-
-		if (pick2.sameTeam(pick3) && !pick1.sameGame(pick2)) return 'iss';
-		if (pick1.sameTeam(pick3) && !pick2.sameGame(pick1)) return 'sis';
-		if (pick1.sameTeam(pick2) && !pick3.sameGame(pick1)) return 'ssi';
-
-		if (pick2.opponentTeam(pick3) && !pick1.sameGame(pick2)) return 'ioo';
-		if (pick1.opponentTeam(pick3) && !pick2.sameGame(pick1)) return 'oio';
-		if (pick1.opponentTeam(pick2) && !pick3.sameGame(pick1)) return 'ooi';
-
-		if (pick1.sameTeam(pick2) && pick3.opponentTeam(pick1)) return 'oso';
-		if (pick1.sameTeam(pick2) && pick3.opponentTeam(pick2)) return 'soo';
-		if (pick1.sameTeam(pick3) && pick1.opponentTeam(pick2)) return 'sos';
-		if (pick2.sameTeam(pick3) && pick1.opponentTeam(pick2)) return 'oss';
-
-		return null;
-	}
 	const calcCombos = (): {
 		top: ReturnType<typeof selectStrategyCombos<Picks.PickOdds>>['top'],
 		strategies: ReturnType<typeof selectStrategyCombos<Picks.PickOdds>>['strategies']
@@ -284,14 +249,6 @@ const calculateStats = (
 		}
 		logHandler.addSection();
 		logHandler.addLine(strategyTitle(strategy), 'center');
-	}
-
-	const logFooter = () => {
-		logHandler.addTitle("Good Values");
-		logHandler.addSection();
-		logHandler.addLine(StrategyLabels.least1 + ": 66% ", 'left');
-		logHandler.addLine(StrategyLabels.points + ": 23", 'left');
-		logHandler.addLine(StrategyLabels.hits + ": 30%", 'left');
 	}
 
 	const setStrategy = (pick: Picks.PickOdds, mode: StrategyMode) => {
@@ -441,8 +398,6 @@ const calculateStats = (
 			}
 		}
 	}
-
-	logFooter();
 };
 
 export const precalculateLogStats = (

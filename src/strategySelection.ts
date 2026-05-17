@@ -1,6 +1,30 @@
 import type { ComboPattern } from './dataTypes';
 import { AllCombos } from './dataTypes';
 
+interface PlayerType<T> {
+    sameTeam(other: PlayerType<T>): boolean;
+    opponentTeam(other: PlayerType<T>): boolean;
+    sameGame(other: PlayerType<T>): boolean;
+}
+export const getStrategy = <T>(pick1: PlayerType<T>, pick2: PlayerType<T>, pick3: PlayerType<T>): ComboPattern | null => {
+    if (!pick1.sameGame(pick2) && !pick2.sameGame(pick3) && !pick1.sameGame(pick3)) return 'iii';
+    if (pick1.sameTeam(pick2) && pick2.sameTeam(pick3)) return 'sss';
+
+    if (pick2.sameTeam(pick3) && !pick1.sameGame(pick2)) return 'iss';
+    if (pick1.sameTeam(pick3) && !pick2.sameGame(pick1)) return 'sis';
+    if (pick1.sameTeam(pick2) && !pick3.sameGame(pick1)) return 'ssi';
+
+    if (pick2.opponentTeam(pick3) && !pick1.sameGame(pick2)) return 'ioo';
+    if (pick1.opponentTeam(pick3) && !pick2.sameGame(pick1)) return 'oio';
+    if (pick1.opponentTeam(pick2) && !pick3.sameGame(pick1)) return 'ooi';
+
+    if (pick2.sameTeam(pick3) && pick1.opponentTeam(pick2)) return 'oss';
+    if (pick1.sameTeam(pick3) && pick1.opponentTeam(pick2)) return 'sos';
+    if (pick1.sameTeam(pick2) && pick3.opponentTeam(pick1)) return 'sso';
+
+    return null;
+}
+
 export type SelectionCandidate<T> = {
     pick1: T;
     pick2: T;
