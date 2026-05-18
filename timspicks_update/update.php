@@ -100,6 +100,9 @@ if (!is_dir($basePath)) mkdir($basePath, 0755, true);
 $timezone = new DateTimeZone('America/New_York');
 $now = new DateTime('now', $timezone);
 
+$nowTime = $now->getTimestamp();
+$startOfDayTime = (new DateTime('today midnight', $timezone))->getTimestamp();
+
 $minOutput = true;
 
 /*
@@ -118,11 +121,9 @@ if ($processDate !== null && $gameTimes !== null) {
         logEnd($now, "No games found");
     }
 
-    $nowTime = $now->getTimestamp();
-
     // a. Don't update between the last game and midnight
     $lastGameTime = end($gameTimes)->getTimestamp();
-    $startOfDayTime = (new DateTime('today midnight', $timezone))->getTimestamp();
+
     if ($nowTime >= $lastGameTime - $updateBuffer || $nowTime <= $startOfDayTime + $updateBuffer) {
         if ($minOutput) die();
         logEnd($now, "Not updating between last game and midnight");
@@ -192,8 +193,11 @@ if (!$minOutput) logOutput($output);
 if (isset($output['error'])) logEnd($now, "{$output['error']}");
 
 /* Backup */
-$output = backup($now, $timezone, $basePath);
-if (!$minOutput) logOutput($output);
-if (isset($output['error'])) logEnd($now, "{$output['error']}");
+// Don't backup before 3am to make sure any time zone changes have passed
+if ($nowTime > $startOfDayTime + 60 * 60 * 3) {
+    $output = backup($now, $timezone, $basePath);
+    if (!$minOutput) logOutput($output);
+    if (isset($output['error'])) logEnd($now, "{$output['error']}");
+}
 
 logEnd($now, $output['content'] ?? "Complete");
