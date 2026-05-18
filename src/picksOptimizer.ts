@@ -140,18 +140,6 @@ const compileSimItems = (simItems: SimItem[]): CorrelationResults => {
 	}
 }
 
-class Result {
-	least1: boolean
-	points: number
-	hits: number
-	constructor(hit1: boolean, hit2: boolean, hit3: boolean) {
-		this.least1 = hit1 || hit2 || hit3;
-		const hitCount = (hit1 ? 1 : 0) + (hit2 ? 1 : 0) + (hit3 ? 1 : 0);
-		this.points = hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100;
-		this.hits = hitCount;
-	}
-}
-
 class ResultTotal implements Total {
 	least1: number
 	points: number
@@ -163,11 +151,20 @@ class ResultTotal implements Total {
 		this.hits = 0;
 		this.count = 0;
 	}
-	add(result: Result) {
-		if (result.least1) this.least1++;
-		this.points += result.points;
-		this.hits += result.hits;
+	add(hit1: boolean, hit2: boolean, hit3: boolean) {
+		const hitCount = (hit1 ? 1 : 0) + (hit2 ? 1 : 0) + (hit3 ? 1 : 0);
+
+		if (hitCount > 0) this.least1++;
+		this.points += hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100;
+		this.hits += hitCount;
 		this.count++;
+	}
+	normalize() {
+		if (this.count <= 1) return;
+		this.least1 /= this.count;
+		this.points /= this.count;
+		this.hits /= this.count;
+		this.count = 1;
 	}
 }
 
@@ -1712,16 +1709,13 @@ export const runSimulation = async () => {
 
 					const topOverall = new ComboGroup<SnapshotOddsRow>();
 					for (const candidate of candidates) topOverall.add(candidate);
-					const topSelection = topOverall.merge();
-					if (!topSelection) continue;
+					if (topOverall.combos.length === 0) continue;
 
-					const topResult = new Result(
-						topSelection.representative.pick1.scored,
-						topSelection.representative.pick2.scored,
-						topSelection.representative.pick3.scored,
-					);
 					const baseline = new ResultTotal();
-					baseline.add(topResult);
+					for (const combo of topOverall.combos) {
+						baseline.add(combo.pick1.scored, combo.pick2.scored, combo.pick3.scored);
+					}
+					baseline.normalize();
 					totals.baseline = { ...baseline };
 
 					for (const comboPattern of AllCombos) {
@@ -1731,13 +1725,11 @@ export const runSimulation = async () => {
 						}
 
 						const groupResult = new ResultTotal();
-						const groupSelection = groupTop.merge();
-						if (groupSelection) {
-							groupResult.add(new Result(
-								groupSelection.representative.pick1.scored,
-								groupSelection.representative.pick2.scored,
-								groupSelection.representative.pick3.scored,
-							));
+						if (groupTop.combos.length > 0) {
+							for (const combo of groupTop.combos) {
+								groupResult.add(combo.pick1.scored, combo.pick2.scored, combo.pick3.scored);
+							}
+							groupResult.normalize();
 						}
 
 						totals[comboPattern] = { ...groupResult };
