@@ -8,16 +8,16 @@ export const correlations: CorrelationResults = {
     "1": {
         "least1": {
             "iii": null,
-            "sss": 0.951209835830568,
+            "sss": 0.9534799843651072,
             "iss": null,
             "sis": null,
             "ssi": null,
             "ioo": null,
             "oio": null,
             "ooi": null,
-            "oss": 0.7280662845163581,
-            "sos": 0.8999165414430175,
-            "sso": 0.7280662845163581
+            "oss": 0.6815462688814654,
+            "sos": 0.9046898201956751,
+            "sso": 0.7421708906979002
         },
         "points": {
             "iii": null,
@@ -28,9 +28,9 @@ export const correlations: CorrelationResults = {
             "ioo": null,
             "oio": null,
             "ooi": null,
-            "oss": 0.6486021131621114,
-            "sos": 0.7952055873539867,
-            "sso": 0.6998954075496618
+            "oss": 0.6122344689912366,
+            "sos": 0.8032897057539458,
+            "sso": 0.7588379431831119
         },
         "hits": {
             "iii": null,
@@ -41,9 +41,9 @@ export const correlations: CorrelationResults = {
             "ioo": null,
             "oio": null,
             "ooi": null,
-            "oss": 0.6486021131621114,
-            "sos": 0.7952055873539867,
-            "sso": 0.6998954075496618
+            "oss": 0.6122344689912366,
+            "sos": 0.8032897057539458,
+            "sso": 0.7588379431831119
         }
     },
     "2": {
@@ -139,7 +139,7 @@ export const correlations: CorrelationResults = {
             "oio": 0.5844845560383344,
             "ooi": 0.8946394843421739,
             "oss": 0.5725559851730604,
-            "sos": 0.6678661649773854,
+            "sos": 0.5725559851730604,
             "sso": 0.4891743762340095
         },
         "points": {
@@ -152,7 +152,7 @@ export const correlations: CorrelationResults = {
             "oio": 0.7321205548443988,
             "ooi": 0.671495933027964,
             "oss": 0.38018409252560437,
-            "sos": 0.5472381771887705,
+            "sos": 0.46719546951523416,
             "sso": 0.4638565682497193
         },
         "hits": {
@@ -165,7 +165,7 @@ export const correlations: CorrelationResults = {
             "oio": 0.6069574118903929,
             "ooi": 0.671495933027964,
             "oss": 0.38018409252560437,
-            "sos": 0.5472381771887705,
+            "sos": 0.46719546951523416,
             "sso": 0.46385656824971955
         }
     }
