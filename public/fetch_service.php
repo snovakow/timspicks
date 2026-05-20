@@ -249,7 +249,7 @@ $ch = curl_init();
 
 /* Picks */
 if ($live) {
-	$output = updatePicks($ch, $basePath, $savesrc);
+	$output = updatePicks($ch, $basePath, './players', $savesrc);
 	if (isset($output['title'])) echo '<h3>' . $output['title'] . '</h3>';
 	if (isset($output['content'])) echo $output['content'];
 	if (isset($output['error'])) die($output['error']);

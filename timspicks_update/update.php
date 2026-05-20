@@ -166,7 +166,7 @@ if (isset($output['error'])) logEnd($now, "{$output['error']}");
 $ch = curl_init();
 
 /* Picks */
-$output = updatePicks($ch, $basePath);
+$output = updatePicks($ch, $basePath, './players');
 if (!$minOutput) logOutput($output);
 if (isset($output['error'])) logEnd($now, "{$output['error']}");
 

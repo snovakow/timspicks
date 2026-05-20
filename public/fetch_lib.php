@@ -26,13 +26,12 @@ function updateGames(DateTime $now, string $basePath)
 }
 
 /* Picks */
-function updatePicks(CurlHandle $ch, string $basePath, bool $savesrc = false)
+function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'Picks';
 
 	$helper = 'https://api.hockeychallengehelper.com/api/picks';
-	$local_file = $basePath . '/helper.json';
 
 	curl_reset($ch);
 
@@ -78,12 +77,29 @@ function updatePicks(CurlHandle $ch, string $basePath, bool $savesrc = false)
 	$data["2"] = [];
 	$data["3"] = [];
 
+	if (!is_dir($playerPath)) mkdir($playerPath, 0755, true);
 	foreach ($json as $item) {
 		if ($item->id == 1) $array = &$data["1"];
 		else if ($item->id == 2) $array = &$data["2"];
 		else $array = &$data["3"];
 		foreach ($item->players as $player) {
 			$playerId = $player->nhlPlayerId < 0 ? -$player->nhlPlayerId : $player->nhlPlayerId;
+
+			$local_file = "{$playerPath}/{$playerId}.json";
+			if (!file_exists($local_file)) {
+				$url = "https://api-web.nhle.com/v1/player/{$playerId}/landing";
+
+				$response = file_get_contents($url);
+				if ($response === false) {
+					$output['error'] = 'Error fetching player data: ' . $url;
+					return $output;
+				}
+
+				if (file_put_contents($local_file, $response, LOCK_EX) === false) {
+					$output['error'] = 'Error saving local player JSON file: ' . $local_file;
+					return $output;
+				}
+			}
 
 			$array[] = [
 				"playerId" => $playerId,
@@ -97,6 +113,7 @@ function updatePicks(CurlHandle $ch, string $basePath, bool $savesrc = false)
 	}
 
 	$json_string = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+	$local_file = $basePath . '/helper.json';
 	if (file_put_contents($local_file, $json_string, LOCK_EX) === false) {
 		$output['error'] = 'Error saving local JSON file: ' . $local_file;
 		return $output;
