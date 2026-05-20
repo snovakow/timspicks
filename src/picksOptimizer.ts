@@ -375,7 +375,7 @@ const countGamesFromHelper = (
 		if (!outcomes) continue;
 
 		for (const item of helper[sid] ?? []) {
-			const player = outcomes.get(Math.abs(item.playerId));
+			const player = outcomes.get(item.playerId);
 			if (!player) continue;
 			if (teams.has(player.team)) continue;
 
@@ -580,7 +580,7 @@ export const runHistoricalStrategyAudit = async (
 						if (!outcomes) continue;
 
 						for (const item of helper[sid] ?? []) {
-							const player = outcomes.get(Math.abs(item.playerId));
+							const player = outcomes.get(item.playerId);
 							if (!player) continue;
 
 							const fullName = `${item.firstName} ${item.lastName}`;
@@ -1625,7 +1625,7 @@ export const runSimulation = async () => {
 						if (!outcomes) continue;
 
 						for (const item of helper[sid] ?? []) {
-							const player = outcomes.get(Math.abs(item.playerId));
+							const player = outcomes.get(item.playerId);
 							if (!player) continue;
 
 							const fullName = `${item.firstName} ${item.lastName}`;

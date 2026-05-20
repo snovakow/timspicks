@@ -29,7 +29,7 @@ interface GameInput {
 }
 
 interface PlayerInput {
-	id: number;
+	playerId: number;
 	firstName: LocalizedText;
 	lastName: LocalizedText;
 }
@@ -162,7 +162,7 @@ export class Player {
 	pick: 0 | 1 | 2 | 3 = 0;
 
 	constructor(data: PlayerInput, team: TeamData, opponent: TeamData, homeGame: boolean, gameTime: Date) {
-		this.playerId = data.id;
+		this.playerId = data.playerId;
 
 		this.firstName = data.firstName;
 		this.lastName = data.lastName;

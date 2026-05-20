@@ -83,8 +83,10 @@ function updatePicks(CurlHandle $ch, string $basePath, bool $savesrc = false)
 		else if ($item->id == 2) $array = &$data["2"];
 		else $array = &$data["3"];
 		foreach ($item->players as $player) {
+			$playerId = $player->nhlPlayerId < 0 ? -$player->nhlPlayerId : $player->nhlPlayerId;
+
 			$array[] = [
-				"playerId" => $player->nhlPlayerId,
+				"playerId" => $playerId,
 				"firstName" => $player->firstName,
 				"lastName" => $player->lastName,
 				"gamesPlayed" => $player->gamesPlayed,
