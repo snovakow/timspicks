@@ -551,7 +551,7 @@ export const runHistoricalStrategyAudit = async (
 
 			const playerSets = new Map<string, Map<number, HistoryPlayer>>();
 			for (const list of history.playerLists) {
-				playerSets.set(String(list.id), new Map(list.players.map((player) => [player.nhlPlayerId, player])));
+				playerSets.set(String(list.id), new Map(list.players.map((player) => [Math.abs(player.nhlPlayerId), player])));
 			}
 
 			const gameStartTimes = await getGameStartTimeGroups(date);
@@ -1600,7 +1600,7 @@ export const runSimulation = async () => {
 
 			const playerSets = new Map<string, Map<number, HistoryPlayer>>();
 			for (const list of history.playerLists) {
-				playerSets.set(String(list.id), new Map(list.players.map((player) => [player.nhlPlayerId, player])));
+				playerSets.set(String(list.id), new Map(list.players.map((player) => [Math.abs(player.nhlPlayerId), player])));
 			}
 
 			const gameStartTimes = await getGameStartTimeGroups(date);
