@@ -376,7 +376,10 @@ const countGamesFromHelper = (
 
 		for (const item of helper[sid] ?? []) {
 			const player = outcomes.get(item.playerId);
-			if (!player) continue;
+			if (!player) {
+				console.error("Player not found:", item);
+				continue;
+			}
 			if (teams.has(player.team)) continue;
 
 			teams.add(player.team);
@@ -581,7 +584,10 @@ export const runHistoricalStrategyAudit = async (
 
 						for (const item of helper[sid] ?? []) {
 							const player = outcomes.get(item.playerId);
-							if (!player) continue;
+							if (!player) {
+								console.error("Player not found:", item);
+								continue;
+							}
 
 							const fullName = `${item.firstName} ${item.lastName}`;
 							const candidates = [fullName, oddsNameMap.get(fullName)].filter((name): name is string => Boolean(name));
@@ -1626,7 +1632,10 @@ export const runSimulation = async () => {
 
 						for (const item of helper[sid] ?? []) {
 							const player = outcomes.get(item.playerId);
-							if (!player) continue;
+							if (!player) {
+								console.error("Player not found:", item);
+								continue;
+							}
 
 							const fullName = `${item.firstName} ${item.lastName}`;
 							const candidates = [fullName, oddsNameMap.get(fullName)].filter((name): name is string => Boolean(name));
