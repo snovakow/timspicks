@@ -224,18 +224,34 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 	}
 	$data = $data->attachments;
 	$data = $data->markets;
-	$map = [];
+	$markets = [];
 	foreach ($data as $market) {
 		if ($market->marketType !== 'ANY_TIME_GOAL_SCORER') continue;
-		if ($market->marketName !== 'Any Time Goal Scorer' && $market->marketName !== 'Anytime Goal Scorer') continue;
-
 		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $market->marketTime);
-		if (!$closingTime) {
-			$output['error'] = "Invalid date format in response: " . $market->marketTime;
-			return $output;
-		}
+		if (!$closingTime) continue;
 		if ($closingTime > $endOfDay) continue;
+		$markets[] = $market;
+	}
+	if (count($markets) > 1) {
+		$list = [];
+		foreach ($markets as $market) {
+			if ($market->marketName !== 'Any Time Goal Scorer' && $market->marketName !== 'Anytime Goal Scorer') continue;
+			$list[] = $market;
+		}
+		$markets = $list;
+	}
+	if (count($markets) > 1) {
+		$list = [];
+		foreach ($markets as $market) {
+			if (!isset($market->marketLevels)) continue;
+			if ($market->marketLevels[0] !== 'AVB_EVENT') continue;
+			$list[] = $market;
+		}
+		$markets = $list;
+	}
 
+	$map = [];
+	foreach ($markets as $market) {
 		foreach ($market->runners as $runner) {
 			$num = $runner->winRunnerOdds->trueOdds->fractionalOdds->numerator;
 			$den = $runner->winRunnerOdds->trueOdds->fractionalOdds->denominator;
