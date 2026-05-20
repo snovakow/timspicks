@@ -49,28 +49,6 @@ if ($live && $secure) {
 	}
 }
 
-/* Players */
-if ($live && isset($_GET['players']) && isset($_GET['team'])) {
-	$code = $_GET['team'];
-	$url = 'https://api-web.nhle.com/v1/roster/' . $code . '/current';
-	$response = file_get_contents($url);
-	if ($response === false) {
-		die('Error fetching NHL data: ' . $url);
-	}
-
-	$filename = 'players_' . $code . '.json';
-	$filepath = './players/' . $filename;
-
-	$dir = dirname($filepath);
-	if (!is_dir($dir)) mkdir($dir, 0755, true);
-
-	if (file_put_contents($filepath, $response) === false) {
-		die('Error saving ' . $filepath . '<br>');
-	}
-
-	die($filename . '<br>');
-}
-
 /* History */
 if ($live && isset($_GET['history'])) {
 	echo '<h2>History</h2>';

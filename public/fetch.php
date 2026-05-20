@@ -23,7 +23,6 @@ $csrfToken = $_SESSION['csrf_token'];
 		<select id="option">
 			<option value="update">Update</option>
 			<option value="history">History</option>
-			<option value="players">Players</option>
 		</select>
 		<input type="text" id="name" />
 		<input type="password" id="input" />
@@ -33,12 +32,6 @@ $csrfToken = $_SESSION['csrf_token'];
 	<div id="response"></div>
 
 	<script>
-		const teams = [
-			"ANA", "BOS", "BUF", "CAR", "CBJ", "CGY", "CHI", "COL", "DAL", "DET", "EDM",
-			"FLA", "LAK", "MIN", "MTL", "NJD", "NSH", "NYI", "NYR", "OTT", "PHI", "PIT",
-			"SEA", "SJS", "STL", "TBL", "TOR", "UTA", "VAN", "VGK", "WPG", "WSH"
-		];
-
 		const sendRequest = async (query) => {
 			const data = {
 				name: name.value,
@@ -65,9 +58,9 @@ $csrfToken = $_SESSION['csrf_token'];
 		};
 
 		const button = document.getElementById('button');
+		const defaultButtonLabel = button.textContent;
 		const name = document.getElementById('name');
 		const input = document.getElementById('input');
-		let activeRunId = 0;
 
 		const scrollResponseToBottom = (element) => {
 			window.requestAnimationFrame(() => {
@@ -78,6 +71,7 @@ $csrfToken = $_SESSION['csrf_token'];
 		const keydown = (e) => {
 			if (e.key === "Enter") {
 				e.preventDefault();
+				if (button.disabled) return;
 				button.focus();
 				button.click();
 			}
@@ -86,58 +80,31 @@ $csrfToken = $_SESSION['csrf_token'];
 		input.addEventListener("keydown", keydown);
 
 		button.addEventListener('click', async () => {
-			const runId = ++activeRunId;
+			if (button.disabled) return;
+
 			const option = document.getElementById('option');
 			const options = option.value;
 			if (!options) return;
+
+			button.disabled = true;
+			button.textContent = 'Working...';
 
 			const responseElement = document.getElementById('response');
 			responseElement.replaceChildren();
 			responseElement.scrollTop = 0;
 
-			if (options === "players") {
-				let teamIndex = 0;
-				const processTeam = async () => {
-					if (runId !== activeRunId) return;
-					try {
-						const result = await sendRequest("players&team=" + teams[teamIndex]);
-						if (runId !== activeRunId) return;
-						if (result) {
-							const tempDiv = document.createElement('div');
-							tempDiv.innerHTML = result;
-							responseElement.appendChild(tempDiv);
-							scrollResponseToBottom(responseElement);
-						}
-					} catch (error) {
-						if (runId !== activeRunId) return;
-						const errorDiv = document.createElement('div');
-						errorDiv.style.color = 'red';
-						errorDiv.textContent = `Error fetching ${teams[teamIndex]}: ${error.message}`;
-						responseElement.appendChild(errorDiv);
-						scrollResponseToBottom(responseElement);
-					}
-
-					teamIndex++;
-
-					if (teamIndex < teams.length) {
-						window.setTimeout(() => {
-							processTeam();
-						}, 1000);
-					} else {
-						responseElement.insertAdjacentHTML('beforeend', "<h2>All teams processed</h2>");
-						scrollResponseToBottom(responseElement);
-					}
+			try {
+				const result = await sendRequest(options.split(",").join("&"));
+				if (result) {
+					const tempDiv = document.createElement('div');
+					tempDiv.innerHTML = result;
+					responseElement.appendChild(tempDiv);
 				}
-				processTeam();
-				return;
-			}
-
-			const result = await sendRequest(options.split(",").join("&"));
-			if (runId !== activeRunId) return;
-			if (result) {
-				const tempDiv = document.createElement('div');
-				tempDiv.innerHTML = result;
-				responseElement.appendChild(tempDiv);
+			} catch (error) {
+				responseElement.textContent = `Error: ${error.message}`;
+			} finally {
+				button.disabled = false;
+				button.textContent = defaultButtonLabel;
 				scrollResponseToBottom(responseElement);
 			}
 		});

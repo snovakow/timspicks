@@ -1,18 +1,18 @@
+import { isTeam, type Team } from './components/logo';
 import * as Picks from './components/Table';
 import { SportsbookKeys } from './dataTypes';
 
-// Raw player structure from players_XXX.json
+// Raw player structure from playerId.json
 type RawPlayerJson = {
-	id: number;
+	playerId: number;
 	firstName: Picks.LocalizedText;
 	lastName: Picks.LocalizedText;
-	headshot: string;
+	currentTeamAbbrev: Team;
 };
 
 type PickBucket = "1" | "2" | "3";
 type PlayerDataByPick = Record<PickBucket, Picks.OddsItem[]>;
 type GameDataInput = ConstructorParameters<typeof Picks.GameData>[0];
-type PlayerInput = ConstructorParameters<typeof Picks.Player>[0];
 // Structure of games.json
 type GameListingData = {
 	gameWeek: {
@@ -72,18 +72,6 @@ const isGameDataInput = (value: unknown): value is GameListingData => {
 	return true;
 };
 
-const isPlayersInput = (value: unknown): value is PlayerInput => {
-	if (!Array.isArray(value)) return false;
-	for (const player of value) {
-		if (typeof player.id !== 'number') return false;
-		if (!isStringMap(player.firstName)) return false;
-		if (typeof player.firstName.default !== 'string') return false;
-		if (!isStringMap(player.lastName)) return false;
-		if (typeof player.lastName.default !== 'string') return false;
-	}
-	return true;
-};
-
 const isTeamInput = (value: unknown): boolean => {
 	if (!isRecord(value)) return false;
 	return (
@@ -111,15 +99,15 @@ const isSportsbookOddsItem = (value: unknown): value is SportsbookOddsItem => {
 	return typeof value.name === 'string' && typeof value.odds === 'number';
 };
 
-const fetchData = async (src: string) => {
-	const response = await fetch(src + "?t=" + new Date().getTime());
+const fetchData = async (src: string, query?: string) => {
+	const response = await fetch(src + "?t=" + new Date().getTime() + (query ? `&${query}` : ""));
 	if (!response.ok) throw new Error(`Failed to load ${src}: ${response.status} ${response.statusText}`);
 	return response;
 }
 
-const loadData = async (src: string): Promise<unknown> => {
+const loadData = async (src: string, query?: string): Promise<unknown> => {
 	try {
-		const response = await fetchData(src);
+		const response = await fetchData(src, query);
 		return await response.json();
 	} catch (error) {
 		console.error(`Error loading ${src}:`, error);
@@ -140,8 +128,18 @@ const loadAndValidate = async <T>(
 	return value as T;
 };
 
+// Validate a player object from playerId.json
+function isPlayerJson(val: unknown): val is RawPlayerJson {
+	if (!isRecord(val)) return false;
+	if (typeof val.playerId !== 'number') return false;
+	if (!val.firstName || !isStringMap(val.firstName) || typeof val.firstName.default !== 'string') return false;
+	if (!val.lastName || !isStringMap(val.lastName) || typeof val.lastName.default !== 'string') return false;
+	if (!isTeam(val.currentTeamAbbrev)) return false;
+	return true;
+}
+
 // Async loader/validator for games.json that merges players into each game
-const loadGamesAndPlayers = async (processSrc: string, gamesSrc: string): Promise<[Picks.Player[], Picks.GameData[]]> => {
+const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesSrc: string): Promise<[Picks.Player[], Picks.GameData[]]> => {
 	let cutoff: Date | null = null;
 
 	let metaDataResponse;
@@ -168,8 +166,16 @@ const loadGamesAndPlayers = async (processSrc: string, gamesSrc: string): Promis
 		}
 	}
 
-	const response = await fetchData(gamesSrc);
-	const gamesJsonRaw = await response.json();
+	const promiseHelper = fetchData(helperSrc);
+	const promiseGames = fetchData(gamesSrc);
+	const [responseHelper, responseGames] = await Promise.all([promiseHelper, promiseGames]);
+
+	const playerData = await responseHelper.json();
+	if (!isPlayerDataByPick(playerData)) {
+		throw new Error(`Invalid helper data format in ${helperSrc}`);
+	}
+
+	const gamesJsonRaw = await responseGames.json();
 	if (!isGameDataInput(gamesJsonRaw)) {
 		throw new Error(`Invalid games listing data format in ${gamesSrc}`);
 	}
@@ -192,30 +198,29 @@ const loadGamesAndPlayers = async (processSrc: string, gamesSrc: string): Promis
 		if (!cutoff || cutoff < game.time) gamesList.push(game);
 	}
 
-	async function fetchAndValidatePlayers(
-		team: Picks.TeamData,
-		opponent: Picks.TeamData,
-		homeGame: boolean,
-		gameTime: Date
-	): Promise<Picks.Player[]> {
-		const code = team.code;
-		const url = `./players/players_${code}.json`;
-		const response = await fetchData(url);
-		const json = await response.json();
-		if (!isPlayersJson(json)) throw new Error(`Invalid players file: ${url}`);
-		const allPlayers: RawPlayerJson[] = [...json.forwards, ...json.defensemen];
-		if (!isPlayersInput(allPlayers)) throw new Error(`Invalid players listing data format in ${url}`);
-		return allPlayers.map((p) => new Picks.Player(p, team, opponent, homeGame, gameTime));
+	const gameMap = new Map<Team, Picks.GameData>();
+	for (const game of gamesList) {
+		isGamesListingItem(game); // Type guard for game structure
+		gameMap.set(game.home.code, game);
+		gameMap.set(game.away.code, game);
 	}
 
 	const promises = [];
-	for (const game of gamesList) {
-		isGamesListingItem(game); // Type guard for game structure
-		promises.push(fetchAndValidatePlayers(game.home, game.away, true, game.time));
-		promises.push(fetchAndValidatePlayers(game.away, game.home, false, game.time));
+	for (const pick of [...playerData['1'], ...playerData['2'], ...playerData['3']]) {
+		const playerId = pick.playerId;
+		const promise = loadData(`./players/${playerId}.json`);
+		promises.push(promise);
 	}
 	const playersData = await Promise.all(promises);
-	const playersList: Picks.Player[] = playersData.flat();
+	const playersList: Picks.Player[] = [];
+	for (const playerJson of playersData.flat()) {
+		if (!isPlayerJson(playerJson)) throw new Error(`Invalid player data: ${playerJson}`);
+		const game = gameMap.get(playerJson.currentTeamAbbrev);
+		if (!game) continue;
+		const homeGame = game.home.code === playerJson.currentTeamAbbrev;
+		const [team, opponent] = homeGame ? [game.home, game.away] : [game.away, game.home];
+		playersList.push(new Picks.Player(playerJson, team, opponent, homeGame, game.time));
+	}
 
 	gamesList.sort((a: Picks.GameData, b: Picks.GameData): number => {
 		const time = a.time.getTime() - b.time.getTime();
@@ -225,25 +230,6 @@ const loadGamesAndPlayers = async (processSrc: string, gamesSrc: string): Promis
 
 	return [playersList, gamesList];
 };
-
-// Validate a player object from players_XXX.json
-function isPlayerJson(val: unknown): val is RawPlayerJson {
-	if (!isRecord(val)) return false;
-	if (typeof val.id !== 'number') return false;
-	if (!val.firstName || !isStringMap(val.firstName) || typeof val.firstName.default !== 'string') return false;
-	if (!val.lastName || !isStringMap(val.lastName) || typeof val.lastName.default !== 'string') return false;
-	if (typeof val.headshot !== 'string') return false;
-	return true;
-}
-
-// Validate a players_XXX.json file
-function isPlayersJson(val: unknown): val is { forwards: RawPlayerJson[]; defensemen: RawPlayerJson[] } {
-	if (!isRecord(val)) return false;
-	if (!Array.isArray(val.forwards) || !Array.isArray(val.defensemen)) return false;
-	if (!val.forwards.every(isPlayerJson)) return false;
-	if (!val.defensemen.every(isPlayerJson)) return false;
-	return true;
-}
 
 interface InitialData {
 	playerData: PlayerDataByPick;
@@ -265,7 +251,7 @@ export const loadInitialData = async (): Promise<InitialData> => {
 		playerOddsBetRivers,
 	] = await Promise.all([
 		loadAndValidate('./data/helper.json', isPlayerDataByPick, 'Helper data'),
-		loadGamesAndPlayers('./data/process.json', './data/games.json'),
+		loadGamesAndPlayers('./data/process.json', './data/helper.json', './data/games.json'),
 		loadAndValidate('./data/bet1.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'DraftKings odds data'),
 		loadAndValidate('./data/bet2.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'FanDuel odds data'),
 		loadAndValidate('./data/bet3.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'BetMGM odds data'),
@@ -358,7 +344,7 @@ export const mapPlayers = (
 	const makeRows = (data: Picks.OddsItem[], pick: 1 | 2 | 3): Picks.PickOdds[] => {
 		const row: Picks.PickOdds[] = [];
 		for (const item of data) {
-			const playerId = item.playerId < 0 ? -item.playerId : item.playerId;
+			const playerId = item.playerId;
 			let player = playerMap.get(playerId);
 			if (!player) {
 				const fullName = item.firstName + " " + item.lastName;
