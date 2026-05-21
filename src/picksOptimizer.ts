@@ -116,30 +116,6 @@ class Correlation {
 	}
 };
 
-const compileSimItems = (simItems: SimItem[]): CorrelationResults => {
-	const game1 = new Correlation();
-	const game2 = new Correlation();
-	const game3 = new Correlation();
-	const game4 = new Correlation();
-	for (const item of simItems) {
-		if (item.gameCount === 1) game1.add(item.totals);
-		else if (item.gameCount === 2) game2.add(item.totals);
-		else if (item.gameCount === 3) game3.add(item.totals);
-		else game4.add(item.totals);
-	}
-	game1.calculate();
-	game2.calculate();
-	game3.calculate();
-	game4.calculate();
-
-	return {
-		"1": game1.results(),
-		"2": game2.results(),
-		"3": game3.results(),
-		"4+": game4.results(),
-	}
-}
-
 class ResultTotal implements Total {
 	least1: number
 	points: number
@@ -1570,6 +1546,30 @@ export const bestPicks = async (
 	}
 
 	return results;
+}
+
+const compileSimItems = (simItems: SimItem[]): CorrelationResults => {
+	const game1 = new Correlation();
+	const game2 = new Correlation();
+	const game3 = new Correlation();
+	const game4 = new Correlation();
+	for (const item of simItems) {
+		if (item.gameCount === 1) game1.add(item.totals);
+		else if (item.gameCount === 2) game2.add(item.totals);
+		else if (item.gameCount === 3) game3.add(item.totals);
+		else game4.add(item.totals);
+	}
+	game1.calculate();
+	game2.calculate();
+	game3.calculate();
+	game4.calculate();
+
+	return {
+		"1": game1.results(),
+		"2": game2.results(),
+		"3": game3.results(),
+		"4+": game4.results(),
+	}
 }
 
 export const runSimulation = async () => {
