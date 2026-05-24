@@ -199,6 +199,8 @@ if ($nowTime > $startOfDayTime + 60 * 60 * 3) {
     $output = backup($now, $timezone, $basePath);
     if (!$minOutput) logOutput($output);
     if (isset($output['error'])) logEnd($now, "{$output['error']}");
+} else {
+    processed($now, $basePath);
 }
 
 logEnd($now, $output['content'] ?? "Complete");

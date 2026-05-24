@@ -606,10 +606,17 @@ function backup(DateTime $now, DateTimeZone $timezone, string $basePath)
 		else $output['title'] = 'No game found after the current time';
 	}
 
+	processed($now, $basePath);
+
+	return $output;
+}
+
+/* processed metadata object */
+function processed(DateTime $now, string $basePath)
+{
 	// Write $now as an object property called "processed" to process.json at the end of Backup
 	$processObj = ["processed" => $now->format(DateTime::ATOM)];
 	$local_file = $basePath . '/process.json';
 	file_put_contents($local_file, json_encode($processObj, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
-	return $output;
 }
