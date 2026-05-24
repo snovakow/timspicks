@@ -71,10 +71,10 @@ const calculateStats = (
 	};
 
 	const printName = (player: Picks.Player) => `${player.fullName} (${player.team.code})`;
-	const names = (players: Set<Picks.PickOdds>, shortTab: boolean = false) => {
+	const names = (prefix: string, players: Set<Picks.PickOdds>) => {
 		const names: string[] = [];
 		for (const pick of players) names.push(printName(pick.player));
-		return names.join(shortTab ? "\n   " : "\n           ");
+		return prefix + names.join(`\n${" ".repeat(prefix.length)}`);
 	}
 
 	class Choice {
@@ -214,25 +214,28 @@ const calculateStats = (
 	}
 
 	const logTopPicks = (avgResult: Result) => {
-		logHandler.addLine(`1: ${roundToPercent(avgResult.prob1, precision)} - ${names(avgResult.players1)}`);
-		logHandler.addLine(`2: ${roundToPercent(avgResult.prob2, precision)} - ${names(avgResult.players2)}`);
-		logHandler.addLine(`3: ${roundToPercent(avgResult.prob3, precision)} - ${names(avgResult.players3)}`);
+		const line1 = `1: ${roundToPercent(avgResult.prob1, precision)} - `;
+		const line2 = `2: ${roundToPercent(avgResult.prob2, precision)} - `;
+		const line3 = `3: ${roundToPercent(avgResult.prob3, precision)} - `;
+		logHandler.addLine(names(line1, avgResult.players1));
+		logHandler.addLine(names(line2, avgResult.players2));
+		logHandler.addLine(names(line3, avgResult.players3));
 		logCalcStats(avgResult);
 	}
 
 	const logReduced = (avgResult: Result, topResult: Result, strategy: ComboPattern): void => {
-		let line1 = `1: ${names(avgResult.players1, true)}`;
+		let line1 = names("1: ", avgResult.players1);
 		let reducedCount = 0;
 		if (avgResult.prob1 !== topResult.prob1) {
 			reducedCount++;
 			line1 += " " + roundToPercent(avgResult.prob1 - topResult.prob1, comboPrecision);
 		}
-		let line2 = `2: ${names(avgResult.players2, true)}`;
+		let line2 = names("2: ", avgResult.players2);
 		if (avgResult.prob2 !== topResult.prob2) {
 			reducedCount++;
 			line2 += " " + roundToPercent(avgResult.prob2 - topResult.prob2, comboPrecision);
 		}
-		let line3 = `3: ${names(avgResult.players3, true)}`;
+		let line3 = names("3: ", avgResult.players3);
 		if (avgResult.prob3 !== topResult.prob3) {
 			reducedCount++;
 			line3 += " " + roundToPercent(avgResult.prob3 - topResult.prob3, comboPrecision);
