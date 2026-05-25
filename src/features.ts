@@ -1,5 +1,4 @@
 export const normalizeSportsbooks = false;
 export const allPlayersTable = false;
-export const correlation = false;
-export const simulate = false;
-export const analyze = false;
+export const correlation = true;
+export const analyze: 'GENERATE' | 'OUTPUT' | 'OFF' = 'OFF';

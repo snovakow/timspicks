@@ -27,8 +27,8 @@ import './App.css';
 
 const precision = Picks.precision;
 
-let SIMULATE = Feature.simulate;
-let ANALYZE = Feature.analyze;
+let SIMULATE = Feature.analyze === 'OUTPUT';
+let ANALYZE = Feature.analyze === 'GENERATE';
 
 const betDisplayRounded = (chance: number | null): string => {
 	if (chance === null) return "-";
