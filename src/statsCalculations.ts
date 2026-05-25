@@ -2,7 +2,7 @@ import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
 import { calcAny, calcPnt, calcHit, resolvePoolKey, gamesCount } from './picksOptimizer';
 import { correlations, } from './correlationData';
-import type { CorrelationResult } from './correlationData';
+import type { CorrelationStrategy } from './correlationData';
 import type {
 	LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog,
 	Strategy, StrategyMode, ComboPattern
@@ -128,7 +128,7 @@ const calculateStats = (
 
 		// Scale correlation effect with linear interpolation:
 		// factor=0 => no effect, factor=1 => full effect, factor>1 => amplified effect.
-		correlate(strategy: ComboPattern, ref: CorrelationResult): void {
+		correlate(strategy: ComboPattern, ref: CorrelationStrategy): void {
 			const least1 = ref.least1[strategy];
 			if (least1 !== null) this.least1 *= (least1 - 1) * factor + 1;
 			const points = ref.points[strategy];
@@ -270,8 +270,6 @@ const calculateStats = (
 	const gameCount = gamesCount(table1Rows, table2Rows, table3Rows);
 	if (gameCount === 0) return;
 
-	const ref = correlations[resolvePoolKey(gameCount)];
-
 	const { top, strategies } = calcCombos();
 	const topSelection = top.merge();
 	if (topSelection === null) return;
@@ -302,6 +300,7 @@ const calculateStats = (
 		return maxResults;
 	}
 
+	const ref = correlations[resolvePoolKey(gameCount)][betKey];
 	for (const [strategy, result] of strategyResults) {
 		result.correlate(strategy, ref);
 	}

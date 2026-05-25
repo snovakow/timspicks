@@ -1,9 +1,9 @@
 import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
-import type { CorrelationData, CorrelationResult, CorrelationResults } from "./correlationData";
+import type { CorrelationData, CorrelationResult, CorrelationStrategy } from "./correlationData";
 import { deVig, oddsNameMap, removeAccentsNormalize } from "./dataProcessor";
 import type { ComboPattern, LogStatsKey, Strategy, PoolSlots } from "./dataTypes";
-import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies, Sportsbooks } from "./dataTypes";
+import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies, Sportsbooks, AllPoolSlots } from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
 import { ComboGroup, getStrategy } from "./strategySelection";
 import * as Feature from './features';
@@ -107,7 +107,7 @@ class Correlation {
 			this.strategy.hits[combo] = Math.log(this.strategy.hits[combo]) + 1;
 		}
 	}
-	results(): CorrelationResult {
+	results(): CorrelationStrategy {
 		return {
 			least1: this.strategy.least1,
 			points: this.strategy.points,
@@ -720,10 +720,9 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	console.log("   ◦ Z > 1.96 or Z < -1.96: Statistically significant at 95% level");
 	console.log("   ◦ Z between -1.96 and 1.96: Within expected random variance");
 
-	const pools: PoolSlots[] = ['1', '2', '3', '4+'];
 	type PoolResults = Record<PoolSlots, HistoricalAuditResults>;
 	const results: PoolResults = {} as PoolResults;
-	for (const pool of pools) {
+	for (const pool of AllPoolSlots) {
 		results[pool] = {} as HistoricalAuditResults;
 	}
 
@@ -764,7 +763,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 
 	const summaryByPool = {} as ComparePoolAccuracySummary;
 
-	for (const pool of pools) {
+	for (const pool of AllPoolSlots) {
 		const auditResult = await runHistoricalStrategyAudit({
 			minSportsbooks,
 			formatFilter,
@@ -778,7 +777,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 	const avgValue = (stat: OutcomeStat): number => avg(stat.value, stat.count);
 	const avgPredicted = (stat: OutcomeStat): number => avg(stat.predicted, stat.count);
 
-	for (const pool of pools) {
+	for (const pool of AllPoolSlots) {
 		const bestTopLeast1 = getTopBooksForMetric(results[pool], (stat) => 100 * avgValue(stat.least1));
 		const bestTopPoints = getTopBooksForMetric(results[pool], (stat) => avgValue(stat.points));
 		const bestTopHits = getTopBooksForMetric(results[pool], (stat) => 100 * avgValue(stat.hits));
@@ -1548,28 +1547,36 @@ export const bestPicks = async (
 	return results;
 }
 
-const compileSimItems = (simItems: SimItem[]): CorrelationResults => {
-	const game1 = new Correlation();
-	const game2 = new Correlation();
-	const game3 = new Correlation();
-	const game4 = new Correlation();
-	for (const item of simItems) {
-		if (item.gameCount === 1) game1.add(item.totals);
-		else if (item.gameCount === 2) game2.add(item.totals);
-		else if (item.gameCount === 3) game3.add(item.totals);
-		else game4.add(item.totals);
-	}
-	game1.calculate();
-	game2.calculate();
-	game3.calculate();
-	game4.calculate();
+const compileSimItems = (simItems: Record<LogStatsKey, SimItem[]>): CorrelationResult => {
+	const results = {} as CorrelationResult;
+	results['1'] = {} as Record<LogStatsKey, CorrelationStrategy>;
+	results['2'] = {} as Record<LogStatsKey, CorrelationStrategy>;
+	results['3'] = {} as Record<LogStatsKey, CorrelationStrategy>;
+	results['4+'] = {} as Record<LogStatsKey, CorrelationStrategy>;
 
-	return {
-		"1": game1.results(),
-		"2": game2.results(),
-		"3": game3.results(),
-		"4+": game4.results(),
+	for (const key of LogStatsKeys) {
+		const game1 = new Correlation();
+		const game2 = new Correlation();
+		const game3 = new Correlation();
+		const game4 = new Correlation();
+		const simItem = simItems[key];
+		for (const item of simItem) {
+			if (item.gameCount === 1) game1.add(item.totals);
+			else if (item.gameCount === 2) game2.add(item.totals);
+			else if (item.gameCount === 3) game3.add(item.totals);
+			else game4.add(item.totals);
+		}
+		game1.calculate();
+		game2.calculate();
+		game3.calculate();
+		game4.calculate();
+
+		results['1'][key] = game1.results();
+		results['2'][key] = game2.results();
+		results['3'][key] = game3.results();
+		results['4+'][key] = game4.results();
 	}
+	return results;
 }
 
 export const runSimulation = async () => {
@@ -1590,7 +1597,7 @@ export const runSimulation = async () => {
 	}
 
 	const minSportsbooks = 1;
-	const simItems: SimItem[] = [];
+	const simItems: Record<LogStatsKey, SimItem[]> = { bet1: [], bet2: [], bet3: [], bet4: [], betAvg: [] };
 
 	for (const [date, historyFile] of historyByDate) {
 		try {
@@ -1688,68 +1695,74 @@ export const runSimulation = async () => {
 					const set3 = rows.filter((row) => row.sid === '3' && row.betAvg !== null && row.betCount >= minSportsbooks);
 					if (set1.length === 0 || set2.length === 0 || set3.length === 0) continue;
 
-					const candidates: SelectionCandidate<SnapshotOddsRow>[] = [];
-					for (const pick1 of set1) {
-						for (const pick2 of set2) {
-							for (const pick3 of set3) {
-								const prob1 = pick1.betAvg;
-								const prob2 = pick2.betAvg;
-								const prob3 = pick3.betAvg;
-								if (prob1 === null || prob2 === null || prob3 === null) continue;
+					const bookCandidates: Record<LogStatsKey, SelectionCandidate<SnapshotOddsRow>[]> = {
+						bet1: [], bet2: [], bet3: [], bet4: [], betAvg: [],
+					};
 
-								const strategy = getStrategy(pick1, pick2, pick3);
+					for (const key of LogStatsKeys) {
+						const candidates = bookCandidates[key];
+						for (const pick1 of set1) {
+							for (const pick2 of set2) {
+								for (const pick3 of set3) {
+									const prob1 = pick1.betAvg;
+									const prob2 = pick2.betAvg;
+									const prob3 = pick3.betAvg;
+									if (prob1 === null || prob2 === null || prob3 === null) continue;
 
-								candidates.push({
-									pick1,
-									pick2,
-									pick3,
-									prob1,
-									prob2,
-									prob3,
-									strategy,
-								});
+									const strategy = getStrategy(pick1, pick2, pick3);
+
+									candidates.push({
+										pick1,
+										pick2,
+										pick3,
+										prob1,
+										prob2,
+										prob3,
+										strategy,
+									});
+								}
 							}
 						}
-					}
 
-					if (candidates.length === 0) continue;
+						if (candidates.length === 0) continue;
 
-					const totals = {} as SimTotal;
+						const totals = {} as SimTotal;
 
-					const topOverall = new ComboGroup<SnapshotOddsRow>();
-					for (const candidate of candidates) topOverall.add(candidate);
-					if (topOverall.combos.length === 0) continue;
+						const topOverall = new ComboGroup<SnapshotOddsRow>();
+						for (const candidate of candidates) topOverall.add(candidate);
+						if (topOverall.combos.length === 0) continue;
 
-					const baseline = new ResultTotal();
-					for (const combo of topOverall.combos) {
-						baseline.add(combo.pick1.scored, combo.pick2.scored, combo.pick3.scored);
-					}
-					baseline.normalize();
-					totals.baseline = { ...baseline };
-
-					for (const comboPattern of AllCombos) {
-						const groupTop = new ComboGroup<SnapshotOddsRow>();
-						for (const candidate of candidates) {
-							if (candidate.strategy === comboPattern) groupTop.add(candidate);
+						const baseline = new ResultTotal();
+						for (const combo of topOverall.combos) {
+							baseline.add(combo.pick1.scored, combo.pick2.scored, combo.pick3.scored);
 						}
+						baseline.normalize();
+						totals.baseline = { ...baseline };
 
-						const groupResult = new ResultTotal();
-						if (groupTop.combos.length > 0) {
-							for (const combo of groupTop.combos) {
-								groupResult.add(combo.pick1.scored, combo.pick2.scored, combo.pick3.scored);
+						for (const comboPattern of AllCombos) {
+							const groupTop = new ComboGroup<SnapshotOddsRow>();
+							for (const candidate of candidates) {
+								if (candidate.strategy === comboPattern) groupTop.add(candidate);
 							}
-							groupResult.normalize();
+
+							const groupResult = new ResultTotal();
+							if (groupTop.combos.length > 0) {
+								for (const combo of groupTop.combos) {
+									groupResult.add(combo.pick1.scored, combo.pick2.scored, combo.pick3.scored);
+								}
+								groupResult.normalize();
+							}
+
+							totals[comboPattern] = { ...groupResult };
 						}
 
-						totals[comboPattern] = { ...groupResult };
+						simItems[key].push({
+							slotTotal: gameStartTimes.length,
+							slotIndex,
+							gameCount,
+							totals,
+						});
 					}
-
-					simItems.push({
-						slotTotal: gameStartTimes.length,
-						slotIndex,
-						gameCount,
-						totals,
-					});
 				} catch (error) {
 					console.warn(`Skipping simulation snapshot ${date} ${gameStartTimes[slotIndex]}:`, error);
 				}

@@ -52,4 +52,5 @@ export const Sportsbooks: Record<SportsbookKey, Sportsbook> = {
     bet4: { title: "BetRivers", logo: logo4 },
 };
 
-export type PoolSlots = '1' | '2' | '3' | '4+';
+export const AllPoolSlots = ['1', '2', '3', '4+'] as const;
+export type PoolSlots = typeof AllPoolSlots[number];
