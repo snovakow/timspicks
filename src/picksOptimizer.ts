@@ -102,9 +102,9 @@ class Correlation {
 			this.strategy.points[combo] /= count * this.baseline.points;
 			this.strategy.hits[combo] /= count * this.baseline.hits;
 
-			this.strategy.least1[combo] = Math.log(this.strategy.least1[combo]) + 1;
-			this.strategy.points[combo] = Math.log(this.strategy.points[combo]) + 1;
-			this.strategy.hits[combo] = Math.log(this.strategy.hits[combo]) + 1;
+			// this.strategy.least1[combo] = Math.log(this.strategy.least1[combo]) + 1;
+			// this.strategy.points[combo] = Math.log(this.strategy.points[combo]) + 1;
+			// this.strategy.hits[combo] = Math.log(this.strategy.hits[combo]) + 1;
 		}
 	}
 	results(): CorrelationStrategy {
@@ -160,8 +160,10 @@ interface HistoryManifestItem {
 	files: string[];
 }
 
+type PickGroup = '1' | '2' | '3';
+const AllPickGroup: PickGroup[] = ['1', '2', '3'];
 interface SnapshotOddsRowType {
-	sid: '1' | '2' | '3';
+	sid: PickGroup;
 	team: string;
 	opponent: string;
 	scored: boolean;
@@ -174,7 +176,7 @@ interface SnapshotOddsRowType {
 }
 
 class SnapshotOddsRow {
-	sid: '1' | '2' | '3';
+	sid: PickGroup;
 	team: string;
 	opponent: string;
 	scored: boolean;
@@ -340,13 +342,13 @@ const createAuditBuckets = (): Record<LogStatsKey, AccumulateOutcome> => ({
 });
 
 const countGamesFromHelper = (
-	helper: Record<'1' | '2' | '3', Picks.OddsItem[]>,
+	helper: Record<PickGroup, Picks.OddsItem[]>,
 	playerSets: Map<string, Map<number, HistoryPlayer>>
 ): number => {
 	const teams = new Set<string>();
 	let gameCount = 0;
 
-	for (const sid of ['1', '2', '3'] as const) {
+	for (const sid of AllPickGroup) {
 		const outcomes = playerSets.get(sid);
 		if (!outcomes) continue;
 
@@ -486,6 +488,7 @@ const titleForPoolKey = (poolKey: PoolSlots): string => {
 		case '2': return "Pool Slots: 2 Games";
 		case '3': return "Pool Slots: 3 Games";
 		case '4+': return "Pool Slots: 4+ Games";
+		case 'all': return "Pool Slots: All";
 	}
 };
 
@@ -532,13 +535,13 @@ export const runHistoricalStrategyAudit = async (
 
 			const gameStartTimes = await getGameStartTimeGroups(date);
 
-			const findOne = true;
+			const findOne = slots !== 'all';
 			for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
 				try {
 					const folderTime = gameStartTimes[slotIndex];
 
 					const folder = `./data/${date}/${folderTime}`;
-					const helper = await fetchOptionalJson<Record<'1' | '2' | '3', Picks.OddsItem[]>>(`${folder}/helper.json`);
+					const helper = await fetchOptionalJson<Record<PickGroup, Picks.OddsItem[]>>(`${folder}/helper.json`);
 					if (!helper) continue;
 
 					const bookOdds = await Promise.all(SportsbookKeys.map(async (key) => {
@@ -554,7 +557,7 @@ export const runHistoricalStrategyAudit = async (
 					});
 
 					const rows: SnapshotOddsRow[] = [];
-					for (const sid of ['1', '2', '3'] as const) {
+					for (const sid of AllPickGroup) {
 						const outcomes = playerSets.get(sid);
 						if (!outcomes) continue;
 
@@ -615,11 +618,13 @@ export const runHistoricalStrategyAudit = async (
 					const gameCount = helperGameCount;
 					if (gameCount === 0) continue;
 
-					switch (slots) {
-						case '1': if (gameCount !== 1) continue; break;
-						case '2': if (gameCount !== 2) continue; break;
-						case '3': if (gameCount !== 3) continue; break;
-						default: if (gameCount < 4) continue;
+					if (slots !== 'all') {
+						switch (slots) {
+							case '1': if (gameCount !== 1) continue; break;
+							case '2': if (gameCount !== 2) continue; break;
+							case '3': if (gameCount !== 3) continue; break;
+							default: if (gameCount < 4) continue;
+						}
 					}
 
 					daysWithSlots.add(date);
@@ -815,10 +820,7 @@ class StrategyType {
 		this.books = books;
 	}
 }
-interface BestPicksResult {
-	"1": Picks.PickOdds,
-	"2": Picks.PickOdds,
-	"3": Picks.PickOdds,
+interface BestPicksResult extends Record<PickGroup, Picks.PickOdds> {
 	strategies: Set<StrategyType>,
 	rankedBy?: 'top' | 'strategies' | 'least1' | 'hits' | 'points' | 'consensus' | 'xg' | 'tied';
 	isTied?: boolean;
@@ -831,7 +833,8 @@ export const resolvePoolKey = (gameCount: number): PoolSlots => {
 	return '4+';
 }
 
-const comboCode = (combo: Pick<BestPicksResult, "1" | "2" | "3">): string => `${combo["1"].player.playerId}:${combo["2"].player.playerId}:${combo["3"].player.playerId}`;
+type PickGroupType = Pick<BestPicksResult, PickGroup>;
+const comboCode = (combo: PickGroupType): string => `${combo["1"].player.playerId}:${combo["2"].player.playerId}:${combo["3"].player.playerId}`;
 
 // calculate available games from players, rather than use the gamesList.
 // Some games may have started, or players may not be available from a game.
@@ -883,7 +886,7 @@ export const bestPicks = async (
 		}
 	}
 
-	const bestByStrategyAndBooks: Record<Strategy, Map<string, Pick<BestPicksResult, "1" | "2" | "3">>> = {
+	const bestByStrategyAndBooks: Record<Strategy, Map<string, PickGroupType>> = {
 		least1: new Map(),
 		points: new Map(),
 		hits: new Map(),
@@ -894,7 +897,7 @@ export const bestPicks = async (
 		const candidateBooks = strategyConfig[strategy];
 
 		let bestScore = Number.NEGATIVE_INFINITY;
-		const bestCombos = new Map<string, Pick<BestPicksResult, "1" | "2" | "3">>();
+		const bestCombos = new Map<string, PickGroupType>();
 
 		for (const book of candidateBooks) {
 			const top = new ComboGroup<Picks.PickOdds>();
@@ -934,12 +937,12 @@ export const bestPicks = async (
 				bestScore = score;
 				bestCombos.clear();
 				for (const combo of selection.combos) {
-					const resultCombo: Pick<BestPicksResult, "1" | "2" | "3"> = { "1": combo.pick1, "2": combo.pick2, "3": combo.pick3 };
+					const resultCombo: PickGroupType = { "1": combo.pick1, "2": combo.pick2, "3": combo.pick3 };
 					bestCombos.set(comboCode(resultCombo), resultCombo);
 				}
 			} else if (Math.abs(score - bestScore) <= epsilon) {
 				for (const combo of selection.combos) {
-					const resultCombo: Pick<BestPicksResult, "1" | "2" | "3"> = { "1": combo.pick1, "2": combo.pick2, "3": combo.pick3 };
+					const resultCombo: PickGroupType = { "1": combo.pick1, "2": combo.pick2, "3": combo.pick3 };
 					bestCombos.set(comboCode(resultCombo), resultCombo);
 				}
 			}
@@ -951,7 +954,7 @@ export const bestPicks = async (
 	}
 
 	// Merge results: same combo might work for multiple strategies with different books
-	const merged = new Map<string, { combo: Pick<BestPicksResult, "1" | "2" | "3">; strategies: Map<Strategy, LogStatsKey[]> }>();
+	const merged = new Map<string, { combo: PickGroupType; strategies: Map<Strategy, LogStatsKey[]> }>();
 	for (const strategy of AllStrategies) {
 		const books = strategyConfig[strategy];
 		if (!books) continue;
@@ -998,7 +1001,7 @@ export const bestPicks = async (
 		- Reason consensus: display primary=least1%, secondary=hits%, tertiary=points% (5a-5d book agreement compared separately)
 		- Reasons strategies/top/xg/tied: display primary=least1%, secondary=hits%, tertiary=points%
 	*/
-	const metricForBook = (combo: Pick<BestPicksResult, "1" | "2" | "3">, book: LogStatsKey, strategy: Strategy): number | null => {
+	const metricForBook = (combo: PickGroupType, book: LogStatsKey, strategy: Strategy): number | null => {
 		const odd1 = combo['1'].player[book];
 		if (odd1 === null) return null;
 		const odd2 = combo['2'].player[book];
@@ -1080,13 +1083,13 @@ export const bestPicks = async (
 		}
 		return topBets;
 	}
-	const betSupport: { '1': BetSupport; '2': BetSupport; '3': BetSupport } = {
+	const betSupport: Record<PickGroup, BetSupport> = {
 		'1': populateBetSupport(picks1),
 		'2': populateBetSupport(picks2),
 		'3': populateBetSupport(picks3),
 	}
 
-	type SlotKey = '1' | '2' | '3';
+	type SlotKey = PickGroup;
 	type SlotConsensusProfile = {
 		topBookRank: number;
 		supportCount: number;
@@ -1194,7 +1197,7 @@ export const bestPicks = async (
 
 	const compareConsensusProfile = (left: ConsensusProfile, right: ConsensusProfile): number => {
 		// Compare pick1, then pick2, then pick3.
-		const slots: SlotKey[] = ['1', '2', '3'];
+		const slots: SlotKey[] = AllPickGroup;
 		for (const slot of slots) {
 			const slotCompare = compareSlotConsensus(left[slot], right[slot]);
 			if (slotCompare !== 0) return slotCompare;
@@ -1385,7 +1388,7 @@ export const bestPicks = async (
 			case 'xg':
 				return `xG: ${current.xg.toFixed(3)} vs ${previous.xg.toFixed(3)}`;
 			case 'consensus': {
-				const slots: SlotKey[] = ['1', '2', '3'];
+				const slots: SlotKey[] = AllPickGroup;
 				for (const slot of slots) {
 					if (compareSlotConsensus(current.consensus[slot], previous.consensus[slot]) !== 0) {
 						return `${`Pick${slot}`} consensus: ${consensusSlotSummary(current.consensus[slot])} vs ${consensusSlotSummary(previous.consensus[slot])}`;
@@ -1553,28 +1556,33 @@ const compileSimItems = (simItems: Record<LogStatsKey, SimItem[]>): CorrelationR
 	results['2'] = {} as Record<LogStatsKey, CorrelationStrategy>;
 	results['3'] = {} as Record<LogStatsKey, CorrelationStrategy>;
 	results['4+'] = {} as Record<LogStatsKey, CorrelationStrategy>;
+	results['all'] = {} as Record<LogStatsKey, CorrelationStrategy>;
 
 	for (const key of LogStatsKeys) {
 		const game1 = new Correlation();
 		const game2 = new Correlation();
 		const game3 = new Correlation();
 		const game4 = new Correlation();
+		const games = new Correlation();
 		const simItem = simItems[key];
 		for (const item of simItem) {
 			if (item.gameCount === 1) game1.add(item.totals);
 			else if (item.gameCount === 2) game2.add(item.totals);
 			else if (item.gameCount === 3) game3.add(item.totals);
 			else game4.add(item.totals);
+			games.add(item.totals);
 		}
 		game1.calculate();
 		game2.calculate();
 		game3.calculate();
 		game4.calculate();
+		games.calculate();
 
 		results['1'][key] = game1.results();
 		results['2'][key] = game2.results();
 		results['3'][key] = game3.results();
 		results['4+'][key] = game4.results();
+		results['all'][key] = games.results();
 	}
 	return results;
 }
@@ -1617,7 +1625,7 @@ export const runSimulation = async () => {
 					const folderTime = gameStartTimes[slotIndex];
 					const folder = `./data/${date}/${folderTime}`;
 
-					const helper = await fetchOptionalJson<Record<'1' | '2' | '3', Picks.OddsItem[]>>(`${folder}/helper.json`);
+					const helper = await fetchOptionalJson<Record<PickGroup, Picks.OddsItem[]>>(`${folder}/helper.json`);
 					if (!helper) continue;
 
 					const bookOdds = await Promise.all(SportsbookKeys.map(async (key) => {
@@ -1633,7 +1641,7 @@ export const runSimulation = async () => {
 					});
 
 					const rows: SnapshotOddsRow[] = [];
-					for (const sid of ['1', '2', '3'] as const) {
+					for (const sid of AllPickGroup) {
 						const outcomes = playerSets.get(sid);
 						if (!outcomes) continue;
 
@@ -1704,9 +1712,9 @@ export const runSimulation = async () => {
 						for (const pick1 of set1) {
 							for (const pick2 of set2) {
 								for (const pick3 of set3) {
-									const prob1 = pick1.betAvg;
-									const prob2 = pick2.betAvg;
-									const prob3 = pick3.betAvg;
+									const prob1 = pick1[key];
+									const prob2 = pick2[key];
+									const prob3 = pick3[key];
 									if (prob1 === null || prob2 === null || prob3 === null) continue;
 
 									const strategy = getStrategy(pick1, pick2, pick3);
