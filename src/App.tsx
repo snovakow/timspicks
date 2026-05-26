@@ -10,7 +10,7 @@ import SettingsPanel from './components/Settings';
 import { roundToPercent, probabilityToAmerican, getEntries } from './utility';
 import * as DataProcessor from './dataProcessor';
 import { precalculateLogStats, cloneLogStats } from './statsCalculations';
-import { bestPicks, runSimulation } from './picksOptimizer';
+import { bestPicks, logCorrelations, runSimulation } from './picksOptimizer';
 import CollapsibleSection from './components/CollapsibleSection';
 import type { Team } from './components/logo';
 import { getTeamTotals } from './teamGoals';
@@ -360,6 +360,7 @@ function App() {
 		}
 		if (ANALYZE) {
 			ANALYZE = false;
+			logCorrelations();
 			const options = {
 				correlationFactor: Feature.correlation ? 1 : 0,
 				formatFilter: 'all' as const,

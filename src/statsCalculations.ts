@@ -7,7 +7,7 @@ import type {
 	LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog,
 	Strategy, StrategyMode, ComboPattern
 } from './dataTypes';
-import { LogStatsKeys, Sportsbooks, StrategyLabels } from './dataTypes';
+import { LogStatsKeys, Sportsbooks, StrategyLabels, strategyTitle } from './dataTypes';
 import type { MergedSelection, SelectionCandidate } from './strategySelection';
 import { getStrategy, selectStrategyCombos } from './strategySelection';
 import * as Feature from './features';
@@ -136,21 +136,6 @@ const calculateStats = (
 			const hits = ref.hits[strategy];
 			if (hits !== null) this.hits *= (hits - 1) * factor + 1;
 		}
-	}
-
-	const strategyTitle = (strategy: ComboPattern): string => {
-		if (strategy === 'iii') return "All Independent";
-		if (strategy === 'sss') return "All Stacked";
-		if (strategy === 'iss') return "2-3 Stacked, 1 Independent";
-		if (strategy === 'sis') return "1-3 Stacked, 2 Independent";
-		if (strategy === 'ssi') return "1-2 Stacked, 3 Independent";
-		if (strategy === 'ioo') return "2-3 Opposing, 1 Independent";
-		if (strategy === 'oio') return "1-3 Opposing, 2 Independent";
-		if (strategy === 'ooi') return "1-2 Opposing, 3 Independent";
-		if (strategy === 'oss') return "2-3 Stacked, 1 Opposing";
-		if (strategy === 'sos') return "1-3 Stacked, 2 Opposing";
-		if (strategy === 'sso') return "1-2 Stacked, 3 Opposing";
-		return strategy;
 	}
 
 	const calcCombos = (): {

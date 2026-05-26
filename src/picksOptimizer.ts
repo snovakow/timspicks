@@ -1550,6 +1550,31 @@ export const bestPicks = async (
 	return results;
 }
 
+export const logCorrelations = () => {
+	const strategyKey = 'least1';
+	console.log("*** " + StrategyLabels[strategyKey] + " Correlations >= 1 ***");
+	for (const poolKey of AllPoolSlots) {
+		const values: Record<string, { book: LogStatsKey, combo: string, correlation: string }> = {};
+		let entries = 0;
+		for (const logStatsKey of LogStatsKeys) {
+			for (const combo of AllCombos) {
+				const value = correlations[poolKey][logStatsKey][strategyKey][combo];
+				if (value !== null && value >= 1) {
+					values[bookTitle(logStatsKey)] = {
+						book: logStatsKey,
+						combo: strategyTitle(combo),
+						correlation: value.toFixed(3),
+					};
+					entries++;
+				}
+			}
+		}
+		if (entries === 0) continue;
+		console.log(titleForPoolKey(poolKey));
+		console.table(values);
+	}
+}
+
 const compileSimItems = (simItems: Record<LogStatsKey, SimItem[]>): CorrelationResult => {
 	const results = {} as CorrelationResult;
 	results['1'] = {} as Record<LogStatsKey, CorrelationStrategy>;
