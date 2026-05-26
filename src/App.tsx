@@ -565,7 +565,7 @@ function App() {
 					</CollapsibleSection>
 				)}
 
-				{Feature.correlation && (
+				{Feature.correlation && false && (
 					showCorrelate ? (
 						<Correlate
 							value={correlationFactor}
