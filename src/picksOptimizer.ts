@@ -1008,6 +1008,10 @@ export const bestPicks = async (
 		if (strategy === 'least1') return calcAny(odd1, odd2, odd3);
 		if (strategy === 'points') return calcPnt(odd1, odd2, odd3);
 		return calcHit(odd1, odd2, odd3) / 3;
+			book,
+			odd1,
+			combo['3'].player
+		);
 	};
 
 	const strategyTieScore = (result: BestPicksResult, strategy: Strategy): number => {
