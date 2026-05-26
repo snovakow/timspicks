@@ -1,9 +1,13 @@
 import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
+import { correlations } from "./correlationData";
 import type { CorrelationData, CorrelationResult, CorrelationStrategy } from "./correlationData";
 import { deVig, oddsNameMap, removeAccentsNormalize } from "./dataProcessor";
 import type { ComboPattern, LogStatsKey, Strategy, PoolSlots } from "./dataTypes";
-import { AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels, AllStrategies, Sportsbooks, AllPoolSlots } from "./dataTypes";
+import {
+	AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels,
+	AllStrategies, Sportsbooks, AllPoolSlots, strategyTitle
+} from "./dataTypes";
 import type { MergedSelection, SelectionCandidate } from "./strategySelection";
 import { ComboGroup, getStrategy } from "./strategySelection";
 import * as Feature from './features';
