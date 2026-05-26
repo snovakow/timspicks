@@ -977,6 +977,8 @@ export const bestPicks = async (
 
 	const results: BestPicksResult[] = [];
 	for (const { combo, strategies } of merged.values()) {
+		// Ranking is least1-only; ignore combos that are not selected by least1.
+		if (!strategies.has('least1')) continue;
 		results.push({
 			...combo,
 			strategies: new Set([...strategies.entries()].map(([strat, books]) => new StrategyType(strat, books))),
@@ -986,24 +988,14 @@ export const bestPicks = async (
 	}
 
 	/*
-		Ranking priority (determines which pick is best by comparing in this order):
-		1. More agreeing strategies (strategies.size)
-		2. Higher least1 (streak) tie score
-		3. Higher hits tie score
-		4. Higher points tie score
-		5. Higher book consensus (compared by slot: pick1, pick2, pick3):
-		   a) Earlier top-ranked supporting book wins
-		   b) If tied, more supporting books wins
-		   c) If tied, compare supporting values in ranked book order (bet1, bet2, bet3, bet4, betAvg)
-		   d) If still tied, compare remaining (non-top) books in ranked order (bet1, bet2, bet3, bet4, betAvg)
-		6. Higher average team xG
-
-		Log display order (metrics shown for each rank reason, reflecting pool performance):
-		- Reason least1: display primary=least1%, secondary=hits%, tertiary=points%
-		- Reason hits: display primary=hits%, secondary=least1%, tertiary=points%
-		- Reason points: display primary=points%, secondary=least1%, tertiary=hits%
-		- Reason consensus: display primary=least1%, secondary=hits%, tertiary=points% (5a-5d book agreement compared separately)
-		- Reasons strategies/top/xg/tied: display primary=least1%, secondary=hits%, tertiary=points%
+		Ranking priority (least1-only mode):
+		1. Higher least1 tie score
+		2. Higher book consensus (compared by slot: pick1, pick2, pick3):
+		   2a) Earlier top-ranked supporting book wins
+		   2b) If tied, more supporting books wins
+		   2c) If tied, compare supporting values in ranked book order (bet1, bet2, bet3, bet4, betAvg)
+		   2d) If still tied, compare remaining (non-top) books in ranked order (bet1, bet2, bet3, bet4, betAvg)
+		3. Higher average team xG
 	*/
 	const metricForBook = (combo: PickGroupType, book: LogStatsKey, strategy: Strategy): number | null => {
 		const odd1 = combo['1'].player[book];
@@ -1164,15 +1156,15 @@ export const bestPicks = async (
 	};
 
 	const compareSlotConsensus = (left: SlotConsensusProfile, right: SlotConsensusProfile): number => {
-		// 5a) Earlier top-ranked book wins.
+		// 2a) Earlier top-ranked book wins.
 		const topBookCompare = compareAsc(left.topBookRank, right.topBookRank);
 		if (topBookCompare !== 0) return topBookCompare;
 
-		// 5b) If top book rank ties, more agreeing books wins.
+		// 2b) If top book rank ties, more agreeing books wins.
 		const supportCountCompare = compareDesc(left.supportCount, right.supportCount);
 		if (supportCountCompare !== 0) return supportCountCompare;
 
-		// 5c) If still tied, compare agreeing top-book values by ranked book order.
+		// 2c) If still tied, compare agreeing top-book values by ranked book order.
 		for (const book of rankedConsensusBooks) {
 			const leftValue = left.supportByBook.get(book);
 			const rightValue = right.supportByBook.get(book);
@@ -1183,9 +1175,9 @@ export const bestPicks = async (
 			if (valueCompare !== 0) return valueCompare;
 		}
 
-		// 5d) If still tied, compare remaining (non-top) books in ranked order using all book values
+		// 2d) If still tied, compare remaining (non-top) books in ranked order using all book values
 		for (let i = 0; i < rankedConsensusBooks.length; i++) {
-			if (i === left.topBookRank || i === right.topBookRank) continue; // skip top book(s) already compared in 5a/5c
+			if (i === left.topBookRank || i === right.topBookRank) continue; // skip top book(s) already compared in 2a/2c
 			const book = rankedConsensusBooks[i];
 			const leftValue = left.allBookValues.get(book) ?? null;
 			const rightValue = right.allBookValues.get(book) ?? null;
@@ -1210,37 +1202,25 @@ export const bestPicks = async (
 	};
 
 	type RankMetrics = {
-		strategyCount: number;
 		least1: number;
-		hits: number;
-		points: number;
 		consensus: ConsensusProfile;
 		xg: number;
 	};
 
 	const toMetrics = (result: BestPicksResult): RankMetrics => ({
-		strategyCount: result.strategies.size,
 		least1: strategyTieScore(result, 'least1'),
-		hits: strategyTieScore(result, 'hits'),
-		points: strategyTieScore(result, 'points'),
 		consensus: buildConsensusProfile(result),
 		xg: averageTeamXg(result),
 	});
 
 	const metricsEqual = (left: RankMetrics, right: RankMetrics): boolean => {
-		return left.strategyCount === right.strategyCount
-			&& Math.abs(left.least1 - right.least1) <= epsilon
-			&& Math.abs(left.hits - right.hits) <= epsilon
-			&& Math.abs(left.points - right.points) <= epsilon
+		return Math.abs(left.least1 - right.least1) <= epsilon
 			&& compareConsensusProfile(left.consensus, right.consensus) === 0
 			&& Math.abs(left.xg - right.xg) <= epsilon;
 	};
 
 	const rankReasonVsPrevious = (current: RankMetrics, previous: RankMetrics): BestPicksResult['rankedBy'] => {
-		if (current.strategyCount !== previous.strategyCount) return 'strategies';
 		if (Math.abs(current.least1 - previous.least1) > epsilon) return 'least1';
-		if (Math.abs(current.hits - previous.hits) > epsilon) return 'hits';
-		if (Math.abs(current.points - previous.points) > epsilon) return 'points';
 		if (compareConsensusProfile(current.consensus, previous.consensus) !== 0) return 'consensus';
 		if (Math.abs(current.xg - previous.xg) > epsilon) return 'xg';
 		return 'tied';
@@ -1252,18 +1232,10 @@ export const bestPicks = async (
 		metrics: toMetrics(result),
 	}));
 
-	// Sort by ranking priority. If fully tied, preserve original insertion order.
+	// Sort by least1-only ranking priority. If fully tied, preserve original insertion order.
 	ranked.sort((left, right) => {
-		if (right.metrics.strategyCount !== left.metrics.strategyCount) return right.metrics.strategyCount - left.metrics.strategyCount;
-
 		const least1Compare = compareDesc(left.metrics.least1, right.metrics.least1);
 		if (least1Compare !== 0) return least1Compare;
-
-		const hitsCompare = compareDesc(left.metrics.hits, right.metrics.hits);
-		if (hitsCompare !== 0) return hitsCompare;
-
-		const pointsCompare = compareDesc(left.metrics.points, right.metrics.points);
-		if (pointsCompare !== 0) return pointsCompare;
 
 		const consensusCompare = compareConsensusProfile(left.metrics.consensus, right.metrics.consensus);
 		if (consensusCompare !== 0) return consensusCompare;
@@ -1325,7 +1297,7 @@ export const bestPicks = async (
 		return makeTitle(`${name}`);
 	}
 
-	console.log(makeTitle(`*** Best Picks ${titleForPoolKey(poolKey)} ***`));
+	console.log(makeTitle(`*** Best Streak Picks ${titleForPoolKey(poolKey)} ***`));
 
 	// --- Centralized rank metadata ---
 	const rankMeta = [
@@ -1334,20 +1306,8 @@ export const bestPicks = async (
 			label: 'Highest overall rank',
 		},
 		{
-			key: 'strategies',
-			label: 'More strategy matches',
-		},
-		{
 			key: 'least1',
 			label: 'Higher least1 score (streak)',
-		},
-		{
-			key: 'hits',
-			label: 'Higher hits score',
-		},
-		{
-			key: 'points',
-			label: 'Higher points score',
 		},
 		{
 			key: 'consensus',
@@ -1362,11 +1322,16 @@ export const bestPicks = async (
 			label: 'Fully tied on all rank metrics (original order kept)',
 		},
 	];
+	const getStrategyBooks = (result: BestPicksResult, strategy: Strategy): LogStatsKey[] => {
+		for (const item of result.strategies) {
+			if (item.key === strategy) return item.books;
+		}
+		return [];
+	};
 	const rankReasonLabel = Object.fromEntries(rankMeta.map(m => [m.key, m.label]));
 	const formatHitPct = (value: number): string => `${(value * 100).toFixed(2)}%`;
-	const formatPointValue = (value: number): string => value.toFixed(2);
-	const metricSnapshot = (metrics: RankMetrics): string => (
-		`strategies=${metrics.strategyCount} | least1=${formatHitPct(metrics.least1)} | hits=${formatHitPct(metrics.hits)} | points=${formatPointValue(metrics.points)} | xG=${metrics.xg.toFixed(3)}`
+	const metricSnapshot = (metrics: RankMetrics, least1Books: LogStatsKey[]): string => (
+		`least1=${formatHitPct(metrics.least1)} | books=${least1Books.join(',') || 'n/a'} | xG=${metrics.xg.toFixed(3)}`
 	);
 	const consensusSlotSummary = (profile: SlotConsensusProfile): string => {
 		if (profile.topBookRank === Number.POSITIVE_INFINITY) return 'topBook=none, support=0, topValue=n/a';
@@ -1381,14 +1346,8 @@ export const bestPicks = async (
 		rankedBy: BestPicksResult['rankedBy'],
 	): string => {
 		switch (rankedBy) {
-			case 'strategies':
-				return `Strategies: ${current.strategyCount} vs ${previous.strategyCount}`;
 			case 'least1':
 				return `least1: ${formatHitPct(current.least1)} vs ${formatHitPct(previous.least1)}`;
-			case 'hits':
-				return `hits: ${formatHitPct(current.hits)} vs ${formatHitPct(previous.hits)}`;
-			case 'points':
-				return `points: ${formatPointValue(current.points)} vs ${formatPointValue(previous.points)}`;
 			case 'xg':
 				return `xG: ${current.xg.toFixed(3)} vs ${previous.xg.toFixed(3)}`;
 			case 'consensus': {
@@ -1412,15 +1371,12 @@ export const bestPicks = async (
 	const displayPayloads = ranked.map((item, idx) => {
 		const { result, metrics } = item;
 		const previousMetrics = idx > 0 ? ranked[idx - 1].metrics : null;
+		const least1Books = getStrategyBooks(result, 'least1');
 		const rankExplain = previousMetrics && result.rankedBy
 			? explainRankDelta(metrics, previousMetrics, result.rankedBy)
 			: 'Top-ranked result';
-		const bets: Set<LogStatsKey> = new Set();
-		const strategies: Set<Strategy> = new Set();
-		for (const strategy of result.strategies) {
-			for (const book of strategy.books) bets.add(book);
-			strategies.add(strategy.key);
-		}
+		const bets: Set<LogStatsKey> = new Set(least1Books);
+		const strategies: Set<Strategy> = new Set(['least1']);
 		// Consensus details for each slot
 		const consensusDetails = Object.entries(metrics.consensus).map(([slot, prof]) => {
 			// Show topBookRank, supportCount, and top supporting book/value
@@ -1446,7 +1402,7 @@ export const bestPicks = async (
 			tieGroup: tieGroupByIndex[idx],
 			bets: Array.from(bets),
 			strategies: Array.from(strategies),
-			metricSnapshot: metricSnapshot(metrics),
+			metricSnapshot: metricSnapshot(metrics, least1Books),
 			rankExplain,
 			consensusDetails,
 			picks: [result['1'], result['2'], result['3']],
@@ -1454,75 +1410,20 @@ export const bestPicks = async (
 	});
 
 	// --- Enhanced Rank summary and reason output ---
-	// --- Derive rank order from pool results: each rank reason's primary metric > secondary > tertiary ---
-	const derivedRankOrder: Array<Exclude<BestPicksResult['rankedBy'], undefined>> = [];
+	const rankSummaryOrder: Array<Exclude<BestPicksResult['rankedBy'], undefined>> = ['top', 'least1', 'consensus', 'xg', 'tied'];
 	const rankMetaMap = Object.fromEntries(rankMeta.map(m => [m.key, m])) as Record<string, typeof rankMeta[number]>;
 
-	// Build comparison key: (primary, secondary, tertiary) for each rank reason
-	// Each rank reason has its own primary metric reflecting its ranking focus
-	const rankPerformance: Array<{ key: Exclude<BestPicksResult['rankedBy'], undefined>; primary: number; secondary: number; tertiary: number; count: number }> = [];
 	const poolLeast1 = summary[poolKey].topLeast1.actualValue;
-	const poolHits = summary[poolKey].topHits.actualValue;
-	const poolPoints = summary[poolKey].topPoints.actualValue;
-	const getRankPerformance = (key: Exclude<BestPicksResult['rankedBy'], undefined>) => {
-		switch (key) {
-			case 'least1':
-				// Rank reason: least1 score is primary, then hits, then points
-				return { primary: poolLeast1, secondary: poolHits, tertiary: poolPoints };
-			case 'hits':
-				// Rank reason: hits score is primary, then least1, then points
-				return { primary: poolHits, secondary: poolLeast1, tertiary: poolPoints };
-			case 'points':
-				// Rank reason: points score is primary, then least1, then hits
-				return { primary: poolPoints, secondary: poolLeast1, tertiary: poolHits };
-			case 'consensus':
-				// Rank reason: more books agreeing (already compared in consensus logic), use pool baseline
-				return { primary: poolLeast1, secondary: poolHits, tertiary: poolPoints };
-			default:
-				// 'top', 'strategies', 'xg', 'tied': use pool baseline
-				return { primary: poolLeast1, secondary: poolHits, tertiary: poolPoints };
-		}
-	};
-	for (const meta of rankMeta) {
-		const resultsForRank = results.filter(r => r.rankedBy === meta.key);
-		if (resultsForRank.length === 0) continue;
-
-		const perf = getRankPerformance(meta.key as Exclude<BestPicksResult['rankedBy'], undefined>);
-
-		rankPerformance.push({
-			key: meta.key as Exclude<BestPicksResult['rankedBy'], undefined>,
-			primary: perf.primary,
-			secondary: perf.secondary,
-			tertiary: perf.tertiary,
-			count: resultsForRank.length,
-		});
-	}
-
-	// Sort by primary desc, then secondary desc, then tertiary desc
-	rankPerformance.sort((a, b) => {
-		if (Math.abs(a.primary - b.primary) > epsilon) return b.primary - a.primary;
-		if (Math.abs(a.secondary - b.secondary) > epsilon) return b.secondary - a.secondary;
-		if (Math.abs(a.tertiary - b.tertiary) > epsilon) return b.tertiary - a.tertiary;
-		return 0;
-	});
-
-	// Build derived order preserving 'top' and 'tied' at start/end
-	if (!derivedRankOrder.includes('top')) derivedRankOrder.push('top');
-	for (const perf of rankPerformance) {
-		if (perf.key !== 'top' && perf.key !== 'tied' && !derivedRankOrder.includes(perf.key)) {
-			derivedRankOrder.push(perf.key);
-		}
-	}
-	if (!derivedRankOrder.includes('tied')) derivedRankOrder.push('tied');
 
 	console.log('Rank summary:');
 	console.log(` • Total results: ${results.length}`);
 	console.log(` • Tied entries: ${tieGroupByIndex.filter(g => g !== null).length} (results tied with at least one adjacent result)`);
 	console.log(` • Tie groups: ${tieGroupCount} (contiguous clusters of fully-equal ranked results)`);
+	console.log(` • least1 ranking books: ${strategyConfig.least1.join(' > ') || 'none'}`);
 	console.log(` • Consensus rank order: ${rankedConsensusBooks.join(' > ')}`);
 	console.log(' • Consensus tie-break order: (1) top-ranked book, (2) more supporting books wins, (3) ranked book values, (4) remaining books in order');
-	console.log(` • Pool effectiveness baseline: least1=${poolLeast1.toFixed(2)}%, hits=${poolHits.toFixed(2)}%, points=${poolPoints.toFixed(2)}`);
-	for (const key of derivedRankOrder) {
+	console.log(` • Pool least1 baseline: ${poolLeast1.toFixed(2)}%`);
+	for (const key of rankSummaryOrder) {
 		const meta = rankMetaMap[key];
 		const count = results.filter(r => r.rankedBy === key).length;
 		if (count > 0 && meta) console.log(`   - ${meta.label}: ${count}`);
