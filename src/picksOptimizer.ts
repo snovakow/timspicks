@@ -702,12 +702,12 @@ export const runHistoricalStrategyAudit = async (
 					bookTitle(bookKey), table
 				];
 			}));
-			console.log(`\n=== ${title} ${titleForPoolKey(slots)} ===`);
+			console.log(`\n*** ${title} ${titleForPoolKey(slots)} ***`);
 			console.table(display);
 		}
 		makeDisplay(StrategyLabels.least1, true, 'least1');
-		makeDisplay(StrategyLabels.points, false, 'points');
-		makeDisplay(StrategyLabels.hits, true, 'hits');
+		// makeDisplay(StrategyLabels.points, false, 'points');
+		// makeDisplay(StrategyLabels.hits, true, 'hits');
 	}
 
 	return stats;
@@ -721,7 +721,7 @@ export const comparePoolAccuracy = async (options: AnalyzeOptions): Promise<Comp
 		`${GameType[formatFilter]}\n`
 	);
 
-	console.log(`\n=== Statistical Diagnostics: ${GameType[formatFilter]} ===`);
+	console.log(`\n*** Statistical Diagnostics: ${GameType[formatFilter]} ***`);
 	console.log(" • 95% CI (Confidence Interval): The range where the true hit rate likely falls with 95% confidence");
 	console.log("   ◦ Wider CI = smaller pool (more variance)");
 	console.log("   ◦ Narrower CI = larger pool (more stable results)");
