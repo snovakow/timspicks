@@ -1457,26 +1457,22 @@ export const bestPicks = async (
 
 export const logCorrelations = () => {
 	const strategyKey = 'least1';
-	console.log("*** " + StrategyLabels[strategyKey] + " Correlations >= 1 ***");
 	for (const poolKey of AllPoolSlots) {
-		const values: Record<string, { book: LogStatsKey, combo: string, correlation: string }> = {};
-		let entries = 0;
+		console.log(`\n*** ${StrategyLabels[strategyKey]} Correlations >= 1, ${titleForPoolKey(poolKey)} ***`);
 		for (const logStatsKey of LogStatsKeys) {
+			const table: Record<string, string> = {};
+			let rowCount = 0;
 			for (const combo of AllCombos) {
 				const value = correlations[poolKey][logStatsKey][strategyKey][combo];
 				if (value !== null && value >= 1) {
-					values[bookTitle(logStatsKey)] = {
-						book: logStatsKey,
-						combo: strategyTitle(combo),
-						correlation: value.toFixed(3),
-					};
-					entries++;
+					table[strategyTitle(combo)] = value.toFixed(3);
+					rowCount++;
 				}
 			}
+			if (rowCount === 0) continue;
+			console.log(`${bookTitle(logStatsKey)} (${logStatsKey})`);
+			console.table(table);
 		}
-		if (entries === 0) continue;
-		console.log(titleForPoolKey(poolKey));
-		console.table(values);
 	}
 }
 
