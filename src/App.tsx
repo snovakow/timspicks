@@ -459,6 +459,7 @@ function App() {
 		{ key: "gameTime", title: "Start", sort: true },
 	];
 
+	const includeCorrelationSlider = false;
 	return (
 		<>
 			<header>
@@ -565,7 +566,7 @@ function App() {
 					</CollapsibleSection>
 				)}
 
-				{Feature.correlation && false && (
+				{Feature.correlation && includeCorrelationSlider && (
 					showCorrelate ? (
 						<Correlate
 							value={correlationFactor}
