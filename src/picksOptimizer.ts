@@ -930,15 +930,102 @@ export const bestPicks = async (
 		return strategyScore(strategy, prob1, prob2, prob3) * correlation;
 	};
 
+	const strategyBookWeights: Record<Strategy, Map<LogStatsKey, number>> = {
+		least1: new Map<LogStatsKey, number>(),
+		points: new Map<LogStatsKey, number>(),
+		hits: new Map<LogStatsKey, number>(),
+	};
+
+	for (const strategy of AllStrategies) {
+		let totalValue = 0;
+		let totalCount = 0;
+		for (const book of LogStatsKeys) {
+			const stat = auditResults[poolKey][book][strategy];
+			if (stat.count <= 0) continue;
+			totalValue += stat.value;
+			totalCount += stat.count;
+		}
+
+		const globalRate = totalCount > 0 ? totalValue / totalCount : 0;
+
+		for (const book of LogStatsKeys) {
+			const stat = auditResults[poolKey][book][strategy];
+			if (stat.count <= 0) {
+				strategyBookWeights[strategy].set(book, 0);
+				continue;
+			}
+
+			const observedRate = stat.value / stat.count;
+			const baseRate = Number.isFinite(observedRate) ? observedRate : globalRate;
+			const weight = Math.max(1e-6, baseRate);
+			strategyBookWeights[strategy].set(book, weight);
+		}
+	}
+
+	const booksByWeight = (strategy: Strategy): LogStatsKey[] => {
+		const weightedBooks = LogStatsKeys.map((book, order) => ({
+			book,
+			weight: strategyBookWeights[strategy].get(book) ?? 0,
+			order,
+		}));
+		weightedBooks.sort((left, right) => {
+			const weightCompare = right.weight - left.weight;
+			if (Math.abs(weightCompare) > epsilon) return weightCompare;
+			return left.order - right.order;
+		});
+
+		const positive = weightedBooks.filter((item) => item.weight > 0).map((item) => item.book);
+		return positive.length > 0 ? positive : [...LogStatsKeys];
+	};
+
+	const evaluateWeightedStrategyScore = (
+		pick1: Picks.PickOdds,
+		pick2: Picks.PickOdds,
+		pick3: Picks.PickOdds,
+		strategy: Strategy,
+		books: readonly LogStatsKey[],
+	): { score: number; adjusted: boolean } | null => {
+		let weightedTotal = 0;
+		let totalWeight = 0;
+		let adjusted = false;
+
+		for (const book of books) {
+			const prob1 = pick1.player[book];
+			const prob2 = pick2.player[book];
+			const prob3 = pick3.player[book];
+			if (prob1 === null || prob2 === null || prob3 === null) continue;
+
+			const weight = strategyBookWeights[strategy].get(book) ?? 0;
+			if (weight <= 0) continue;
+
+			const score = adjustedStrategyScore(
+				strategy,
+				book,
+				prob1,
+				prob2,
+				prob3,
+				pick1.player,
+				pick2.player,
+				pick3.player
+			);
+
+			weightedTotal += weight * score;
+			totalWeight += weight;
+			if (
+				strategy === 'least1'
+				&& isCorrelationApplied(poolKey, book, strategy, pick1.player, pick2.player, pick3.player)
+			) {
+				adjusted = true;
+			}
+		}
+
+		if (totalWeight <= 0) return null;
+		return { score: weightedTotal / totalWeight, adjusted };
+	};
+
 	// Compare and decide for each strategy
 	for (const strategy of AllStrategies) {
-		if (strategy === 'least1') {
-			strategyConfig[strategy] = summary[poolKey].topLeast1.books;
-		} else if (strategy === 'points') {
-			strategyConfig[strategy] = summary[poolKey].topPoints.books;
-		} else { // hits
-			strategyConfig[strategy] = summary[poolKey].topHits.books;
-		}
+		strategyConfig[strategy] = booksByWeight(strategy);
 	}
 
 	const bestByStrategyAndBooks: Record<Strategy, Map<string, PickGroupType>> = {
@@ -954,51 +1041,25 @@ export const bestPicks = async (
 		let bestScore = Number.NEGATIVE_INFINITY;
 		const bestCombos = new Map<string, PickGroupType>();
 
-		for (const book of candidateBooks) {
-			let bookBestScore = Number.NEGATIVE_INFINITY;
-			const bookBestCombos = new Map<string, PickGroupType>();
-			for (const pick1 of picks1) {
-				const prob1 = pick1.player[book];
-				if (prob1 === null || pick1.player.betCount < minSportsbooks) continue;
-				for (const pick2 of picks2) {
-					const prob2 = pick2.player[book];
-					if (prob2 === null || pick2.player.betCount < minSportsbooks) continue;
-					for (const pick3 of picks3) {
-						const prob3 = pick3.player[book];
-						if (prob3 === null || pick3.player.betCount < minSportsbooks) continue;
+		for (const pick1 of picks1) {
+			if (pick1.player.betCount < minSportsbooks) continue;
+			for (const pick2 of picks2) {
+				if (pick2.player.betCount < minSportsbooks) continue;
+				for (const pick3 of picks3) {
+					if (pick3.player.betCount < minSportsbooks) continue;
 
-						const score = adjustedStrategyScore(
-							strategy,
-							book,
-							prob1,
-							prob2,
-							prob3,
-							pick1.player,
-							pick2.player,
-							pick3.player
-						);
+					const weightedScore = evaluateWeightedStrategyScore(pick1, pick2, pick3, strategy, candidateBooks);
+					if (!weightedScore) continue;
 
-						const resultCombo: PickGroupType = { "1": pick1, "2": pick2, "3": pick3 };
-						if (score > bookBestScore + epsilon) {
-							bookBestScore = score;
-							bookBestCombos.clear();
-							bookBestCombos.set(comboCode(resultCombo), resultCombo);
-						} else if (Math.abs(score - bookBestScore) <= epsilon) {
-							bookBestCombos.set(comboCode(resultCombo), resultCombo);
-						}
+					const score = weightedScore.score;
+					const resultCombo: PickGroupType = { "1": pick1, "2": pick2, "3": pick3 };
+					if (score > bestScore + epsilon) {
+						bestScore = score;
+						bestCombos.clear();
+						bestCombos.set(comboCode(resultCombo), resultCombo);
+					} else if (Math.abs(score - bestScore) <= epsilon) {
+						bestCombos.set(comboCode(resultCombo), resultCombo);
 					}
-				}
-			}
-
-			if (bookBestScore > bestScore + epsilon) {
-				bestScore = bookBestScore;
-				bestCombos.clear();
-				for (const [code, combo] of bookBestCombos) {
-					bestCombos.set(code, combo);
-				}
-			} else if (Math.abs(bookBestScore - bestScore) <= epsilon) {
-				for (const [code, combo] of bookBestCombos) {
-					bestCombos.set(code, combo);
 				}
 			}
 		}
@@ -1040,7 +1101,7 @@ export const bestPicks = async (
 
 	/*
 		Ranking priority (least1-only mode):
-		1. Higher least1 tie score (displayed as "adjusted score" when correlation is applied)
+		1. Higher weighted least1 score (displayed as "adjusted score" when correlation is applied)
 		2. Higher ranked-book values in ranked book order (compared by slot: pick1, pick2, pick3)
 		3. Higher book consensus (compared by slot: pick1, pick2, pick3):
 		   a) Earlier supporting book in ranked order wins
@@ -1049,26 +1110,6 @@ export const bestPicks = async (
 		   d) If still tied, compare remaining non-supporting values in ranked order
 		4. Higher average team xG
 	*/
-	const metricForBook = (combo: PickGroupType, book: LogStatsKey, strategy: Strategy): number | null => {
-		const odd1 = combo['1'].player[book];
-		if (odd1 === null) return null;
-		const odd2 = combo['2'].player[book];
-		if (odd2 === null) return null;
-		const odd3 = combo['3'].player[book];
-		if (odd3 === null) return null;
-
-		return adjustedStrategyScore(
-			strategy,
-			book,
-			odd1,
-			odd2,
-			odd3,
-			combo['1'].player,
-			combo['2'].player,
-			combo['3'].player
-		);
-	};
-
 	const strategyTieScore = (result: BestPicksResult, strategy: Strategy): { score: number; adjusted: boolean } => {
 		let strategyType: StrategyType | undefined;
 		for (const item of result.strategies) {
@@ -1079,26 +1120,16 @@ export const bestPicks = async (
 		}
 		if (!strategyType) return { score: Number.NEGATIVE_INFINITY, adjusted: false };
 
-		let bestMetric = Number.NEGATIVE_INFINITY;
-		let bestMetricAdjusted = false;
-		for (const book of strategyType.books) {
-			const metric = metricForBook(result, book, strategy);
-			if (metric === null) continue;
-			if (metric > bestMetric) {
-				bestMetric = metric;
-				bestMetricAdjusted = strategy === 'least1' && isCorrelationApplied(
-					poolKey,
-					book,
-					strategy,
-					result['1'].player,
-					result['2'].player,
-					result['3'].player
-				);
-			}
-		}
-		if (bestMetric === Number.NEGATIVE_INFINITY) return { score: Number.NEGATIVE_INFINITY, adjusted: false };
+		const weightedScore = evaluateWeightedStrategyScore(
+			result['1'],
+			result['2'],
+			result['3'],
+			strategy,
+			strategyType.books,
+		);
+		if (!weightedScore) return { score: Number.NEGATIVE_INFINITY, adjusted: false };
 
-		return { score: bestMetric, adjusted: bestMetricAdjusted };
+		return weightedScore;
 	};
 
 	const averageTeamXg = (result: BestPicksResult): number => {
@@ -1603,7 +1634,7 @@ export const bestPicks = async (
 	console.log(` • Total results: ${results.length}`);
 	console.log(` • Tied entries: ${tieGroupByIndex.filter(g => g !== null).length} (results tied with at least one adjacent result)`);
 	console.log(` • Tie groups: ${tieGroupCount} (contiguous clusters of fully-equal ranked results)`);
-	console.log(` • ${hasAdjustedLeast1 ? 'adjusted score' : 'least1'} ranking books: ${strategyConfig.least1.join(' > ') || 'none'}`);
+	console.log(` • ${hasAdjustedLeast1 ? 'adjusted score' : 'least1'} weighting books: ${strategyConfig.least1.join(' > ') || 'none'}`);
 	console.log(` • Consensus rank order: ${rankedConsensusBooks.join(' > ')}`);
 	console.log(' • Tie-break order: (1) ranked sportsbook values by book order, (2) earlier consensus support in ranked order, (3) more consensus support, (4) supporting values in ranked order, (5) remaining non-supporting values in ranked order');
 	console.log(` • Pool least1 baseline: ${poolLeast1.toFixed(2)}%`);
@@ -1614,7 +1645,7 @@ export const bestPicks = async (
 	}
 
 	for (const payload of displayPayloads) {
-		console.log(makeTitle(`Result #${payload.rank} of ${displayPayloads.length}`));
+		console.log(makeTitle(`* Result #${payload.rank} of ${displayPayloads.length}`));
 		console.log(`• Metric snapshot: ${payload.metricSnapshot}`);
 		console.log(`• Why at this rank: ${payload.rankExplain}`);
 		if (payload.rankedBy) {
@@ -1627,7 +1658,13 @@ export const bestPicks = async (
 			const topValueStr = slotDetail.topValue !== undefined && slotDetail.topValue !== null ? slotDetail.topValue.toFixed(3) : 'n/a';
 			console.log(`• ${slotLabel} consensus: TopBook=${topBookStr} (rank ${slotDetail.topBookRank}), Support=${slotDetail.supportCount}, TopValue=${topValueStr}`);
 		}
-		for (const bet of payload.bets) {
+		const compactBooks: LogStatsKey[] = payload.bets.length > 1 && payload.bets.includes('betAvg')
+			? ['betAvg']
+			: payload.bets;
+		if (compactBooks.length !== payload.bets.length) {
+			console.log(`• Compact display: Average only (weighted books: ${payload.bets.join(' > ')})`);
+		}
+		for (const bet of compactBooks) {
 			console.log(`${bookName(bet)}`);
 			// Show picks
 			payload.picks.forEach((pick, i) => {
