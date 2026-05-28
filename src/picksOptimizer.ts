@@ -99,12 +99,22 @@ class Correlation {
 		for (const combo of AllCombos) {
 			const count = this.strategy.count[combo];
 			if (count === 0) continue;
-			if (this.strategy.least1[combo] === null) this.strategy.least1[combo] = 0;
-			if (this.strategy.points[combo] === null) this.strategy.points[combo] = 0;
-			if (this.strategy.hits[combo] === null) this.strategy.hits[combo] = 0;
-			this.strategy.least1[combo] /= count * this.baseline.least1;
-			this.strategy.points[combo] /= count * this.baseline.points;
-			this.strategy.hits[combo] /= count * this.baseline.hits;
+
+			let least1: number | null = this.strategy.least1[combo];
+			let points: number | null = this.strategy.points[combo];
+			let hits: number | null = this.strategy.hits[combo];
+
+			if (least1 === null) least1 = 0;
+			if (points === null) points = 0;
+			if (hits === null) hits = 0;
+
+			least1 /= count * this.baseline.least1;
+			points /= count * this.baseline.points;
+			hits /= count * this.baseline.hits;
+
+			this.strategy.least1[combo] = least1;
+			this.strategy.points[combo] = points;
+			this.strategy.hits[combo] = hits;
 
 			// this.strategy.least1[combo] = Math.log(this.strategy.least1[combo]) + 1;
 			// this.strategy.points[combo] = Math.log(this.strategy.points[combo]) + 1;
