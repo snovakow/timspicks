@@ -1744,7 +1744,7 @@ const compileSimItems = (simItems: Record<LogStatsKey, SimItem[]>): CorrelationR
 	return results;
 }
 
-export const runSimulation = async (minSportsbooks: number) => {
+export const runSimulation = async (minSportsbooks: number, correlationPercent: number) => {
 	const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
 	const oldestDate = new Date("2026-04-09");
 	const historyByDate = new Map<string, string>();
@@ -1761,7 +1761,6 @@ export const runSimulation = async (minSportsbooks: number) => {
 		}
 	}
 
-	const probabilityPercentage = 0.99;
 	const strategyScoreFromGroup = (
 		group: ComboGroup<SnapshotOddsRow>,
 		strategy: Strategy,
@@ -1778,7 +1777,7 @@ export const runSimulation = async (minSportsbooks: number) => {
 			const baselineScore = baselineScores[strategy];
 			if (baselineScore <= 0) continue;
 			const groupScore = strategyScoreFromGroup(group, strategy);
-			if (groupScore >= baselineScore * probabilityPercentage) return true;
+			if (groupScore >= baselineScore * correlationPercent) return true;
 		}
 		return false;
 	}
