@@ -1744,7 +1744,7 @@ const compileSimItems = (simItems: Record<LogStatsKey, SimItem[]>): CorrelationR
 	return results;
 }
 
-export const runSimulation = async () => {
+export const runSimulation = async (minSportsbooks: number) => {
 	const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
 	const oldestDate = new Date("2026-04-09");
 	const historyByDate = new Map<string, string>();
@@ -1761,7 +1761,27 @@ export const runSimulation = async () => {
 		}
 	}
 
-	const minSportsbooks = 1;
+	const probabilityPercentage = 0.99;
+	const strategyScoreFromGroup = (
+		group: ComboGroup<SnapshotOddsRow>,
+		strategy: Strategy,
+	): number => {
+		if (strategy === 'least1') return calcAny(group.prob1, group.prob2, group.prob3);
+		if (strategy === 'points') return calcPnt(group.prob1, group.prob2, group.prob3);
+		return calcHit(group.prob1, group.prob2, group.prob3);
+	};
+	const includeGroupByBaselineProbability = (
+		baselineScores: Record<Strategy, number>,
+		group: ComboGroup<SnapshotOddsRow>,
+	): boolean => {
+		for (const strategy of AllStrategies) {
+			const baselineScore = baselineScores[strategy];
+			if (baselineScore <= 0) continue;
+			const groupScore = strategyScoreFromGroup(group, strategy);
+			if (groupScore >= baselineScore * probabilityPercentage) return true;
+		}
+		return false;
+	}
 	const simItems: Record<LogStatsKey, SimItem[]> = { bet1: [], bet2: [], bet3: [], bet4: [], betAvg: [] };
 
 	for (const [date, historyFile] of historyByDate) {
@@ -1896,6 +1916,11 @@ export const runSimulation = async () => {
 						const topOverall = new ComboGroup<SnapshotOddsRow>();
 						for (const candidate of candidates) topOverall.add(candidate);
 						if (topOverall.combos.length === 0) continue;
+						const baselineScores: Record<Strategy, number> = {
+							least1: strategyScoreFromGroup(topOverall, 'least1'),
+							points: strategyScoreFromGroup(topOverall, 'points'),
+							hits: strategyScoreFromGroup(topOverall, 'hits'),
+						};
 
 						const baseline = new ResultTotal();
 						for (const combo of topOverall.combos) {
@@ -1912,6 +1937,10 @@ export const runSimulation = async () => {
 
 							const groupResult = new ResultTotal();
 							if (groupTop.combos.length > 0) {
+								if (!includeGroupByBaselineProbability(baselineScores, groupTop)) {
+									totals[comboPattern] = { ...groupResult };
+									continue;
+								}
 								for (const combo of groupTop.combos) {
 									groupResult.add(combo.pick1.scored, combo.pick2.scored, combo.pick3.scored);
 								}

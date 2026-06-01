@@ -354,7 +354,7 @@ function App() {
 		// Run SIMULATE or ANALYZE only once after data has initialized
 		if (SIMULATE) {
 			SIMULATE = false;
-			runSimulation().then((results) => {
+			runSimulation(minSportsbooks).then((results) => {
 				console.log(results);
 			});
 		}
