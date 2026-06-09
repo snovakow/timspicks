@@ -3,6 +3,7 @@
 1. Enter crontab edit mode: crontab -e
 2. Enter insert mode: i
 3. Type command: * * * * * curl "https://snovakow.sensitive/update.php?lib=public" >> timspicks_log.txt
+                 * * * * * curl "https://snovakow.sensitive/update.php?lib=live/timspicks" >> timspicks_log.txt
 4. Save the file: Esc, :w, Enter
 5. Quit vim: :q
 6. List your cron jobs: crontab -l
