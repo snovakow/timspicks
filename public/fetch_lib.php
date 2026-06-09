@@ -158,7 +158,7 @@ function updateBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
 	$map = [];
 
 	foreach ($data as $selection) {
-		if ($selection->outcomeType !== "ToScoreAnyTime") continue;
+		if (isset($selection->outcomeType) && $selection->outcomeType !== "ToScoreAnyTime") continue;
 		$map[] = [
 			"name" => $selection->participants[0]->seoIdentifier ?? $selection->participants[0]->name,
 			"odds" => $selection->trueOdds
@@ -618,5 +618,4 @@ function processed(DateTime $now, string $basePath)
 	$processObj = ["processed" => $now->format(DateTime::ATOM)];
 	$local_file = $basePath . '/process.json';
 	file_put_contents($local_file, json_encode($processObj, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-
 }
