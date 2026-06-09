@@ -135,6 +135,23 @@ function updateBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
 
 	curl_setopt($ch, CURLOPT_URL, $draftkings);
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
+	curl_setopt($ch, CURLOPT_HTTPHEADER, [
+		'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+		'accept-language: en-US,en;q=0.9',
+		'cache-control: max-age=0',
+		'priority: u=0, i',
+		'sec-ch-ua: "Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+		'sec-ch-ua-mobile: ?0',
+		'sec-ch-ua-platform: "macOS"',
+		'sec-fetch-dest: document',
+		'sec-fetch-mode: navigate',
+		'sec-fetch-site: none',
+		'sec-fetch-user: ?1',
+		'upgrade-insecure-requests: 1',
+		'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+	]);
+	curl_setopt($ch, CURLOPT_COOKIE, 'ak_bmsc=8CE7294E2279F89440F6F8D18336F376~000000000000000000000000000000~YAAQ7BghF3W9RJSeAQAA1tcUrgBe9a3iXCEgMymMbq5Qg9Sw/dJJ71zK/28zSVpPRRPZqObDFuur/HZDgLwCzQ3wcTJzpNV9GPHkx9ERZSkhYQO+qM9PJfpu3qYsfuBh/RVEa9sUbh060esaACP0HUEk1s9/dUyaQ90Xz9v50I57HBhcgV49qseCOWV/JNqIJ/tIuD5SmbpWX9n4SD549LtEY0EomCUBBW60f2tHEtvS2Nuc1mg+dAQZlBXtSjBgCtZdi5MSAXxfbWn66Ta6oiqvQo+3bO3g9beOpEwypVlv6w+n/GZf8Ogemh9HJ6iri/hueINFmx4tbE59PpmPzlxvbQy6qnX1/YvJ8/em4OCftYrJp0XqJUnf9+Lz20ZE80rl+PSD09CBRxVMjnVvOik=; _csrf=06baa80d-35e2-45f2-99ac-06248eb64664; bm_sv=3420CE462BDD242691BAB5FFBC7DEFB7~YAAQ7BghFwZyRpSeAQAARA0YrgCKPkiydlvcoG5bMSejuKRzWb2sKB9jw5phpMnwtCY8O8Bsa61BOHBbUAhzKbFcs520A+tAgqov8mTKPLPGv2ldOgxPbHGwTzyZzyUjqKebM9pAe6sfYwZqgH+SyopXvD2kcpCLZP50jnWXFEx4praZ/TWy4dPAUCAChHoqo2LKNOvdbo8qQkUigDaO7rb6VeBfhHeEp0xcuCItAFsY0QjkXrQNAtmnz4MHSuQN7qKnow==~1');
 
 	$response = curl_exec($ch);
 
@@ -154,11 +171,19 @@ function updateBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
 		$output['error'] = "Missing selections in response from $draftkings";
 		return $output;
 	}
-	$data = $data->selections;
 	$map = [];
 
-	foreach ($data as $selection) {
+	$marketId = null;
+	foreach ($data->markets as $market) {
+		if ($market->marketType->name === "Anytime Goalscorer") {
+			$marketId = $market->id;
+			break;
+		}
+	}
+
+	foreach ($data->selections as $selection) {
 		if (isset($selection->outcomeType) && $selection->outcomeType !== "ToScoreAnyTime") continue;
+		if ($marketId && $selection->marketId !== $marketId) continue;
 		$map[] = [
 			"name" => $selection->participants[0]->seoIdentifier ?? $selection->participants[0]->name,
 			"odds" => $selection->trueOdds
