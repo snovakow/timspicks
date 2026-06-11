@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 import { getEntries } from '../utility';
 import type { LogStatsKey, SportsbookKey, LogLines } from '../dataTypes';
 import { Sportsbooks } from '../dataTypes';
@@ -11,6 +9,8 @@ type SportsbookLog = Record<LogStatsKey, LogLines>
 
 interface StatsPopupContentProps {
 	bookStats: SportsbookLog | null;
+	selectedKey: LogStatsKey;
+	onSelectKey: (key: LogStatsKey) => void;
 }
 
 const emptyStats: LogLines = [[
@@ -22,8 +22,7 @@ const emptyStats: LogLines = [[
 	}
 ]];
 
-export default function StatsPopupContent({ bookStats }: StatsPopupContentProps) {
-	const [selectedKey, setSelectedKey] = useState<LogStatsKey>('betAvg');
+export default function StatsPopupContent({ bookStats, selectedKey, onSelectKey }: StatsPopupContentProps) {
 
 	const display = bookStats?.[selectedKey] ?? emptyStats;
 	return (
@@ -35,7 +34,7 @@ export default function StatsPopupContent({ bookStats }: StatsPopupContentProps)
 						type="button"
 						className={`sportsbook-item${selectedKey === key ? ' sportsbook-selected' : ''}`}
 						aria-label={book.title}
-						onClick={() => setSelectedKey(selectedKey === key ? 'betAvg' : key as SportsbookKey)}
+						onClick={() => onSelectKey(selectedKey === key ? 'betAvg' : key as SportsbookKey)}
 					>
 						<img className="sportsbook-logo sportsbook-logo-rounded" src={book.logo} alt={`${book.title} logo`} />
 						<span>{book.title}</span>

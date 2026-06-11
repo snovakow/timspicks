@@ -343,6 +343,7 @@ function App() {
 	const [showPopup, setShowPopup] = useState<{ visible: boolean; title: string; key?: LogStatsKey }>({ visible: false, title: 'Stats', key: 'betAvg' });
 	const [popupStats, setPopupStats] = useState<SportsbookLog | null>(null);
 	const [popupView, setPopupView] = useState<'info' | 'legend' | 'stats' | 'settings'>('stats');
+	const [selectedStatsKey, setSelectedStatsKey] = useState<LogStatsKey>('betAvg');
 
 	const closePopup = () => {
 		setShowPopup({ ...showPopup, visible: false });
@@ -549,7 +550,7 @@ function App() {
 							onXgEnabledChange={setXgEnabled}
 						/>
 					) : (
-						<StatsPopupContent bookStats={popupStats} />
+						<StatsPopupContent bookStats={popupStats} selectedKey={selectedStatsKey} onSelectKey={setSelectedStatsKey} />
 					)}
 				</Popup>
 
