@@ -53,13 +53,14 @@ export class ComboGroup<T> {
     prob3 = 0;
 
     add(candidate: SelectionCandidate<T>) {
-        const max1 = candidate.prob1 >= this.prob1;
-        if (!max1) return;
-        const max2 = candidate.prob2 >= this.prob2;
-        if (!max2) return;
-        const max3 = candidate.prob3 >= this.prob3;
-        if (!max3) return;
-        if (candidate.prob1 > this.prob1 || candidate.prob2 > this.prob2 || candidate.prob3 > this.prob3) {
+        // Compare by sum of probabilities — order-independent since addition is commutative.
+        // All candidates with the maximum sum are kept as ties.
+        const candidateSum = candidate.prob1 + candidate.prob2 + candidate.prob3;
+        const currentSum = this.prob1 + this.prob2 + this.prob3;
+
+        if (candidateSum < currentSum) return;
+
+        if (candidateSum > currentSum) {
             this.combos.splice(0, this.combos.length, candidate);
             this.prob1 = candidate.prob1;
             this.prob2 = candidate.prob2;
