@@ -1375,13 +1375,12 @@ export const bestPicks = async (
 		return 'tied';
 	};
 
-	const ranked = results.map((result, originalIndex) => ({
+	const ranked = results.map((result) => ({
 		result,
-		originalIndex,
 		metrics: toMetrics(result),
 	}));
 
-	// Sort by least1-only ranking priority. If fully tied, preserve original insertion order.
+	// Sort by least1-only ranking priority.
 	ranked.sort((left, right) => {
 		const least1Compare = compareDesc(left.metrics.least1, right.metrics.least1);
 		if (least1Compare !== 0) return least1Compare;
@@ -1395,7 +1394,7 @@ export const bestPicks = async (
 		const xgCompare = compareDesc(left.metrics.xg, right.metrics.xg);
 		if (xgCompare !== 0) return xgCompare;
 
-		return left.originalIndex - right.originalIndex;
+		return 0;
 	});
 
 	for (let index = 0; index < ranked.length; index++) {
@@ -1431,6 +1430,16 @@ export const bestPicks = async (
 			tieGroupCount++;
 			tieGroupByIndex[index] = tieGroupCount;
 		}
+	}
+
+	const displayRankByIndex: number[] = [];
+	for (let index = 0; index < ranked.length; index++) {
+		if (index === 0) {
+			displayRankByIndex.push(1);
+			continue;
+		}
+		const isSameAsPrevious = metricsEqual(ranked[index].metrics, ranked[index - 1].metrics);
+		displayRankByIndex.push(isSameAsPrevious ? displayRankByIndex[index - 1] : index + 1);
 	}
 
 	results.splice(0, results.length, ...ranked.map((item) => item.result));
@@ -1475,7 +1484,7 @@ export const bestPicks = async (
 		},
 		{
 			key: 'tied',
-			label: 'Fully tied on all rank metrics (original order kept)',
+			label: 'Fully tied on all rank metrics',
 		},
 	];
 	const getStrategyBooks = (result: BestPicksResult, strategy: Strategy): LogStatsKey[] => {
@@ -1621,7 +1630,7 @@ export const bestPicks = async (
 		});
 		return {
 			index: idx,
-			rank: idx + 1,
+			rank: displayRankByIndex[idx],
 			rankedBy: result.rankedBy,
 			isTied: result.isTied,
 			tieGroup: tieGroupByIndex[idx],
@@ -1655,9 +1664,15 @@ export const bestPicks = async (
 	}
 
 	for (const payload of displayPayloads) {
-		console.log(makeTitle(`* Result #${payload.rank} of ${displayPayloads.length}`));
+		const tieHeader = payload.tieGroup !== null
+			? `* Shared Rank #${payload.rank} (tie group #${payload.tieGroup}) of ${displayPayloads.length}`
+			: `* Rank #${payload.rank} of ${displayPayloads.length}`;
+		console.log(makeTitle(tieHeader));
 		console.log(`• Metric snapshot: ${payload.metricSnapshot}`);
 		console.log(`• Why at this rank: ${payload.rankExplain}`);
+		if (payload.tieGroup !== null) {
+			console.log(`• Tie semantics: This result is fully tied; entries in tie group #${payload.tieGroup} share rank #${payload.rank} with no further ranking between them.`);
+		}
 		if (payload.rankedBy) {
 			const tieSuffix = payload.tieGroup !== null ? ` | tie group #${payload.tieGroup}` : '';
 			console.log(`• Rank reason: ${rankReasonLabel[payload.rankedBy]}${tieSuffix}`);
