@@ -179,7 +179,13 @@ function App() {
 					initialData.playerOddsBetRivers
 				);
 
-				setData({ gamesList, playerList, table1Rows, table2Rows, table3Rows });
+				setData({
+					gamesList,
+					playerList,
+					table1Rows,
+					table2Rows,
+					table3Rows,
+				});
 				setError(null);
 			} catch (error: unknown) {
 				if (error instanceof Error && error.message === DataProcessor.NO_GAMES_ERROR) {
@@ -188,7 +194,13 @@ function App() {
 					console.error('Failed to load initial data:', error);
 					setError('Failed to load game data. Please refresh the page.');
 				}
-				setData({ gamesList: [], playerList: [], table1Rows: [], table2Rows: [], table3Rows: [] });
+				setData({
+					gamesList: [],
+					playerList: [],
+					table1Rows: [],
+					table2Rows: [],
+					table3Rows: [],
+				});
 			} finally {
 				setIsLoading(false);
 			}
@@ -318,7 +330,13 @@ function App() {
 		makeSortPlayer(needsSortPlayer);
 		playerList.sort(sortFunctionPlayer);
 
-		return { gamesList, playerList, table1Rows, table2Rows, table3Rows };
+		return {
+			gamesList,
+			playerList,
+			table1Rows,
+			table2Rows,
+			table3Rows,
+		};
 	}, [data, showPercentage, deVigEnabled, needsSort1, needsSort2, needsSort3, needsSortPlayer]);
 
 	// Only stats popup uses 'key', others do not
