@@ -554,6 +554,13 @@ function App() {
 					)}
 				</Popup>
 
+				{Feature.offseasonBanner && (
+					<section className="offseason-banner" role="status" aria-live="polite">
+						<p className="offseason-banner-primary">Check back for the 2026/2027 hockey season!</p>
+						<p className="offseason-banner-secondary">Offseason view: showing the last day of the 2026 Stanley Cup finals.</p>
+					</section>
+				)}
+
 				<CollapsibleSection title="Games">
 					<div className="scrollable-table-wrapper section-container">
 						{gamesList.length === 0 ? (

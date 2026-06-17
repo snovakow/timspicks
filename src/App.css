@@ -29,6 +29,7 @@ button:hover {
 	width: 1.25em;
 	justify-content: center;
 }
+
 .button-disabled {
 	visibility: hidden;
 }
@@ -127,6 +128,27 @@ button:hover {
 
 .toolbar-end {
 	justify-self: end;
+}
+
+.offseason-banner {
+	padding: 0.9rem 1rem;
+	margin: 0 0 1rem;
+	border-radius: 12px;
+	border: 1px solid color-mix(in srgb, var(--c-link) 35%, transparent);
+	background: color-mix(in srgb, var(--c-link) 10%, transparent);
+	text-align: center;
+}
+
+.offseason-banner-primary {
+	margin: 0;
+	font-weight: 700;
+	font-size: 1.02rem;
+}
+
+.offseason-banner-secondary {
+	margin: 0.35rem 0 0;
+	font-size: 0.95rem;
+	opacity: 0.9;
 }
 
 .no-games-message {
