@@ -106,16 +106,18 @@ export function LegendPopupContent() {
 	return (
 		<div className="info-popup-layout">
 			<section className="info-popup-section">
-				<p className="legend-pick-row"><span className="cell-bet-with-dots legend-badge-cell highlight-top-bg">
-					<span className="cell-bet-value">Pick</span>
-					<span className="cell-strategy-dots" aria-hidden="true">
-						<span className="cell-strategy-dot cell-strategy-dot-least1 cell-strategy-dot-active" />
-						<span className="cell-strategy-dot cell-strategy-dot-points cell-strategy-dot-active" />
-						<span className="cell-strategy-dot cell-strategy-dot-hits cell-strategy-dot-active" />
-						<span className="cell-strategy-dot cell-strategy-dot-top cell-strategy-dot-active" />
+				<p className="legend-pick-row">
+					<span className="cell-bet-with-dots legend-badge-cell highlight-top-bg">
+						<span className="cell-bet-value">Pick</span>
+						<span className="cell-strategy-dots" aria-hidden="true">
+							<span className="cell-strategy-dot cell-strategy-dot-least1 cell-strategy-dot-active" />
+							<span className="cell-strategy-dot cell-strategy-dot-points cell-strategy-dot-active" />
+							<span className="cell-strategy-dot cell-strategy-dot-hits cell-strategy-dot-active" />
+							<span className="cell-strategy-dot cell-strategy-dot-top cell-strategy-dot-active" />
+						</span>
 					</span>
-				</span>
-					<span className="legend-pick-text">Green background highlight indicates a highest-probability pick, with circular badges indicating which strategies correspond to the pick.</span></p>
+					<span className="legend-pick-text">Green background highlight indicates a highest-probability pick, with circular badges indicating which strategies correspond to the pick.</span>
+				</p>
 			</section>
 
 			<section className="info-popup-section">
