@@ -1,4 +1,28 @@
-# hockey
+# Tims Picks
+App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hortons Hockey Challenge is a contest for picking goal scorers in NHL games. The app uses sportsbook implied probability odds to calculate optimal picks.
+
+## About
+During the 2025-2026 season, the Tim Hortons Hockey Challenge presented 6 Challenges in addition to the Playoffs.
+
+During the period of Challenges 1 to 3, I would play by making random picks. I am not a knowledgeable hockey fan, and hoped to get some points by pure chance. I ranked better than almost half of the players. Challenge 3 had a poorer result, likely due to missed picks while vacationing.
+
+In early January, by pure luck, 6 consecutive correct picks were made. Being close to win a week's worth of free coffee by making 7 consecutive correct picks, I used goals per game stats to successfully make the 7th pick.
+
+Finding the challenge fun, I continued using goals per game stats, began using sportsbook odds to help make picks, and began developing this app to compile and rank sportsbook odds. Challenges 4 and 5 covered this period, and my winning rate improved to the top 1 in about 20 players.
+
+Challenge 6 and the playoffs are the result of using sportsbook odds to make picks. The Challenge 6 ranked in the top 0.38%, and the Playoffs in the top 1.33%.
+
+## 2025-2026 Season Results
+| Challenge   | Period               | Ranking  | Players | Top %  |
+| ----------- | -------------------- | -------: | ------: | -----: |
+| Challenge 1 | Oct 7 - Oct 31, 2025 | 275010   | 531047  | 51.79% |
+| Challenge 2 | Nov 1 - Nov 30, 2025 | 281160   | 533456  | 52.71% |
+| Challenge 3 | Dec 1 - Dec 31, 2025 | 297333   | 507403  | 58.60% |
+| Challenge 4 | Jan 1 - Jan 31, 2026 | 22665    | 537831  | 4.21%  |
+| Challenge 5 | Feb 1 - Feb 28, 2026 | 38955    | 466675  | 8.35%  |
+| Challenge 6 | Mar 1 - Apr 16, 2026 | 2314     | 601063  | 0.38%  |
+| Playoffs    | Apr 18, 2026         | 7563     | 567347  | 1.33%  |
+
 [Similar to](https://hockeychallengehelper.com/)
 
 [5v5 hockey](https://5v5hockey.com/ai-betting/tims-picks/)
