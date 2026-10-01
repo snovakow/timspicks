@@ -25,6 +25,18 @@ function updateGames(DateTime $now, string $basePath)
 	return $output;
 }
 
+/* Cached player data is refreshed when missing or when the player changes teams */
+function playerFileCurrent(string $local_file, string $team)
+{
+	if (!file_exists($local_file)) return false;
+
+	$data = file_get_contents($local_file);
+	if ($data === false) return false;
+
+	$data = json_decode($data, false);
+	return isset($data->currentTeamAbbrev) && $data->currentTeamAbbrev === $team;
+}
+
 /* Picks */
 function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool $savesrc = false)
 {
@@ -86,7 +98,7 @@ function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool 
 			$playerId = $player->nhlPlayerId < 0 ? -$player->nhlPlayerId : $player->nhlPlayerId;
 
 			$local_file = "{$playerPath}/{$playerId}.json";
-			if (!file_exists($local_file)) {
+			if (!playerFileCurrent($local_file, (string)$player->team)) {
 				$url = "https://api-web.nhle.com/v1/player/{$playerId}/landing";
 
 				$response = file_get_contents($url);
@@ -173,17 +185,15 @@ function updateBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
 	}
 	$map = [];
 
-	$marketId = null;
+	// One Anytime Goalscorer market per game
+	$marketIds = [];
 	foreach ($data->markets as $market) {
-		if ($market->marketType->name === "Anytime Goalscorer") {
-			$marketId = $market->id;
-			break;
-		}
+		if ($market->marketType->name === "Anytime Goalscorer") $marketIds[$market->id] = true;
 	}
 
 	foreach ($data->selections as $selection) {
 		if (isset($selection->outcomeType) && $selection->outcomeType !== "ToScoreAnyTime") continue;
-		if ($marketId && $selection->marketId !== $marketId) continue;
+		if (!isset($marketIds[$selection->marketId])) continue;
 		$map[] = [
 			"name" => $selection->participants[0]->seoIdentifier ?? $selection->participants[0]->name,
 			"odds" => $selection->trueOdds
@@ -209,12 +219,7 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 	$fanduel = 'https://sbapi.on.sportsbook.fanduel.ca/api/content-managed-page?page=CUSTOM&customPageId=nhl&pbHorizontal=false&_ak=FhMFpcPWXMeyZxOx&timezone=America%2FNew_York';
 	$local_file = $basePath . '/bet2.json';
 
-	curl_reset($ch);
-
-	curl_setopt($ch, CURLOPT_URL, $fanduel);
-	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
-	curl_setopt($ch, CURLOPT_HTTPHEADER, [
+	$headers = [
 		'accept: application/json',
 		'accept-language: en-US,en;q=0.9',
 		'cache-control: no-cache',
@@ -231,7 +236,14 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 		'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
 		'x-px-context: _px3=98e6a5091287e11efd918ca990e430abc0584021256cf8912c9bcb6bd39af22a:5/CDG9AQvvmihGG6211Yz6LoC6LVM8My5tfqaG9gnVMqKdT/aa8JqT/v1hKZuq2vj9f2Xn41JinV1txRa1hwqQ==:1000:j0v9ImgsRNhSlmWiq5Iq7Ul2P05kFf2DV0BgnBgs26/1jNMN/NJz+3AHcZR70Z5ol1KzI3A43iGOWflKX3UauM9UFOoYID1q0nb339ot4lj6DxpuUk5Ye8W/IY4a3Nngwb6zMjAUz0ggBDGKXB2c5Y1C8DDEZZOT3KG/edd81LZa6KFt0ty9wtXwWiOH0h/kNxhlViyFIY38IT9BgD/7IoHdEsDSPd2GNmQL/XnaAQnxWpEKmj8l8kYr+wsMnpcO7VMZ/5ktJd759KqUXh9nANsZCz5g3OUUpOYBX0OhWvQyG7PNiNcakFf/QGzfp+YvsFgv8aC6d4ZjaNkb/fFnefZrZwlSk2nX61AI+bsZVa1M3R5DpjzlERPSr72eRbJdOTITEOpbkCgI38G0dbSD14HUC3Qmgoot9jjoTBQgg/33ipqvjc07wvr+F7rWKWCcU/a52zlcH5WQQtSAAOM4mSrS3MXZWApT6oF0BiMqDL0VFe+/oNurqKgqX2M1DexU;_pxvid=5e4ed398-1409-11f1-9c4c-73f30c9ee40b;pxcts=5e4edb9a-1409-11f1-9c4d-a70d1e54286e;',
 		'x-sportsbook-region: ON',
-	]);
+	];
+
+	curl_reset($ch);
+
+	curl_setopt($ch, CURLOPT_URL, $fanduel);
+	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
+	curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
 	$response = curl_exec($ch);
 
@@ -247,45 +259,80 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 		$output['error'] = "Error decoding JSON from $fanduel: " . json_last_error_msg();
 		return $output;
 	}
-	$data = $data->attachments;
-	$data = $data->markets;
-	$markets = [];
-	foreach ($data as $market) {
-		if ($market->marketType !== 'ANY_TIME_GOAL_SCORER') continue;
+	if (!isset($data->attachments->markets)) {
+		$output['error'] = "Missing markets in response from $fanduel";
+		return $output;
+	}
+
+	// The NHL page lists today's games, goal scorer markets are on each game's own page
+	$eventIds = [];
+	foreach ($data->attachments->markets as $market) {
+		if ($market->marketType !== 'MONEY_LINE') continue;
 		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $market->marketTime);
 		if (!$closingTime) continue;
 		if ($closingTime > $endOfDay) continue;
-		$markets[] = $market;
-	}
-	if (count($markets) > 1) {
-		$list = [];
-		foreach ($markets as $market) {
-			if ($market->marketName !== 'Any Time Goal Scorer' && $market->marketName !== 'Anytime Goal Scorer') continue;
-			$list[] = $market;
-		}
-		$markets = $list;
-	}
-	if (count($markets) > 1) {
-		$list = [];
-		foreach ($markets as $market) {
-			if (!isset($market->marketLevels)) continue;
-			if ($market->marketLevels[0] !== 'AVB_EVENT') continue;
-			$list[] = $market;
-		}
-		$markets = $list;
+		$eventIds[$market->eventId] = true;
 	}
 
 	$map = [];
-	foreach ($markets as $market) {
-		foreach ($market->runners as $runner) {
-			$num = $runner->winRunnerOdds->trueOdds->fractionalOdds->numerator;
-			$den = $runner->winRunnerOdds->trueOdds->fractionalOdds->denominator;
-			$trueOdds = $num / $den + 1;
+	foreach (array_keys($eventIds) as $eventId) {
+		$url = 'https://sbapi.on.sportsbook.fanduel.ca/api/event-page?_ak=FhMFpcPWXMeyZxOx&eventId=' . $eventId . '&tab=goals';
 
-			$map[] = [
-				"name" => $runner->runnerName,
-				"odds" => $trueOdds
-			];
+		curl_reset($ch);
+
+		curl_setopt($ch, CURLOPT_URL, $url);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
+		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+		$response = curl_exec($ch);
+		if ($response === false) {
+			$output['error'] = 'cURL Error: ' . curl_error($ch);
+			return $output;
+		}
+
+		if ($savesrc) file_put_contents($basePath . '/src_bet2_' . $eventId . '.json', $response);
+
+		$event = json_decode($response, false);
+		if (json_last_error() !== JSON_ERROR_NONE) {
+			$output['error'] = "Error decoding JSON from $url: " . json_last_error_msg();
+			return $output;
+		}
+
+		$markets = [];
+		foreach ($event->attachments->markets ?? [] as $market) {
+			if ($market->marketType !== 'ANY_TIME_GOAL_SCORER') continue;
+			$markets[] = $market;
+		}
+		if (count($markets) > 1) {
+			$list = [];
+			foreach ($markets as $market) {
+				if ($market->marketName !== 'Any Time Goal Scorer' && $market->marketName !== 'Anytime Goal Scorer') continue;
+				$list[] = $market;
+			}
+			$markets = $list;
+		}
+		if (count($markets) > 1) {
+			$list = [];
+			foreach ($markets as $market) {
+				if (!isset($market->marketLevels)) continue;
+				if ($market->marketLevels[0] !== 'AVB_EVENT') continue;
+				$list[] = $market;
+			}
+			$markets = $list;
+		}
+
+		foreach ($markets as $market) {
+			foreach ($market->runners as $runner) {
+				$num = $runner->winRunnerOdds->trueOdds->fractionalOdds->numerator;
+				$den = $runner->winRunnerOdds->trueOdds->fractionalOdds->denominator;
+				$trueOdds = $num / $den + 1;
+
+				$map[] = [
+					"name" => $runner->runnerName,
+					"odds" => $trueOdds
+				];
+			}
 		}
 	}
 
@@ -295,7 +342,7 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 		return $output;
 	}
 
-	$output['content'] = "Data has been written to $local_file";
+	$output['content'] = count($eventIds) . " games of data have been merged and written to $local_file";
 	return $output;
 }
 
@@ -422,7 +469,7 @@ function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 			return $output;
 		}
 
-		foreach ($json_data->fixture->games as $game) {
+		foreach ($json_data->fixture->games ?? [] as $game) {
 			if ($game->name->value !== "Anytime goalscorer") continue;
 			$data_array = $game->results;
 
@@ -432,6 +479,21 @@ function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 				$map[] = [
 					"name" => $result->name->value,
 					"odds" => $result->odds
+				];
+			}
+		}
+
+		// Newer fixture format lists markets under optionMarkets
+		foreach ($json_data->fixture->optionMarkets ?? [] as $market) {
+			if ($market->name->value !== "Anytime goalscorer") continue;
+			$data_array = $market->options;
+
+			if ($savesrc) $items[] = $data_array;
+
+			foreach ($data_array as $option) {
+				$map[] = [
+					"name" => $option->name->value,
+					"odds" => $option->price->odds
 				];
 			}
 		}
@@ -485,16 +547,18 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 		}
 
 		foreach ($data_array->items as $item) {
-			$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $item->closingTime);
+			// Newer responses nest the closing time and odds under betOffers
+			$offer = $item->betOffers[0] ?? $item;
+			$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $offer->closingTime);
 			if (!$closingTime) {
-				$output['error'] = "Invalid date format in response: " . $item->closingTime;
+				$output['error'] = "Invalid date format in response: " . $offer->closingTime;
 				return $output;
 			}
 			if ($closingTime > $endOfDay) continue;
 
 			$map[] = [
 				"name" => $item->playerInfo->name,
-				"odds" => $item->outcomes[0]->odds
+				"odds" => $offer->outcomes[0]->odds
 			];
 		}
 
@@ -524,16 +588,17 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 			if ($savesrc) $items[] = $data_array->items;
 
 			foreach ($data_array->items as $item) {
-				$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $item->closingTime);
+				$offer = $item->betOffers[0] ?? $item;
+				$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $offer->closingTime);
 				if (!$closingTime) {
-					$output['error'] = "Invalid date format in response: " . $item->closingTime;
+					$output['error'] = "Invalid date format in response: " . $offer->closingTime;
 					return $output;
 				}
 				if ($closingTime > $endOfDay) continue;
 
 				$map[] = [
 					"name" => $item->playerInfo->name,
-					"odds" => $item->outcomes[0]->odds
+					"odds" => $offer->outcomes[0]->odds
 				];
 			}
 		}
