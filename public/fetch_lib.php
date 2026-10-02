@@ -1,5 +1,43 @@
 <?php
 
+/*
+	Two callers: fetch_service.php in this folder, and update.php, which lives in its own tree and is
+	copied to the server separately. Nothing builds or type-checks that pairing, so every parameter
+	added to a function here carries a default — a required one breaks the cron silently.
+*/
+
+/* A fetch's body, or the status or empty body that came back instead of one. Every feed here answers
+   with JSON, so this has to run before json_decode reports an outage as "Error decoding JSON". */
+function fetchCurl(CurlHandle $ch, string $url)
+{
+	$response = curl_exec($ch);
+	if ($response === false) return ['body' => null, 'status' => null, 'error' => 'cURL Error: ' . curl_error($ch)];
+
+	$status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+	if ($status < 200 || $status > 299) return ['body' => null, 'status' => $status, 'error' => "HTTP $status from $url"];
+	if (trim($response) === '') return ['body' => null, 'status' => $status, 'error' => "Empty response from $url (HTTP $status)"];
+
+	return ['body' => $response, 'status' => $status, 'error' => null];
+}
+
+/* The same for the http stream wrapper, which fails a non-2xx itself but only as a PHP warning, so the
+   status has to be read back out of the headers it leaves behind */
+function fetchUrl(string $url)
+{
+	$response = @file_get_contents($url);
+
+	$status = null;
+	foreach ($http_response_header ?? [] as $header) {
+		if (preg_match('#^HTTP/\S+ (\d{3})#', $header, $match)) $status = (int)$match[1];
+	}
+	$detail = $status === null ? '' : " (HTTP $status)";
+
+	if ($response === false) return ['body' => null, 'status' => $status, 'error' => "Fetch failed from $url$detail"];
+	if (trim($response) === '') return ['body' => null, 'status' => $status, 'error' => "Empty response from $url$detail"];
+
+	return ['body' => $response, 'status' => $status, 'error' => null];
+}
+
 /* Games */
 function updateGames(DateTime $now, string $basePath)
 {
@@ -11,11 +49,12 @@ function updateGames(DateTime $now, string $basePath)
 	$local_file = $basePath . '/games.json';
 
 	// Fetch the JSON data
-	$response = file_get_contents($url);
-	if ($response === false) {
-		$output['error'] = 'Error fetching NHL data: ' . $url;
+	$fetched = fetchUrl($url);
+	if ($fetched['error'] !== null) {
+		$output['error'] = $fetched['error'];
 		return $output;
 	}
+	$response = $fetched['body'];
 
 	if (file_put_contents($local_file, $response, LOCK_EX) === false) {
 		$output['error'] = 'Error saving local JSON file: ' . $local_file;
@@ -63,22 +102,22 @@ function resolvePlayerId(CurlHandle $ch, string $firstName, string $lastName, st
 	$target = "$first $last";
 
 	curl_reset($ch);
-	curl_setopt($ch, CURLOPT_URL, 'https://search.d3.nhle.com/api/v1/search/player?' . http_build_query([
+	$url = 'https://search.d3.nhle.com/api/v1/search/player?' . http_build_query([
 		'culture' => 'en-us',
 		'limit' => 20,
 		'q' => "$firstName $lastName",
 		'active' => 'true',
-	]));
+	]);
+	curl_setopt($ch, CURLOPT_URL, $url);
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 	curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
 	curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 
-	$response = curl_exec($ch);
-	if ($response === false) return ['id' => 0, 'detail' => 'player search failed: ' . curl_error($ch)];
+	$fetched = fetchCurl($ch, $url);
+	if ($fetched['error'] !== null) return ['id' => 0, 'detail' => "player search failed: {$fetched['error']}"];
 
-	$status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-	$results = json_decode($response, false);
-	if ($status !== 200 || !is_array($results)) return ['id' => 0, 'detail' => "player search returned an invalid response (HTTP $status)"];
+	$results = json_decode($fetched['body'], false);
+	if (!is_array($results)) return ['id' => 0, 'detail' => "player search returned an invalid response (HTTP {$fetched['status']})"];
 
 	$candidates = [];
 	foreach ($results as $result) {
@@ -174,11 +213,12 @@ function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool 
 		'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
 	]);
 
-	$response = curl_exec($ch);
-	if ($response === false) {
-		$output['error'] = 'cURL Error: ' . curl_error($ch);
+	$fetched = fetchCurl($ch, $helper);
+	if ($fetched['error'] !== null) {
+		$output['error'] = $fetched['error'];
 		return $output;
 	}
+	$response = $fetched['body'];
 
 	if ($savesrc) file_put_contents($basePath . '/src_helper.json', $response);
 
@@ -216,11 +256,12 @@ function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool 
 			if (!playerFileCurrent($local_file, $team)) {
 				$url = "https://api-web.nhle.com/v1/player/{$playerId}/landing";
 
-				$response = file_get_contents($url);
-				if ($response === false) {
-					$output['error'] = 'Error fetching player data: ' . $url;
+				$fetched = fetchUrl($url);
+				if ($fetched['error'] !== null) {
+					$output['error'] = $fetched['error'];
 					return $output;
 				}
+				$response = $fetched['body'];
 
 				if (file_put_contents($local_file, $response, LOCK_EX) === false) {
 					$output['error'] = 'Error saving local player JSON file: ' . $local_file;
@@ -279,12 +320,12 @@ function updateBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
 		'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
 	]);
 
-	$response = curl_exec($ch);
-
-	if ($response === false) {
-		$output['error'] = 'cURL Error: ' . curl_error($ch);
+	$fetched = fetchCurl($ch, $draftkings);
+	if ($fetched['error'] !== null) {
+		$output['error'] = $fetched['error'];
 		return $output;
 	}
+	$response = $fetched['body'];
 
 	if ($savesrc) file_put_contents($basePath . '/src_bet1.json', $response);
 
@@ -359,12 +400,12 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 	curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
 	curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
-	$response = curl_exec($ch);
-
-	if ($response === false) {
-		$output['error'] = 'cURL Error: ' . curl_error($ch);
+	$fetched = fetchCurl($ch, $fanduel);
+	if ($fetched['error'] !== null) {
+		$output['error'] = $fetched['error'];
 		return $output;
 	}
+	$response = $fetched['body'];
 
 	if ($savesrc) file_put_contents($basePath . '/src_bet2.json', $response);
 
@@ -399,11 +440,12 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
 		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
-		$response = curl_exec($ch);
-		if ($response === false) {
-			$output['error'] = 'cURL Error: ' . curl_error($ch);
+		$fetched = fetchCurl($ch, $url);
+		if ($fetched['error'] !== null) {
+			$output['error'] = $fetched['error'];
 			return $output;
 		}
+		$response = $fetched['body'];
 
 		if ($savesrc) file_put_contents($basePath . '/src_bet2_' . $eventId . '.json', $response);
 
@@ -493,11 +535,12 @@ function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 		'x-from-product: host-app',
 	]);
 
-	$response = curl_exec($ch);
-	if ($response === false) {
-		$output['error'] = 'cURL Error: ' . curl_error($ch);
+	$fetched = fetchCurl($ch, $remote_url);
+	if ($fetched['error'] !== null) {
+		$output['error'] = $fetched['error'];
 		return $output;
 	}
+	$response = $fetched['body'];
 
 	if ($savesrc) file_put_contents($basePath . '/src_bet3_0.json', $response);
 	$json_data = json_decode($response, false);
@@ -553,11 +596,12 @@ function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 			'x-from-product: host-app',
 		]);
 
-		$response = curl_exec($ch);
-		if ($response === false) {
-			$output['error'] = 'cURL Error: ' . curl_error($ch);
+		$fetched = fetchCurl($ch, $url);
+		if ($fetched['error'] !== null) {
+			$output['error'] = $fetched['error'];
 			return $output;
 		}
+		$response = $fetched['body'];
 
 		if ($savesrc) file_put_contents($basePath . '/src_bet3_' . $id . '.json', $response);
 
@@ -616,7 +660,7 @@ function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 /* BetRivers */
 function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 {
-	$output = ['title' => null, 'content' => null, 'error' => null];
+	$output = ['title' => null, 'content' => null, 'warning' => [], 'error' => null];
 	$output['title'] = 'BetRivers';
 
 	$remote_url_base = 'https://on.betrivers.ca/api/service/sportsbook/offering/propcentral/offers?groupId=1000093657&marketCategory=TO_SCORE&pageSize=20&cageCode=249&t=' . time() . '&pageNr=';
@@ -624,9 +668,12 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 
 	$remote_url = $remote_url_base . '1';
 
-	$json_data = file_get_contents($remote_url);
+	$fetched = fetchUrl($remote_url);
+	$json_data = $fetched['body'];
 	$map = [];
-	if ($json_data === false) {
+	if ($json_data === null) {
+		// Tolerated as "no offers today", the way it always has been, but it should not pass for a quiet day
+		$output['warning'][] = "No offers recorded: {$fetched['error']}";
 		$pages = 0;
 	} else {
 		if ($savesrc) file_put_contents($basePath . '/src_bet4_1.json', $json_data);
@@ -668,12 +715,12 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 
 		for ($i = 2; $i <= $pages; $i++) {
 			$remote_url = $remote_url_base . $i;
-			$json_data = file_get_contents($remote_url);
-
-			if ($json_data === false) {
-				$output['error'] = "Error fetching $remote_url";
+			$fetched = fetchUrl($remote_url);
+			if ($fetched['error'] !== null) {
+				$output['error'] = $fetched['error'];
 				return $output;
 			}
+			$json_data = $fetched['body'];
 
 			if ($savesrc) file_put_contents($basePath . '/src_bet4_' . $i . '.json', $json_data);
 
@@ -810,8 +857,12 @@ function startRun(DateTime $now, string $basePath)
 	file_put_contents($local_file, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), LOCK_EX);
 }
 
-/* processed metadata object */
-function processed(DateTime $now, string $basePath, array $warnings)
+/*
+	processed metadata object. $warnings defaults because update.php calls this from its own tree and is
+	deployed separately: when this gained a required third parameter, every cron run between midnight and
+	3 a.m. died on ArgumentCountError after a full scrape, and nothing advanced process.json.
+*/
+function processed(DateTime $now, string $basePath, array $warnings = [])
 {
 	// Write $now as "processed" and the run's warnings to process.json at the end of Backup, which also clears "started"
 	$processObj = ["processed" => $now->format(DateTime::ATOM), "warnings" => $warnings];
