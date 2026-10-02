@@ -39,6 +39,8 @@ Challenge 6 and the playoffs are the result of using sportsbook odds to make pic
 
 Reacts adaptively to light-dark scheme
 
+Shows a notice when the data is over a day old, an update didn't finish, or the last update had warnings
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
