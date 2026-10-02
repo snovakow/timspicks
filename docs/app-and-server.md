@@ -38,15 +38,27 @@ are an update period of one hour and a buffer of 60 seconds:
 - Otherwise update once per period, or as soon as a game start time has passed
   since the previous run.
 - Never within the buffer of a game start time, or of midnight.
+- No retry within the period of a run that failed.
 
-The gate only engages once both `process.json` and a today-dated `games.json`
-parse; otherwise the run proceeds unthrottled, which is what bootstraps a new
-day. The net effect is a handful of runs a day, not 1,440 — 2026-10-01 produced
-four snapshot folders.
+The midnight buffer and the failed-run hold are checked on their own, before
+anything reads `games.json`. The rest of the gate needs both `process.json` and
+a today-dated `games.json` to parse, and at rollover `games.json` still holds
+yesterday's schedule — so a check that waited on it would be skipped at exactly
+the minute the upstream feeds are least likely to answer with JSON. The
+unthrottled fall-through that remains is what bootstraps a new day.
+
+The net effect is roughly hourly, plus a run shortly after each game start —
+about two dozen a day, not 1,440. Fewer snapshot folders than that appear, since
+each is named for the next upcoming game and every run before that puck drop
+overwrites it: the folder count tracks game slots, not runs. 2026-10-01 produced
+four.
 
 Backups are additionally skipped before 3 a.m. ET, to let any time-zone shift
-pass first. The clock is `America/New_York` throughout, and day folders roll
-over at ET midnight.
+pass first — times are stored in local time, so a shift could misname a day
+folder or its game-time subfolder. Three hours of real time added to local
+midnight lands past the shift either way: 4 a.m. EDT in March, 2 a.m. EST in
+November. The clock is `America/New_York` throughout, and day folders roll over
+at ET midnight.
 
 ## The feeds
 
@@ -66,6 +78,13 @@ that arrive with a missing or wrong id.
 `bet2`, `bet3` and `bet4` take an end-of-day cutoff and drop markets closing
 after it. `bet1` takes none, so `bet1.json` can include tomorrow's games — worth
 remembering when book coverage looks uneven.
+
+Every fetch goes through `fetchCurl` or `fetchUrl`, which reject a non-2xx status
+or an empty body before anything parses them — otherwise an outage reaches
+`json_decode` and is reported as "Error decoding JSON", which is what a feed
+mid-rollover used to look like. The exception is page 1 of `bet4`, where an
+unreachable feed has always counted as "no offers today"; it still does, but it
+records a warning now instead of passing for a quiet day.
 
 `$savesrc` dumps each raw upstream response next to the parsed one. Cron never
 enables it, and `fetch_service.php` hard-codes it to `false`.
@@ -99,9 +118,10 @@ is copied — that is the normal end-of-day state.
 `process.json` carries the run state: `startRun` stamps `started` when a run
 begins, and `processed` writes the finish time plus any warnings and clears
 `started`. The front end reads it and shows a notice when the data is over a day
-old, a run didn't finish, or the last run had warnings. Note that only the
-manual Update action currently feeds that channel — `update.php` neither calls
-`startRun` nor passes the steps' warnings into `backup`.
+old, a run didn't finish, or the last run had warnings. A run that dies partway
+leaves `started` behind, which is both what the banner reports once its
+ten-minute grace is up and what holds the next cron attempt off for an update
+period — without it, a failing feed is retried every minute.
 
 ## The admin page
 
