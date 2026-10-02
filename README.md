@@ -1,6 +1,16 @@
 # Tims Picks
 App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hortons Hockey Challenge is a contest for picking goal scorers in NHL games. The app uses sportsbook implied probability odds to calculate optimal picks.
 
+## Documentation
+
+- [The Hockey Challenge](docs/hockey-challenge.md) — how the contest works:
+  three picks a game day from three tiered pools, how the lists are redrawn as
+  games start, scoring, and the strategies the app optimizes for
+- [The app and the server](docs/app-and-server.md) — the feeds, what lands on
+  disk, the update cadence, the history archive, and how to build and deploy
+- [Deploying](docs/deployment.md) — the daily merge, build and copy routine,
+  the checks before a merge, and what changes at each end of a season
+
 ## About
 During the 2025-2026 season, the Tim Hortons Hockey Challenge presented 6 Challenges in addition to the Playoffs.
 
