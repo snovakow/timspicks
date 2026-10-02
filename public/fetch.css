@@ -75,3 +75,11 @@ body {
     background: #ffffff;
     color: #1f2937;
 }
+
+.warning {
+    margin: 0.4rem 0;
+    padding: 0.4rem 0.6rem;
+    border-left: 4px solid #d97706;
+    background: #fef3c7;
+    color: #92400e;
+}

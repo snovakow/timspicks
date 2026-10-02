@@ -1,6 +1,17 @@
 <?php
 require_once './fetch_lib.php';
 
+/* Echo a step's result, stopping the run on error, and return its warnings */
+function printOutput(array $output)
+{
+	if (isset($output['title'])) echo '<h3>' . $output['title'] . '</h3>';
+	$warnings = $output['warning'] ?? [];
+	foreach ($warnings as $warning) echo '<p class="warning">Warning: ' . htmlspecialchars($warning, ENT_QUOTES, 'UTF-8') . '</p>';
+	if (isset($output['content'])) echo $output['content'];
+	if (isset($output['error'])) die($output['error']);
+	return $warnings;
+}
+
 $live = true;
 $secure = true;
 $savesrc = false;
@@ -54,6 +65,7 @@ if ($live && isset($_GET['history'])) {
 	echo '<h2>History</h2>';
 
 	$ch = curl_init();
+	$searchCh = curl_init(); // Player search for missing ids, separate so $ch keeps its pick-list feed headers
 
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 	curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
@@ -178,10 +190,15 @@ if ($live && isset($_GET['history'])) {
 				$data = json_decode($response, false);
 				if (json_last_error() !== JSON_ERROR_NONE) die('Error decoding JSON: ' . json_last_error_msg());
 
-				if ($data->status === 404) {
+				if (($data->status ?? null) === 404) {
 					echo "No data for {$date}<br>";
 					continue;
 				}
+
+				// Save the ids the picks fetch used, so this file matches that day's helper.json backups
+				$fixed = fixHistoryPlayerIds($searchCh, $data);
+				foreach ($fixed['notes'] as $note) echo '<p class="warning">Warning: ' . htmlspecialchars($note, ENT_QUOTES, 'UTF-8') . '</p>';
+				if ($fixed['changed']) $response = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 
 				$filename = "{$season}_{$date}_{$part}.json";
 				$daily_file = $baseHistoryPath . '/' . $filename;
@@ -217,12 +234,13 @@ echo '<h1>Data Downloader</h1>';
 $timezone = new DateTimeZone('America/New_York');
 $now = new DateTime('now', $timezone);
 
+$warnings = [];
+if ($live) startRun($now, $basePath);
+
 /* Games */
 if ($live) {
 	$output = updateGames($now, $basePath);
-	if (isset($output['title'])) echo '<h3>' . $output['title'] . '</h3>';
-	if (isset($output['content'])) echo $output['content'];
-	if (isset($output['error'])) die($output['error']);
+	$warnings = array_merge($warnings, printOutput($output));
 }
 
 $ch = curl_init();
@@ -230,17 +248,13 @@ $ch = curl_init();
 /* Picks */
 if ($live) {
 	$output = updatePicks($ch, $basePath, './players', $savesrc);
-	if (isset($output['title'])) echo '<h3>' . $output['title'] . '</h3>';
-	if (isset($output['content'])) echo $output['content'];
-	if (isset($output['error'])) die($output['error']);
+	$warnings = array_merge($warnings, printOutput($output));
 }
 
 /* DraftKings */
 if ($live) {
 	$output = updateBet1($ch, $basePath, $savesrc);
-	if (isset($output['title'])) echo '<h3>' . $output['title'] . '</h3>';
-	if (isset($output['content'])) echo $output['content'];
-	if (isset($output['error'])) die($output['error']);
+	$warnings = array_merge($warnings, printOutput($output));
 }
 
 $endOfDay = new DateTime('tomorrow midnight', $timezone);
@@ -248,34 +262,28 @@ $endOfDay = new DateTime('tomorrow midnight', $timezone);
 /* FanDuel */
 if ($live) {
 	$output = updateBet2($endOfDay, $ch, $basePath, $savesrc);
-	if (isset($output['title'])) echo '<h3>' . $output['title'] . '</h3>';
-	if (isset($output['content'])) echo $output['content'];
-	if (isset($output['error'])) die($output['error']);
+	$warnings = array_merge($warnings, printOutput($output));
 }
 
 /* BetMGM */
 if ($live) {
 	$output = updateBet3($endOfDay, $ch, $basePath, $savesrc);
-	if (isset($output['title'])) echo '<h3>' . $output['title'] . '</h3>';
-	if (isset($output['content'])) echo $output['content'];
-	if (isset($output['error'])) die($output['error']);
+	$warnings = array_merge($warnings, printOutput($output));
 }
 
 /* BetRivers */
 if ($live) {
 	$output = updateBet4($endOfDay, $basePath, $savesrc);
-	if (isset($output['title'])) echo '<h3>' . $output['title'] . '</h3>';
-	if (isset($output['content'])) echo $output['content'];
-	if (isset($output['error'])) die($output['error']);
+	$warnings = array_merge($warnings, printOutput($output));
 }
 
 /* Backup */
 if ($live) {
-	$output = backup($now, $timezone, $basePath);
-	if (isset($output['title'])) echo '<h3>' . $output['title'] . '</h3>';
-	if (isset($output['content'])) echo $output['content'];
-	if (isset($output['error'])) die($output['error']);
+	$output = backup($now, $timezone, $basePath, $warnings);
+	$warnings = array_merge($warnings, printOutput($output));
 }
 
-echo "<h2>Complete</h2>";
+$warningCount = count($warnings);
+if ($warningCount) echo '<h2 class="warning">Complete with ' . $warningCount . ($warningCount === 1 ? ' warning' : ' warnings') . '</h2>';
+else echo '<h2>Complete</h2>';
 echo $now->format('Y-m-d h:i A');

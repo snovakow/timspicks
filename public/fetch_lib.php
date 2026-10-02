@@ -37,10 +37,118 @@ function playerFileCurrent(string $local_file, string $team)
 	return isset($data->currentTeamAbbrev) && $data->currentTeamAbbrev === $team;
 }
 
+/* Manual player ids for pick-list entries with a missing or wrong id, keyed by the full name in the pick-list feed */
+const PLAYER_ID_OVERRIDES = [
+	'Oskar Back' => 8480840, // The pick-list feed sends id 0
+];
+
+/* Lowercase ASCII without punctuation, so "Oskar Bäck" matches "Oskar Back" and "J.T. Miller" matches "JT Miller" */
+function normalizePlayerName(string $name)
+{
+	$ascii = function_exists('transliterator_transliterate')
+		? transliterator_transliterate('Any-Latin; Latin-ASCII', $name)
+		: iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name);
+	if ($ascii !== false) $name = $ascii;
+
+	$name = preg_replace('/[^a-z0-9\s-]/', '', strtolower($name));
+	return trim(preg_replace('/[\s-]+/', ' ', $name));
+}
+
+/* Look up a player id in the player search when the pick-list feed doesn't supply one */
+function resolvePlayerId(CurlHandle $ch, string $firstName, string $lastName, string $team)
+{
+	$first = normalizePlayerName($firstName);
+	$last = normalizePlayerName($lastName);
+	if ($first === '' || $last === '') return ['id' => 0, 'detail' => 'name missing from the pick-list feed'];
+	$target = "$first $last";
+
+	curl_reset($ch);
+	curl_setopt($ch, CURLOPT_URL, 'https://search.d3.nhle.com/api/v1/search/player?' . http_build_query([
+		'culture' => 'en-us',
+		'limit' => 20,
+		'q' => "$firstName $lastName",
+		'active' => 'true',
+	]));
+	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+	curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+	$response = curl_exec($ch);
+	if ($response === false) return ['id' => 0, 'detail' => 'player search failed: ' . curl_error($ch)];
+
+	$status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+	$results = json_decode($response, false);
+	if ($status !== 200 || !is_array($results)) return ['id' => 0, 'detail' => "player search returned an invalid response (HTTP $status)"];
+
+	$candidates = [];
+	foreach ($results as $result) {
+		if (!isset($result->playerId, $result->name)) continue;
+		$candidates[] = [
+			'id' => (int)$result->playerId,
+			'name' => normalizePlayerName($result->name),
+			'team' => $result->teamAbbrev ?? null,
+			'label' => $result->name . ', ' . ($result->teamAbbrev ?? 'no team'),
+		];
+	}
+
+	// Exact name on the team, then first initial and last name on the team (Jake/Jacob), then exact name on any team (stale search team).
+	// A pass only counts when exactly one player matches, so two players with the same name are skipped rather than guessed.
+	$passes = [
+		fn($c) => $c['team'] === $team && $c['name'] === $target,
+		fn($c) => $c['team'] === $team && str_starts_with($c['name'], $first[0]) && str_ends_with($c['name'], " $last"),
+		fn($c) => $c['name'] === $target,
+	];
+	$mostMatches = 0;
+	foreach ($passes as $pass) {
+		$matches = array_values(array_filter($candidates, $pass));
+		if (count($matches) === 1) return ['id' => $matches[0]['id'], 'detail' => "matched {$matches[0]['label']} in the player search"];
+		$mostMatches = max($mostMatches, count($matches));
+	}
+	return ['id' => 0, 'detail' => $mostMatches ? "$mostMatches possible matches in the player search" : 'no match in the player search'];
+}
+
+/* Player id for a pick-list player: the manual override, else the feed's id, else the player search (0 if none),
+   with a note whenever the id didn't come straight from the feed */
+function nhlPlayerId(CurlHandle $ch, string $firstName, string $lastName, string $team, int $helperId)
+{
+	$overrideId = PLAYER_ID_OVERRIDES["$firstName $lastName"] ?? 0;
+	if ($overrideId) {
+		if (!$helperId) return ['id' => $overrideId, 'note' => null];
+		$note = $overrideId === $helperId ? 'override matches the pick-list feed id and can be removed' : "pick-list feed id $helperId overridden with $overrideId";
+		return ['id' => $overrideId, 'note' => $note];
+	}
+	if ($helperId) return ['id' => $helperId, 'note' => null];
+
+	$resolved = resolvePlayerId($ch, $firstName, $lastName, $team);
+	$note = $resolved['id'] ? "resolved missing player id to {$resolved['id']} ({$resolved['detail']})" : "missing player id, {$resolved['detail']}";
+	return ['id' => $resolved['id'], 'note' => $note];
+}
+
+/* Give a history file's players the ids the picks fetch uses, so history files match the helper.json backups */
+function fixHistoryPlayerIds(CurlHandle $ch, object $history)
+{
+	$result = ['changed' => 0, 'notes' => []];
+	foreach ($history->playerLists ?? [] as $list) {
+		foreach ($list->players ?? [] as $player) {
+			[$firstName, $lastName] = array_pad(explode(' ', trim((string)($player->fullName ?? '')), 2), 2, '');
+			$team = (string)($player->team ?? '');
+			$helperId = abs((int)($player->nhlPlayerId ?? 0));
+
+			$fixed = nhlPlayerId($ch, $firstName, $lastName, $team, $helperId);
+			if ($fixed['note']) $result['notes'][] = "$firstName $lastName ($team): {$fixed['note']}";
+			if ($fixed['id'] && $fixed['id'] !== $helperId) {
+				$player->nhlPlayerId = $fixed['id'];
+				$result['changed']++;
+			}
+		}
+	}
+	return $result;
+}
+
 /* Picks */
 function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool $savesrc = false)
 {
-	$output = ['title' => null, 'content' => null, 'error' => null];
+	$output = ['title' => null, 'content' => null, 'warning' => [], 'error' => null];
 	$output['title'] = 'Picks';
 
 	$helper = 'https://api.hockeychallengehelper.com/api/picks';
@@ -95,10 +203,17 @@ function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool 
 		else if ($item->id == 2) $array = &$data["2"];
 		else $array = &$data["3"];
 		foreach ($item->players as $player) {
-			$playerId = $player->nhlPlayerId < 0 ? -$player->nhlPlayerId : $player->nhlPlayerId;
+			$firstName = trim((string)($player->firstName ?? ''));
+			$lastName = trim((string)($player->lastName ?? ''));
+			$team = (string)($player->team ?? '');
+
+			$fixed = nhlPlayerId($ch, $firstName, $lastName, $team, abs((int)($player->nhlPlayerId ?? 0)));
+			$playerId = $fixed['id'];
+			if ($fixed['note']) $output['warning'][] = ($playerId ? '' : 'Skipped ') . "$firstName $lastName ($team): {$fixed['note']}";
+			if (!$playerId) continue;
 
 			$local_file = "{$playerPath}/{$playerId}.json";
-			if (!playerFileCurrent($local_file, (string)$player->team)) {
+			if (!playerFileCurrent($local_file, $team)) {
 				$url = "https://api-web.nhle.com/v1/player/{$playerId}/landing";
 
 				$response = file_get_contents($url);
@@ -115,11 +230,11 @@ function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool 
 
 			$array[] = [
 				"playerId" => $playerId,
-				"firstName" => $player->firstName,
-				"lastName" => $player->lastName,
+				"firstName" => $firstName,
+				"lastName" => $lastName,
 				"gamesPlayed" => $player->gamesPlayed,
 				"goals" => $player->goals,
-				"team" => $player->team
+				"team" => $team
 			];
 		}
 	}
@@ -621,7 +736,7 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 }
 
 /* Backup */
-function backup(DateTime $now, DateTimeZone $timezone, string $basePath)
+function backup(DateTime $now, DateTimeZone $timezone, string $basePath, array $warnings = [])
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 
@@ -696,16 +811,27 @@ function backup(DateTime $now, DateTimeZone $timezone, string $basePath)
 		else $output['title'] = 'No game found after the current time';
 	}
 
-	processed($now, $basePath);
+	processed($now, $basePath, $warnings);
 
 	return $output;
 }
 
-/* processed metadata object */
-function processed(DateTime $now, string $basePath)
+/* Mark a run as started in process.json, keeping the last complete run's time and warnings until this run finishes */
+function startRun(DateTime $now, string $basePath)
 {
-	// Write $now as an object property called "processed" to process.json at the end of Backup
-	$processObj = ["processed" => $now->format(DateTime::ATOM)];
+	$local_file = $basePath . '/process.json';
+	$data = file_exists($local_file) ? json_decode(file_get_contents($local_file), true) : null;
+	if (!is_array($data) || !isset($data['processed'])) return;
+
+	$data['started'] = $now->format(DateTime::ATOM);
+	file_put_contents($local_file, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), LOCK_EX);
+}
+
+/* processed metadata object */
+function processed(DateTime $now, string $basePath, array $warnings)
+{
+	// Write $now as "processed" and the run's warnings to process.json at the end of Backup, which also clears "started"
+	$processObj = ["processed" => $now->format(DateTime::ATOM), "warnings" => $warnings];
 	$local_file = $basePath . '/process.json';
 	file_put_contents($local_file, json_encode($processObj, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 }
