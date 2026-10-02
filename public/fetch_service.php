@@ -84,8 +84,8 @@ if ($live && isset($_GET['history'])) {
 		// ['season' => '2025-2026', 'format' => 'regular', 'start' => '2025-10-07', 'end' => '2026-04-16'],
 		['season' => '2025-2026', 'format' => 'regular', 'start' => '2026-04-09', 'end' => '2026-04-16'],
 		['season' => '2025-2026', 'format' => 'playoff', 'start' => '2026-04-18', 'end' => '2026-06-14'],
-		// Season started 2026-09-29, skipping 2026-09-29 and 2026-09-30 without odds backups
-		['season' => '2026-2027', 'format' => 'regular', 'start' => '2026-10-01', 'end' => '2026-10-01'],
+		// 2026-09-29 and 2026-09-30 odds were backfilled from recovered closing lines (cron was off)
+		['season' => '2026-2027', 'format' => 'regular', 'start' => '2026-09-29', 'end' => '2026-10-01'],
 	];
 
 	$index_file = $baseHistoryPath . '/history.json';
