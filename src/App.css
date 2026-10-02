@@ -130,7 +130,8 @@ button:hover {
 	justify-self: end;
 }
 
-.offseason-banner {
+.offseason-banner,
+.status-banner {
 	padding: 0.9rem 1rem;
 	margin: 0 0 1rem;
 	border-radius: 12px;
@@ -139,16 +140,31 @@ button:hover {
 	text-align: center;
 }
 
-.offseason-banner-primary {
+.status-banner {
+	border: 1px solid light-dark(hsl(38, 92%, 50%), hsl(38, 80%, 45%));
+	background: light-dark(hsl(48, 96%, 89%), hsl(38, 70%, 16%));
+}
+
+.offseason-banner-primary,
+.status-banner-primary {
 	margin: 0;
 	font-weight: 700;
 	font-size: 1.02rem;
 }
 
-.offseason-banner-secondary {
+.offseason-banner-secondary,
+.status-banner-secondary {
 	margin: 0.35rem 0 0;
 	font-size: 0.95rem;
 	opacity: 0.9;
+}
+
+.status-banner-warnings {
+	margin: 0.25rem 0 0;
+	padding: 0;
+	list-style: none;
+	font-size: 0.9rem;
+	overflow-wrap: anywhere;
 }
 
 .no-games-message {

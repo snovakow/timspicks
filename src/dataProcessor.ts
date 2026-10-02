@@ -22,6 +22,25 @@ type GameListingData = {
 
 export const NO_GAMES_ERROR = "NO_GAMES" as const;
 
+export interface DataStatus {
+	processed: Date;
+	unfinished: boolean;
+	stopped: boolean;
+	warnings: string[];
+}
+
+// A day plus slack for cron timing and daylight saving changes
+const STALE_AFTER_MS = 26 * 60 * 60 * 1000;
+// A full run takes seconds, so one still going after this has failed
+const RUN_GRACE_MS = 10 * 60 * 1000;
+
+// process.json holds the last complete run's time and warnings, plus "started" while a later run hasn't finished
+export const getDataStatus = (processed: Date, started: Date | null, warnings: string[], now = new Date()): DataStatus | null => {
+	const unfinished = started !== null && started.getTime() > processed.getTime() && now.getTime() - started.getTime() > RUN_GRACE_MS;
+	const stopped = now.getTime() - processed.getTime() > STALE_AFTER_MS;
+	return unfinished || stopped || warnings.length > 0 ? { processed, unfinished, stopped, warnings } : null;
+};
+
 interface SportsbookOddsItem {
 	name: string;
 	odds: number;
@@ -139,8 +158,10 @@ function isPlayerJson(val: unknown): val is RawPlayerJson {
 }
 
 // Async loader/validator for games.json that merges players into each game
-const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesSrc: string): Promise<[Picks.Player[], Picks.GameData[]]> => {
+const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesSrc: string): Promise<[Picks.Player[], Picks.GameData[], DataStatus | null]> => {
 	let cutoff: Date | null = null;
+	let started: Date | null = null;
+	let warnings: string[] = [];
 
 	let metaDataResponse;
 	try { metaDataResponse = await fetchData(processSrc); }
@@ -163,6 +184,14 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 		cutoff = new Date(metaData.processed);
 		if (!cutoff || isNaN(cutoff.getTime())) {
 			throw new Error(`Invalid 'processed' date in ${processSrc}: ${metaData.processed}`);
+		}
+
+		// Status fields only feed the banner, so ignore them rather than fail the page when they're malformed
+		if (typeof metaData.started === 'string' && !isNaN(new Date(metaData.started).getTime())) {
+			started = new Date(metaData.started);
+		}
+		if (Array.isArray(metaData.warnings)) {
+			warnings = metaData.warnings.filter((warning: unknown): warning is string => typeof warning === 'string');
 		}
 	}
 
@@ -228,13 +257,16 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 		return a.away.name.localeCompare(b.away.name);
 	});
 
-	return [playersList, gamesList];
+	const dataStatus = cutoff ? getDataStatus(cutoff, started, warnings) : null;
+
+	return [playersList, gamesList, dataStatus];
 };
 
 interface InitialData {
 	playerData: PlayerDataByPick;
 	playersListing: Picks.Player[];
 	gamesListing: Picks.GameData[];
+	dataStatus: DataStatus | null;
 	playerOddsDraftKings: SportsbookOddsItem[];
 	playerOddsFanDuel: SportsbookOddsItem[];
 	playerOddsBetMGM: SportsbookOddsItem[];
@@ -244,7 +276,7 @@ interface InitialData {
 export const loadInitialData = async (): Promise<InitialData> => {
 	const [
 		playerData,
-		[playersListing, gamesListing],
+		[playersListing, gamesListing, dataStatus],
 		playerOddsDraftKings,
 		playerOddsFanDuel,
 		playerOddsBetMGM,
@@ -262,6 +294,7 @@ export const loadInitialData = async (): Promise<InitialData> => {
 		playerData,
 		playersListing,
 		gamesListing,
+		dataStatus,
 		playerOddsDraftKings,
 		playerOddsFanDuel,
 		playerOddsBetMGM,

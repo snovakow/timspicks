@@ -138,6 +138,7 @@ function App() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [data, setData] = useState<InitializedData | null>(null);
+	const [dataStatus, setDataStatus] = useState<DataProcessor.DataStatus | null>(null);
 
 	const [showPercentage, setShowPercentage] = useState(true);
 	const [deVigEnabled, setDeVigEnabled] = useState(false);
@@ -186,6 +187,7 @@ function App() {
 					table2Rows,
 					table3Rows,
 				});
+				setDataStatus(initialData.dataStatus);
 				setError(null);
 			} catch (error: unknown) {
 				if (error instanceof Error && error.message === DataProcessor.NO_GAMES_ERROR) {
@@ -558,6 +560,29 @@ function App() {
 					<section className="offseason-banner" role="status" aria-live="polite">
 						<p className="offseason-banner-primary">Check back for the 2026/2027 hockey season!</p>
 						<p className="offseason-banner-secondary">Offseason view: showing the last day of the 2026 Stanley Cup finals.</p>
+					</section>
+				)}
+
+				{!Feature.offseasonBanner && dataStatus && (
+					<section className="status-banner" role="status" aria-live="polite">
+						<p className="status-banner-primary">
+							Data last updated {dataStatus.processed.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+						</p>
+						{(dataStatus.unfinished || dataStatus.stopped) && (
+							<p className="status-banner-secondary">
+								{dataStatus.unfinished ? "The latest update didn't finish" : "There hasn't been an update in over a day"}, so picks and odds may be out of date.
+							</p>
+						)}
+						{dataStatus.warnings.length > 0 && (
+							<>
+								<p className="status-banner-secondary">
+									{dataStatus.warnings.length === 1 ? '1 warning' : `${dataStatus.warnings.length} warnings`} from the last {dataStatus.unfinished ? 'complete ' : ''}update:
+								</p>
+								<ul className="status-banner-warnings">
+									{dataStatus.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
+								</ul>
+							</>
+						)}
 					</section>
 				)}
 
