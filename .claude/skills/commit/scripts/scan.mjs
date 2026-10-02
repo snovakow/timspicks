@@ -16,11 +16,36 @@ const NEVER_COPY = 'dist/data, dist/history, dist/players, dist/auth.json';
 const SCHEME_URL = /\b[a-z][a-z0-9+.-]*:\/\/[^\s'"`<>)\]]+/gi;
 const WWW_HOST = /\bwww\.[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi;
 const BARE_DOMAIN = /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|net|org|io|ca|bet|co|us|uk|ai|app|dev|gg|tv|info|me|news|online|site|xyz)(?![a-z0-9-]|\.[a-z0-9])/gi;
-const MARKDOWN_LINK = /\]\([^)\s]+\)/g;
+const MARKDOWN_LINK = /\]\(([^)\s]+)\)/g;
 const XMLNS = /\bxmlns(?::[\w-]+)?\s*=\s*"[^"]*"/g;
+// A markdown link matters only when it leaves the repo; a relative path names no site. Not
+// global, so .test() stays stateless.
+const LINK_TARGET_HOST = new RegExp(`${SCHEME_URL.source}|${WWW_HOST.source}|${BARE_DOMAIN.source}|^//`, 'i');
+const externalLinks = (text) => [...text.matchAll(MARKDOWN_LINK)]
+	.filter(([, target]) => LINK_TARGET_HOST.test(target))
+	.map(([match]) => match);
 const TRAILER = /^(co-authored-by|signed-off-by):/i;
 const PROSE_FILE = /\.(md|markdown|txt|html?)$/i;
 const HASH_COMMENT_FILE = /\.(php|sh|zsh|bash|py|ya?ml|toml|ini|conf)$|(^|\/)\.gitignore$/i;
+
+// Credentials and copied browser-session data. The scrapers legitimately send browser-like
+// headers, but a pasted Cookie header also carries the session, ad and fingerprint ids of
+// whoever copied it, and those stay in the public history forever.
+const SECRET_PATTERNS = [
+	[/\bCURLOPT_COOKIE(?:FILE|JAR)?\b/i, 'cookie sent with a request'],
+	[/(?:^|['"\s])(?:set-)?cookie\s*:/i, 'cookie header'],
+	[/(?:^|['"\s])authorization\s*:/i, 'authorization header'],
+	[/\bBearer\s+[\w.~+/-]{12,}/, 'bearer token'],
+	[/(?:^|['"\s])x-api-key\s*:/i, 'api key header'],
+	[/\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)\b\s*[=:]\s*['"`]?[\w.~+/-]{8,}/i, 'key or token value'],
+	[/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/, 'private key'],
+	[/(?:^|['"\s])(?:traceparent|tracestate|x-correlation-id|x-datadog-[a-z-]+)\s*:/i, 'session or trace id header'],
+	[/\bbrowserfingerprint\b/i, 'browser fingerprint'],
+];
+// This skill's own files spell out the patterns above, so they would always match themselves.
+const SELF_FILE = /(^|\/)\.claude\/skills\/commit\//;
+// Long opaque values are the payload, so they never reach the output.
+const maskValues = (text) => text.replace(/(['"`])((?:(?!\1).){24,})\1/g, (_, quote) => `${quote}…${quote}`);
 
 const git = (...args) => execFileSync('git', args, {
 	encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'],
@@ -154,14 +179,20 @@ const proseOf = (file, text) => {
 
 const linkHits = [];
 const proseLines = [];
+const secretHits = [];
 const scanText = (where, file, line, text, proseOnly) => {
 	const code = text.replace(XMLNS, '');
+	if (!proseOnly && !SELF_FILE.test(file ?? '')) {
+		for (const [pattern, label] of SECRET_PATTERNS) {
+			if (pattern.test(code)) secretHits.push(`${where} ${file}:${line}  ${label}  | ${clip(maskValues(code.trim()), 100)}`);
+		}
+	}
 	const prose = proseOnly ? code : proseOf(file, code);
 	const urls = code.match(SCHEME_URL) ?? [];
 	const found = new Set([
 		...urls,
 		...[...(code.match(WWW_HOST) ?? []), ...(prose?.match(BARE_DOMAIN) ?? [])].filter((host) => !urls.some((url) => url.includes(host))),
-		...(prose?.match(MARKDOWN_LINK) ?? []),
+		...(prose ? externalLinks(prose).filter((link) => !urls.some((url) => link.includes(url))) : []),
 	]);
 	const location = file ? `${file}:${line}` : `line ${line}`;
 	for (const match of found) linkHits.push(`${where} ${location}  ${match}  | ${clip(code.trim())}`);
@@ -200,6 +231,38 @@ const lateEnds = service.split('\n').flatMap((text, index) => (text.trim().start
 const flagChanges = baseline
 	? lines(git('diff', baseline, '--unified=0', '--no-color', '--', 'src/features.ts')).filter((line) => /^[+-](?![+-])/.test(line))
 	: [];
+
+// --- Docs: maintained by hand, so only flag what provably outdates one --------------------------
+
+// Repo paths a doc names. Build and runtime output (dist/, data/, players/, history/, auth.json)
+// is written on the server and absent here, so a missing one of those proves nothing.
+const DOC_PATH = /`((?:src|public|docs|timspicks_update|\.claude)\/[A-Za-z0-9_./-]*)`/g;
+const docFiles = [...lines(tryGit('ls-files', '--cached', '--others', '--exclude-standard', 'docs') ?? ''), 'README.md']
+	.filter((file) => PROSE_FILE.test(file));
+const dangling = [];
+const seenRef = new Set();
+for (const file of docFiles) {
+	(readText(file) ?? '').split('\n').forEach((text, index) => {
+		for (const [, path] of text.matchAll(DOC_PATH)) {
+			const key = `${file}\t${path}`;
+			if (seenRef.has(key) || existsSync(path.replace(/\/$/, ''))) continue;
+			seenRef.add(key);
+			dangling.push(`${file}:${index + 1}  ${path}`);
+		}
+	});
+}
+
+// An added, deleted or renamed source file is what outdates a doc's layout or source map; an edit
+// inside an existing file would name a doc nearly every batch, so it doesn't count.
+const SOURCE_PATH = /^(?:src|public)\//;
+const structural = baseline
+	? lines(git('diff', '--name-status', '--find-renames', baseline)).flatMap((line) => {
+		const [kind, ...paths] = line.split('\t');
+		const path = paths[paths.length - 1];
+		return kind[0] === 'M' || !SOURCE_PATH.test(path) ? [] : [`${kind[0]} ${paths.join(' -> ')}`];
+	})
+	: [];
+for (const path of untracked) if (SOURCE_PATH.test(path)) structural.push(`A ${path}`);
 
 const mainRef = tryGit('rev-parse', '-q', '--verify', 'origin/main') ? 'origin/main' : null;
 const [mainOnly, branchOnly] = mainRef && branch && branch !== 'main'
@@ -261,6 +324,7 @@ const attention = [
 	...(analyze === 'OFF' ? [] : [`src/features.ts analyze is '${analyze}', not 'OFF'`]),
 	...(savesrc === 'false' ? [] : [`public/fetch_service.php $savesrc is ${savesrc}`]),
 	...lateEnds.map((end) => `History end date is today or later (${today}): ${end}`),
+	...(secretHits.length ? [`${secretHits.length} line(s) add credentials or copied session data; see Secrets and session data`] : []),
 ];
 
 say('# Commit survey');
@@ -293,12 +357,21 @@ for (const hit of linkHits.length ? linkHits : ['(none)']) say(`- ${hit}`);
 section('Prose to read (comments and docs added in the range)');
 for (const line of proseLines.length ? proseLines : ['(none)']) say(`- ${line}`);
 
+section('Secrets and session data');
+for (const hit of secretHits.length ? secretHits : ['(none)']) say(`- ${hit}`);
+
 section('Release checks');
 say(`analyze: '${analyze}'`);
 say(`$savesrc: ${savesrc}`);
 say(`History end dates today or later: ${lateEnds.length ? lateEnds.join('; ') : 'none'}`);
 say(`Feature flag changes since the baseline: ${flagChanges.length ? '' : 'none'}`);
 for (const line of flagChanges) say(`    ${line}`);
+
+section('Docs (maintained by hand; report, never rewrite)');
+say(`Dangling path references: ${dangling.length ? '' : 'none'}`);
+for (const line of dangling) say(`    ${line}`);
+say(`Added, deleted or renamed under src/ or public/: ${structural.length ? '' : 'none'}`);
+for (const line of structural) say(`    ${line}`);
 
 section(`Live update (since ${deployBase ? `${short(deployBase)} ${git('log', '-1', '--format=%s', deployBase)}` : 'the first commit'})`);
 say(`Built frontend: rebuild (${frontend.length ? `changed: ${frontend.join(', ')}` : 'version only'})`);

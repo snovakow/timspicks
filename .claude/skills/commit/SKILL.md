@@ -5,7 +5,7 @@ disable-model-invocation: true
 argument-hint: "[x.y.z]"
 model: opus
 effort: max
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git ls-files:*), Bash(git config user.name), Bash(git fetch:*), Bash(git add:*), Bash(git commit:*), Bash(npm version:*), Bash(npm run lint:*), Bash(npm run build:*), Bash(node .claude/skills/commit/scripts/scan.mjs:*)
+allowed-tools: Read, Edit, Write, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git ls-files:*), Bash(git config user.name), Bash(git fetch:*), Bash(git add:*), Bash(git commit:*), Bash(git rebase:*), Bash(git stash:*), Bash(npm version:*), Bash(npm run lint:*), Bash(npm run build:*), Bash(php -l:*), Bash(node .claude/skills/commit/scripts/scan.mjs:*)
 ---
 
 # Commit a reviewed, versioned batch
@@ -24,7 +24,7 @@ This repo is public: whatever gets pushed (code, comments and commit messages) s
 
   Everything after the newest such commit is under review, however much a commit looks like a version commit. A subject that mentions "version", a bump made by hand, or `Version X.Y.Z` with a trailer are all ordinary range commits. Before the first version commit exists, the baseline is the newest pushed commit.
 - **Rewriting.** A commit can be rewritten only if it comes after the baseline and isn't reachable from any remote branch, because rewriting a pushed commit would take a force push. The scan prints this rewrite base. Pushed commits in the range are still reviewed, and their problems reported.
-- **Order.** Fixes to existing commits come first, then new commits, then a README commit if one is needed. The version commit always comes last.
+- **Order.** Plan the batch before staging anything. Fixes to existing commits come first, then new commits, then a README commit if one is needed. The version commit always comes last.
 
 ## 1. Survey
 
@@ -46,7 +46,7 @@ The release-check items there are covered in step 2. If nothing is new since the
 
 Read each range commit with `git show`, the working-tree diff (`git diff HEAD`), and every untracked file. Look for:
 - site names and links (step 3)
-- secrets, tokens or credentials being added
+- secrets, tokens or credentials being added (step 2a)
 - files that shouldn't be tracked: data dumps, logs, build output, local settings
 - leftovers that look accidental, such as stray debug output
 
@@ -60,6 +60,27 @@ Feature-flag changes in the range go in the report even when they're intended.
 Run the checks that match what changed, and ask before committing if one fails in a touched file:
 - Frontend files (`src/`, `index.html`, `vite.config.ts`, dependencies): `npm run lint` and `npm run build`. The build is what the server runs, so a failure here is a failed deploy later.
 - PHP: `php -l <file>` with a local PHP CLI if one is available; it may not be on PATH.
+
+## 2a. Credentials and copied session data
+
+The scan's **Secrets and session data** section flags added lines that carry a credential or a
+browser session. Anything it lists is an Attention item: stop and ask before committing.
+
+The scrapers are meant to look like a browser, so `accept`, `user-agent`, `referer` and the
+`sec-ch-ua` headers belong in the code, as do the endpoint URLs and their embedded app ids. What
+doesn't belong is anything copied from a real signed-in session, because it carries the ids of
+whoever copied it and the public history keeps them forever:
+- a Cookie header or `CURLOPT_COOKIE` line, which also holds ad-click, consent and fingerprint ids
+- `traceparent`, `tracestate`, `x-correlation-id` and the `x-datadog-*` headers
+- any authorization header, bearer token, API key or private key
+
+A request usually works without them. Check with a throwaway script in the scratchpad that runs the
+same request with and without the line, and compare the response, rather than guessing. Remove what
+isn't needed. When one genuinely is needed, say so in the report instead of committing it quietly.
+
+The check reads only added lines after the baseline, so it says nothing about credentials already
+in the code; it also skips this skill's own files, which spell out the patterns. Values never reach
+the output, so a hit shows the pattern and a masked line. Investigate by opening the file.
 
 ## 3. No site names or links
 
@@ -93,7 +114,20 @@ No other commit's subject may start with `Version` and a number, because the bas
 
 Update README.md if the range adds or changes something it describes, or something a reader would want to know: a feature, a setting, how picks are ranked, setup or deploy steps, or season details the user has provided. Skip it for fixes, refactors, data ranges and styling.
 
-Keep its voice, follow step 3 for anything you add, and leave the existing link list and the template section as they are. Never invent results. The README change is its own commit, just before the version commit.
+Keep its voice, follow step 3 for anything you add, and leave the external link list and the
+template section as they are. The Documentation list is part of what you maintain: keep it pointing
+at whatever `docs/` holds. Never invent results. The README change is its own commit, just before
+the version commit.
+
+README.md is the only prose this skill writes. The pages under `docs/` are maintained by hand, so
+never rewrite one to match the range. Report them instead, in two cases:
+- the scan's **Docs** section lists a dangling path reference, which means a doc names a file that
+  no longer exists
+- the range adds, deletes or renames a file under `src/` or `public/`, the kind of change that
+  outdates a doc's layout or source map
+
+Edits inside an existing file aren't worth reporting; the scan would name a doc on nearly every
+batch, since the docs reference most of `src/` and `public/` between them.
 
 ## 6. Version
 
@@ -101,7 +135,25 @@ Keep its voice, follow step 3 for anything you add, and leave the existing link 
 - **Set it** with `npm version <x.y.z> --no-git-tag-version`. That updates `package.json` and `package-lock.json` without tagging or committing.
 - **Commit** just those two files, with the message `Version X.Y.Z` and nothing else: no body, no trailer, author as configured. It's the last commit.
 
-## 7. Apply
+## 7. Plan the commits
+
+Decide the whole batch before staging anything. Take the scan's **Working tree** list, assign every
+path to a group, and give each group its subject. That plan is what step 8 executes, in order.
+
+- **One concern per commit.** A group is a change someone would describe in one sentence: a fix, a
+  feature, a doc update, a dependency bump. Unrelated work in the same batch gets its own commit,
+  however small it is.
+- **The file is the unit.** Splitting hunks needs an interactive `git add -p`, which isn't available
+  here, so two unrelated changes inside one file can't be separated. Commit the file once and cover
+  both in the message, or ask whether to hold one back.
+- **Order so every commit stands on its own.** Code before the docs describing it, a helper before
+  its caller, so no commit mid-batch leaves the build broken.
+- Reword-only and fix-only work isn't a group; it belongs to step 8.2.
+
+If the batch is a single concern, say so and make one commit. Don't split a coherent change to look
+tidy.
+
+## 8. Apply
 
 1. Note `git rev-parse HEAD`; the report gives it as the undo point.
 2. Fix the rewritable commits first, before new commits bury the tip.
@@ -112,11 +164,11 @@ Keep its voice, follow step 3 for anything you add, and leave the existing link 
    - If the rebase stops on a conflict, run `git rebase --abort` and ask. If a merge commit sits anywhere but the tip, report it and ask rather than flatten it. If a fix touches a file that also has uncommitted edits, `git stash push --include-untracked` first and `git stash pop` after.
    - Keep message files outside the repo (the session scratchpad if there is one), so they never get committed.
 3. Fix site mentions in the working-tree changes.
-4. Commit the remaining work in logical groups, split by file when the changes are clearly unrelated. Stage explicit paths, not everything at once. Commit untracked files that belong to the project and ask about the rest. Never delete the user's files or edit `.gitignore` without asking.
+4. Commit the groups from step 7, in the planned order. Stage explicit paths, never `-A` or `.`, and check `git diff --cached --stat` against the group's subject before committing: if something unrelated is staged, unstage it rather than widen the message. Commit untracked files that belong to the project and ask about the rest. Never delete the user's files or edit `.gitignore` without asking.
 5. Make the README commit, if step 5 calls for one.
 6. Make the version commit.
 
-## 8. Verify and report
+## 9. Verify and report
 
 Run the scan again. Check that:
 - `git status` is clean
@@ -130,6 +182,7 @@ Then report, briefly:
 - problems in pushed commits that couldn't be fixed
 - the version change, and any feature-flag changes
 - new site or brand names in code, files left uncommitted, and the checks that ran
+- any `docs/` page the batch may have outdated, per step 5, as something for the user to pick up later; never edited here
 - the starting sha (the undo point, also in the reflog), and that nothing was pushed
 - how far `origin/main` is behind this branch, and whether main has commits this branch lacks, as a reminder to merge before the server pulls
 - last, the scan's live update list:
