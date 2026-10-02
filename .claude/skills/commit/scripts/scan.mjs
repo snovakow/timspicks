@@ -1,0 +1,311 @@
+#!/usr/bin/env node
+// Read-only survey for the commit skill. Prints the review baseline, the commits and files to
+// review, link and prose findings, release checks and the live update list. Changes nothing.
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+
+const AUTHOR = 'snovakow';
+const VERSION_MESSAGE = /^Version (\d+\.\d+\.\d+)$/;
+const VERSION_LOOKALIKE = /^version\s+v?\d|^release\s+v?\d+\.\d|^v\d+\.\d|\bversion\b.*\d+\.\d+\.\d+/i;
+const VERSION_FILES = ['package-lock.json', 'package.json'];
+const FRONTEND_FILES = new Set(['index.html', 'vite.config.ts', 'package.json', 'package-lock.json']);
+const LIVE_FOLDER = 'the live folder';
+const UPDATE_FOLDER = 'the update folder';
+const NEVER_COPY = 'dist/data, dist/history, dist/players, dist/auth.json';
+
+const SCHEME_URL = /\b[a-z][a-z0-9+.-]*:\/\/[^\s'"`<>)\]]+/gi;
+const WWW_HOST = /\bwww\.[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi;
+const BARE_DOMAIN = /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|net|org|io|ca|bet|co|us|uk|ai|app|dev|gg|tv|info|me|news|online|site|xyz)(?![a-z0-9-]|\.[a-z0-9])/gi;
+const MARKDOWN_LINK = /\]\([^)\s]+\)/g;
+const XMLNS = /\bxmlns(?::[\w-]+)?\s*=\s*"[^"]*"/g;
+const TRAILER = /^(co-authored-by|signed-off-by):/i;
+const PROSE_FILE = /\.(md|markdown|txt|html?)$/i;
+const HASH_COMMENT_FILE = /\.(php|sh|zsh|bash|py|ya?ml|toml|ini|conf)$|(^|\/)\.gitignore$/i;
+
+const git = (...args) => execFileSync('git', args, {
+	encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'],
+}).replace(/\n$/, '');
+const tryGit = (...args) => {
+	try { return git(...args); } catch { return null; }
+};
+const lines = (text) => (text ? text.split('\n').filter(Boolean) : []);
+const short = (sha) => sha.slice(0, 7);
+const clip = (text, max = 160) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+const readText = (path) => (existsSync(path) ? readFileSync(path, 'utf8') : null);
+const parseJson = (text) => {
+	try { return text ? JSON.parse(text) : null; } catch { return null; }
+};
+const jsonAt = (rev, path) => (rev ? parseJson(tryGit('show', `${rev}:${path}`)) : null);
+const jsonNow = (path) => parseJson(readText(path));
+const versionAt = (rev) => jsonAt(rev, 'package.json')?.version ?? null;
+
+process.chdir(git('rev-parse', '--show-toplevel'));
+const out = [];
+const section = (title) => out.push('', `## ${title}`);
+const say = (text = '') => out.push(text);
+
+// --- State -------------------------------------------------------------------------------------
+
+const branch = tryGit('symbolic-ref', '--short', '-q', 'HEAD');
+const upstream = tryGit('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}');
+const [behind, ahead] = upstream
+	? git('rev-list', '--left-right', '--count', '@{u}...HEAD').split(/\s+/).map(Number)
+	: [0, 0];
+const operations = [
+	['rebase-merge', 'rebase'], ['rebase-apply', 'rebase'], ['MERGE_HEAD', 'merge'],
+	['CHERRY_PICK_HEAD', 'cherry-pick'], ['REVERT_HEAD', 'revert'],
+].filter(([name]) => existsSync(git('rev-parse', '--git-path', name))).map(([, label]) => label);
+const userName = tryGit('config', 'user.name');
+
+// Pushed means reachable from any remote-tracking branch; only commits outside that set can be rewritten.
+const unpushed = new Set(lines(git('rev-list', 'HEAD', '--not', '--remotes')));
+const pushedTip = lines(git('rev-list', '--first-parent', 'HEAD')).find((sha) => !unpushed.has(sha)) ?? null;
+
+// --- Baseline: the newest official version commit ------------------------------------------------
+
+// Official: the whole message is exactly `Version X.Y.Z` (no body, no trailer), the author is
+// snovakow, it changes exactly package.json and package-lock.json, and package.json holds X.Y.Z.
+// Anything else is an ordinary commit, however much it looks like a version commit.
+const candidates = git('log', '--full-history', '--format=%H%x1f%an%x1f%B%x1e', 'HEAD', '--', 'package.json')
+	.split('\x1e').map((record) => record.trim()).filter(Boolean)
+	.map((record) => {
+		const [sha, author, message = ''] = record.split('\x1f');
+		return { sha, author, message: message.trim() };
+	});
+const isOfficial = ({ sha, author, message }) => {
+	const match = VERSION_MESSAGE.exec(message);
+	if (!match || author !== AUTHOR) return false;
+	const files = lines(git('diff-tree', '--no-commit-id', '--name-only', '-r', '--root', sha)).sort();
+	if (files.join('\n') !== VERSION_FILES.join('\n')) return false;
+	return versionAt(sha) === match[1];
+};
+const official = candidates.find(isOfficial) ?? null;
+const officialVersion = official ? VERSION_MESSAGE.exec(official.message)[1] : null;
+const baseline = official?.sha ?? pushedTip;
+const rewriteBase = official && !unpushed.has(official.sha) ? pushedTip : baseline;
+
+const headVersion = versionAt('HEAD');
+const worktreeVersion = jsonNow('package.json')?.version ?? null;
+// Only /commit changes the version, so HEAD and the working tree should still hold the baseline's.
+const expectedVersion = officialVersion ?? (baseline ? versionAt(baseline) : null) ?? '0.0.0';
+const nextVersion = expectedVersion.replace(/\d+$/, (n) => String(Number(n) + 1));
+
+// --- Range: commits after the baseline, plus the working tree ------------------------------------
+
+const rangeShas = lines(git('rev-list', '--reverse', '--topo-order', ...(baseline ? [`${baseline}..HEAD`] : ['HEAD'])));
+const commits = rangeShas.map((sha) => {
+	const [parents, author, date, ...rest] = git('log', '-1', '--format=%P%x1f%an%x1f%ad%x1f%B', '--date=short', sha).split('\x1f');
+	const message = rest.join('\x1f').trim();
+	const touchesVersion = VERSION_LOOKALIKE.test(message.split('\n')[0])
+		|| (versionAt(sha) !== (parents ? versionAt(parents.split(' ')[0]) : null));
+	return { sha, merge: parents.split(' ').length > 1, author, date, message, pushed: !unpushed.has(sha), touchesVersion };
+});
+const status = lines(git('status', '--short', '--untracked-files=all'));
+const untracked = lines(git('ls-files', '--others', '--exclude-standard'));
+
+// Added lines from a unified diff, with their line numbers in the new file.
+const addedLines = (diff) => {
+	const result = [];
+	let file = null;
+	let lineNo = 0;
+	let inHeader = false;
+	for (const line of diff.split('\n')) {
+		if (line.startsWith('diff --git ')) { inHeader = true; file = null; continue; }
+		if (inHeader) {
+			if (line.startsWith('+++ ')) { file = line === '+++ /dev/null' ? null : line.slice(6); inHeader = false; }
+			continue;
+		}
+		const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+		if (hunk) { lineNo = Number(hunk[1]); continue; }
+		if (line.startsWith('+')) { if (file) result.push({ file, line: lineNo, text: line.slice(1) }); lineNo++; }
+		else if (line.startsWith(' ')) lineNo++;
+	}
+	return result;
+};
+const DIFF_FLAGS = ['--unified=0', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/'];
+const commitAdded = (sha) => addedLines(git('show', '--format=', '--diff-merges=first-parent', ...DIFF_FLAGS, sha));
+const worktreeAdded = () => addedLines(git('diff', 'HEAD', ...DIFF_FLAGS));
+const untrackedAdded = (path) => {
+	try {
+		if (!statSync(path).isFile() || statSync(path).size > 2_000_000) return [];
+		const buffer = readFileSync(path);
+		if (buffer.subarray(0, 8000).includes(0)) return [];
+		return buffer.toString('utf8').split('\n').map((text, index) => ({ file: path, line: index + 1, text }));
+	} catch {
+		return [];
+	}
+};
+
+// The comment or document text of a line: where site names would be prose rather than code.
+const proseOf = (file, text) => {
+	const trimmed = text.trim();
+	if (!trimmed || /\.svg$/i.test(file)) return null;
+	if (PROSE_FILE.test(file)) return trimmed;
+	if (/^(\/\*|\*)/.test(trimmed)) return trimmed;
+	if (HASH_COMMENT_FILE.test(file) && trimmed.startsWith('#')) return trimmed;
+	// Comment markers count only at the start or after whitespace, so URLs, paths and strings don't.
+	const pieces = [
+		/(?:^|\s)\/\/(.*)$/.exec(text)?.[1],
+		/(?:^|[\s{(;])\/\*(.*?)(?:\*\/|$)/.exec(text)?.[1],
+		/(?:^|[\s>])<!--(.*?)(?:-->|$)/.exec(text)?.[1],
+	].filter((piece) => piece?.trim());
+	return pieces.length ? pieces.join(' … ').trim() : null;
+};
+
+const linkHits = [];
+const proseLines = [];
+const scanText = (where, file, line, text, proseOnly) => {
+	const code = text.replace(XMLNS, '');
+	const prose = proseOnly ? code : proseOf(file, code);
+	const urls = code.match(SCHEME_URL) ?? [];
+	const found = new Set([
+		...urls,
+		...[...(code.match(WWW_HOST) ?? []), ...(prose?.match(BARE_DOMAIN) ?? [])].filter((host) => !urls.some((url) => url.includes(host))),
+		...(prose?.match(MARKDOWN_LINK) ?? []),
+	]);
+	const location = file ? `${file}:${line}` : `line ${line}`;
+	for (const match of found) linkHits.push(`${where} ${location}  ${match}  | ${clip(code.trim())}`);
+	if (prose && !proseOnly) proseLines.push(`${where} ${location}  ${clip(prose)}`);
+};
+
+for (const commit of commits) {
+	const label = `${short(commit.sha)}${commit.pushed ? ' (pushed)' : ''}`;
+	commit.message.split('\n').forEach((text, index) => {
+		if (!TRAILER.test(text.trim())) scanText(`msg ${label}`, null, index + 1, text, true);
+	});
+	for (const { file, line, text } of commitAdded(commit.sha)) scanText(label, file, line, text, false);
+}
+if (tryGit('rev-parse', '-q', '--verify', 'HEAD')) {
+	for (const { file, line, text } of worktreeAdded()) scanText('worktree', file, line, text, false);
+}
+for (const path of untracked) {
+	for (const { file, line, text } of untrackedAdded(path)) scanText('untracked', file, line, text, false);
+}
+
+// --- Release checks ------------------------------------------------------------------------------
+
+const localDate = () => {
+	const now = new Date();
+	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+const today = localDate();
+const features = readText('src/features.ts') ?? '';
+const analyze = /\banalyze\b[^=\n]*=\s*'(\w+)'/.exec(features)?.[1] ?? 'not found';
+const service = readText('public/fetch_service.php') ?? '';
+const savesrc = /^\s*\$savesrc\s*=\s*(\w+)\s*;/m.exec(service)?.[1] ?? 'not found';
+const lateEnds = service.split('\n').flatMap((text, index) => (text.trim().startsWith('//') ? []
+	: [...text.matchAll(/'end'\s*=>\s*'(\d{4}-\d{2}-\d{2})'/g)]
+		.filter((match) => match[1] >= today)
+		.map((match) => `public/fetch_service.php:${index + 1} end ${match[1]}`)));
+const flagChanges = baseline
+	? lines(git('diff', baseline, '--unified=0', '--no-color', '--', 'src/features.ts')).filter((line) => /^[+-](?![+-])/.test(line))
+	: [];
+
+const mainRef = tryGit('rev-parse', '-q', '--verify', 'origin/main') ? 'origin/main' : null;
+const [mainOnly, branchOnly] = mainRef && branch && branch !== 'main'
+	? git('rev-list', '--left-right', '--count', `${mainRef}...HEAD`).split(/\s+/).map(Number)
+	: [null, null];
+
+// --- Live update: what the server lacks since the newest pushed version --------------------------
+
+const pushedVersion = candidates.find((candidate) => !unpushed.has(candidate.sha) && isOfficial(candidate)) ?? null;
+const deployBase = pushedVersion?.sha ?? pushedTip;
+const changes = new Map();
+for (const line of deployBase ? lines(git('diff', '--name-status', '--no-renames', deployBase)) : lines(git('ls-files')).map((file) => `A\t${file}`)) {
+	const [kind, path] = line.split('\t');
+	changes.set(path, kind[0]);
+}
+for (const path of untracked) changes.set(path, 'A');
+
+const withoutVersion = (pkg) => (pkg ? JSON.stringify({ ...pkg, version: undefined }) : null);
+const lockWithoutVersion = (lock) => {
+	if (!lock) return null;
+	const copy = structuredClone(lock);
+	delete copy.version;
+	if (copy.packages?.['']) delete copy.packages[''].version;
+	return JSON.stringify(copy);
+};
+const dependencies = (pkg) => (pkg ? JSON.stringify([pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies, pkg.overrides]) : null);
+const packageBase = jsonAt(deployBase, 'package.json');
+const packageNow = jsonNow('package.json');
+const lockChanged = lockWithoutVersion(jsonAt(deployBase, 'package-lock.json')) !== lockWithoutVersion(jsonNow('package-lock.json'));
+const packageChanged = withoutVersion(packageBase) !== withoutVersion(packageNow);
+const dependenciesChanged = lockChanged || dependencies(packageBase) !== dependencies(packageNow);
+
+const frontend = [];
+const copies = [];
+const noUpdate = [];
+for (const [path, kind] of [...changes].sort(([a], [b]) => a.localeCompare(b))) {
+	if (path.startsWith('src/') || FRONTEND_FILES.has(path)) {
+		if ((path === 'package.json' && !packageChanged) || (path === 'package-lock.json' && !lockChanged)) continue;
+		frontend.push(path);
+	} else if (path.startsWith('public/') || path.startsWith('timspicks_update/')) {
+		const [prefix, folder] = path.startsWith('public/') ? ['public/', LIVE_FOLDER] : ['timspicks_update/', UPDATE_FOLDER];
+		const name = path.slice(prefix.length);
+		copies.push(kind === 'D' ? `deleted ${path}: remove ${name} from ${folder} if present` : `${path} -> ${name} in ${folder}`);
+	} else {
+		noUpdate.push(path);
+	}
+}
+
+// --- Output --------------------------------------------------------------------------------------
+
+const attention = [
+	...operations.map((op) => `${op} in progress`),
+	...(branch ? [] : ['HEAD is detached']),
+	...(behind ? [`branch is ${behind} commit(s) behind ${upstream}`] : []),
+	...(branch === 'main' ? ['on main; work normally lands on development'] : []),
+	...(userName === AUTHOR ? [] : [`git user.name is ${userName ?? 'unset'}, not ${AUTHOR}; the version commit would not count`]),
+	...(headVersion !== expectedVersion || worktreeVersion !== expectedVersion
+		? [`version changed outside /commit: HEAD ${headVersion}, working tree ${worktreeVersion}, expected ${expectedVersion} from ${official ? 'the last version commit' : 'the baseline'}`] : []),
+	...(analyze === 'OFF' ? [] : [`src/features.ts analyze is '${analyze}', not 'OFF'`]),
+	...(savesrc === 'false' ? [] : [`public/fetch_service.php $savesrc is ${savesrc}`]),
+	...lateEnds.map((end) => `History end date is today or later (${today}): ${end}`),
+];
+
+say('# Commit survey');
+section('Attention');
+for (const item of attention.length ? attention : ['(none)']) say(`- ${item}`);
+
+section('State');
+say(`Branch: ${branch ?? '(detached)'}${upstream ? `, upstream ${upstream} (ahead ${ahead}, behind ${behind})` : ', no upstream'}`);
+say(`Git user: ${userName ?? '(unset)'}`);
+say(`Baseline: ${official ? `${short(official.sha)} ${official.message} (${unpushed.has(official.sha) ? 'unpushed' : 'pushed'})` : `no version commit yet; newest pushed commit ${pushedTip ? `${short(pushedTip)} ${git('log', '-1', '--format=%s', pushedTip)}` : '(none)'}`}`);
+say(`Rewrite base: ${rewriteBase ? short(rewriteBase) : '(root)'}; only commits after it may be rewritten`);
+say(`Version: last version commit ${officialVersion ?? '(none)'}, HEAD ${headVersion}, working tree ${worktreeVersion}, next ${nextVersion}`);
+const lookalikes = commits.filter((commit) => commit.touchesVersion);
+say(`Lookalikes (not baselines; reviewed like any range commit): ${lookalikes.length ? lookalikes.map((commit) => `${short(commit.sha)} ${commit.message.split('\n')[0]}`).join('; ') : 'none'}`);
+if (mainRef && branchOnly !== null) say(`origin/main: ${branchOnly} commit(s) behind ${branch}; ${mainOnly} commit(s) on main not in ${branch}`);
+
+section(`Range commits (${commits.length}, oldest first)`);
+for (const commit of commits) {
+	say(`### ${short(commit.sha)} ${commit.pushed ? 'pushed' : 'unpushed'}${commit.merge ? ', merge' : ''} | ${commit.author} | ${commit.date}`);
+	for (const text of commit.message.split('\n')) say(`    ${text}`);
+}
+if (!commits.length) say('(none)');
+
+section('Working tree');
+for (const line of status.length ? status : ['(clean)']) say(line);
+
+section('Links and domains');
+for (const hit of linkHits.length ? linkHits : ['(none)']) say(`- ${hit}`);
+
+section('Prose to read (comments and docs added in the range)');
+for (const line of proseLines.length ? proseLines : ['(none)']) say(`- ${line}`);
+
+section('Release checks');
+say(`analyze: '${analyze}'`);
+say(`$savesrc: ${savesrc}`);
+say(`History end dates today or later: ${lateEnds.length ? lateEnds.join('; ') : 'none'}`);
+say(`Feature flag changes since the baseline: ${flagChanges.length ? '' : 'none'}`);
+for (const line of flagChanges) say(`    ${line}`);
+
+section(`Live update (since ${deployBase ? `${short(deployBase)} ${git('log', '-1', '--format=%s', deployBase)}` : 'the first commit'})`);
+say(`Built frontend: rebuild (${frontend.length ? `changed: ${frontend.join(', ')}` : 'version only'})`);
+say(`    On the server: git pull, ${dependenciesChanged ? 'npm install (dependencies changed), ' : ''}npm run build, then copy dist/assets/* and after it dist/index.html into ${LIVE_FOLDER}`);
+say('Individual files:');
+for (const line of copies.length ? copies : ['(none)']) say(`    ${line}`);
+say(`Never copy: ${NEVER_COPY}`);
+say(`No live update: ${noUpdate.length ? noUpdate.join(', ') : '(none)'}`);
+
+console.log(out.join('\n'));
