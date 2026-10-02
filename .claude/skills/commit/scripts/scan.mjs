@@ -232,6 +232,55 @@ const flagChanges = baseline
 	? lines(git('diff', baseline, '--unified=0', '--no-color', '--', 'src/features.ts')).filter((line) => /^[+-](?![+-])/.test(line))
 	: [];
 
+// --- Cross-file calls into fetch_lib.php --------------------------------------------------------
+
+// update.php sits in its own tree and is deployed separately, and nothing builds or type-checks either
+// caller against the lib, so a signature change shows up as a fatal in whichever branch happens to run.
+// The top-level pieces of an argument or parameter list, starting at the index of its opening paren.
+const listAt = (text, open) => {
+	const parts = [];
+	let depth = 0;
+	let quote = null;
+	let current = '';
+	for (let index = open + 1; index < text.length; index += 1) {
+		const char = text[index];
+		if (quote) {
+			if (char === '\\') { current += char + (text[index + 1] ?? ''); index += 1; continue; }
+			if (char === quote) quote = null;
+		} else if (char === "'" || char === '"') quote = char;
+		else if (char === '(' || char === '[') depth += 1;
+		else if (char === ')' && depth === 0) {
+			parts.push(current);
+			const trimmed = parts.map((part) => part.trim());
+			return trimmed.length === 1 && trimmed[0] === '' ? [] : trimmed;
+		} else if (char === ')' || char === ']') depth -= 1;
+		else if (char === ',' && depth === 0) { parts.push(current); current = ''; continue; }
+		current += char;
+	}
+	return null;
+};
+
+const LIB = 'public/fetch_lib.php';
+const libText = readText(LIB) ?? '';
+const signatures = new Map();
+for (const match of libText.matchAll(/^function (\w+)\s*\(/gm)) {
+	const params = listAt(libText, match.index + match[0].length - 1);
+	if (params) signatures.set(match[1], { least: params.filter((param) => !param.includes('=')).length, most: params.length });
+}
+
+const arity = [];
+for (const file of [LIB, 'public/fetch_service.php', 'timspicks_update/update.php']) {
+	const text = readText(file) ?? '';
+	for (const [name, { least, most }] of signatures) {
+		for (const match of text.matchAll(new RegExp(`(?<![\\w$>])(?<!function )${name}\\s*\\(`, 'g'))) {
+			const args = listAt(text, match.index + match[0].length - 1);
+			if (!args || (args.length >= least && args.length <= most)) continue;
+			const line = text.slice(0, match.index).split('\n').length;
+			arity.push(`${file}:${line} passes ${args.length} to ${name}(), which takes ${least === most ? least : `${least}-${most}`}`);
+		}
+	}
+}
+
 // --- Docs: maintained by hand, so only flag what provably outdates one --------------------------
 
 // Repo paths a doc names. Build and runtime output (dist/, data/, players/, history/, auth.json)
@@ -323,6 +372,7 @@ const attention = [
 		? [`version changed outside /commit: HEAD ${headVersion}, working tree ${worktreeVersion}, expected ${expectedVersion} from ${official ? 'the last version commit' : 'the baseline'}`] : []),
 	...(analyze === 'OFF' ? [] : [`src/features.ts analyze is '${analyze}', not 'OFF'`]),
 	...(savesrc === 'false' ? [] : [`public/fetch_service.php $savesrc is ${savesrc}`]),
+	...arity.map((item) => `call does not match its fetch_lib.php signature: ${item}`),
 	...lateEnds.map((end) => `History end date is today or later (${today}): ${end}`),
 	...(secretHits.length ? [`${secretHits.length} line(s) add credentials or copied session data; see Secrets and session data`] : []),
 ];
@@ -366,6 +416,8 @@ say(`$savesrc: ${savesrc}`);
 say(`History end dates today or later: ${lateEnds.length ? lateEnds.join('; ') : 'none'}`);
 say(`Feature flag changes since the baseline: ${flagChanges.length ? '' : 'none'}`);
 for (const line of flagChanges) say(`    ${line}`);
+say(`Calls into fetch_lib.php (${signatures.size} function(s)): ${arity.length ? '' : 'all match'}`);
+for (const line of arity) say(`    ${line}`);
 
 section('Docs (maintained by hand; report, never rewrite)');
 say(`Dangling path references: ${dangling.length ? '' : 'none'}`);

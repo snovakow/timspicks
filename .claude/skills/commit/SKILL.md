@@ -50,10 +50,11 @@ Read each range commit with `git show`, the working-tree diff (`git diff HEAD`),
 - files that shouldn't be tracked: data dumps, logs, build output, local settings
 - leftovers that look accidental, such as stray debug output
 
-The scan's release checks catch three mistakes that are easy to ship. Ask before committing if one trips:
+The scan's release checks catch four mistakes that are easy to ship. Ask before committing if one trips:
 - `analyze` in `src/features.ts` isn't `'OFF'`. `GENERATE` and `OUTPUT` run simulation and analysis in the app.
 - `$savesrc` in `public/fetch_service.php` is `true`, which writes raw feed dumps on the server.
 - A History `'end'` date in `public/fetch_service.php` is today or later. An unfinished day gets recorded as done and is never fetched again.
+- A call into `public/fetch_lib.php` passes the wrong number of arguments. `update.php` is the one that matters: it lives in its own tree, is deployed separately, and `php -l` can't see across files, so a mismatch reaches the server and fatals in whichever branch runs.
 
 Feature-flag changes in the range go in the report even when they're intended.
 
