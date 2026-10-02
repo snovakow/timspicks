@@ -5,6 +5,8 @@ import { getEntries } from '../utility';
 import './InfoPopupContent.css';
 import "./sportsbook.css";
 
+declare const __APP_VERSION__: string;
+
 export default function InfoPopupContent() {
 	return (
 		<div className="info-popup-layout">
@@ -97,6 +99,7 @@ export default function InfoPopupContent() {
 			<section className="info-popup-section info-popup-contact">
 				<h3>Contact</h3>
 				<p><a href="mailto:snovakow@gmail.com">snovakow@gmail.com</a></p>
+				<p>Version {__APP_VERSION__}</p>
 			</section>
 		</div>
 	);
