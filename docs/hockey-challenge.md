@@ -124,12 +124,21 @@ three in different games, `sss` for all three on one team, and the mixed
 stacked and opposing cases between. `strategyTitle` gives each an English name
 ("All Independent", "2-3 Stacked, 1 Independent", and so on).
 
-`src/correlationData.ts` is a generated lookup of multipliers for those shapes,
-indexed by pool slots × book × strategy × pattern, produced by `runSimulation`
-(`src/picksOptimizer.ts`) over the archived history. Two things to know about
-it: a multiplier below 1 is ignored, so correlation can only boost a ticket and
-never penalize one, and `null` means no observations — `iii`, for instance, is
-structurally impossible on a one-game slate.
+`src/correlationData.ts` is a generated lookup of correlation factors for those
+shapes, indexed by pool slots × book × strategy × pattern, produced by
+`runSimulation` (`src/picksOptimizer.ts`) over the archived history. Two things
+to know about it: a factor below 1 is ignored, so correlation can only boost a
+ticket and never penalize one, and `null` means no observations — `iii`, for
+instance, is structurally impossible on a one-game slate.
+
+`applyCorrelation` (`src/picksOptimizer.ts`) applies the factor to the *odds*
+rather than multiplying it into the value. Note the asymmetry: a factor is
+*derived* as a ratio of rates but *applied* as a ratio of odds, which is an
+approximation — deliberate, because it is what keeps a boosted value bounded. Each strategy has a natural maximum
+(`StrategyMax`: 1 for `least1`, 100 for `points`, 3 for `hits`), and scaling in
+odds space keeps a boosted result below that maximum — a raw multiply would push
+`least1` past 100%. The transform is strictly monotone, so it never saturates and
+ranking between tickets stays meaningful.
 
 ## A naming trap
 
