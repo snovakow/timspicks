@@ -568,9 +568,13 @@ function App() {
 						<p className="status-banner-primary">
 							Data last updated {dataStatus.processed.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
 						</p>
-						{(dataStatus.unfinished || dataStatus.stopped) && (
+						{(dataStatus.unfinished || dataStatus.stopped || dataStatus.staleList) && (
 							<p className="status-banner-secondary">
-								{dataStatus.unfinished ? "The latest update didn't finish" : "There hasn't been an update in over a day"}, so picks and odds may be out of date.
+								{dataStatus.unfinished
+									? "The latest update didn't finish"
+									: dataStatus.stopped
+										? "There hasn't been an update in over a day"
+										: "A game has started since the last update"}, so picks and odds may be out of date.
 							</p>
 						)}
 						{dataStatus.warnings.length > 0 && (

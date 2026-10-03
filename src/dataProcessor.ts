@@ -26,6 +26,7 @@ export interface DataStatus {
 	processed: Date;
 	unfinished: boolean;
 	stopped: boolean;
+	staleList: boolean;
 	warnings: string[];
 }
 
@@ -33,12 +34,19 @@ export interface DataStatus {
 const STALE_AFTER_MS = 26 * 60 * 60 * 1000;
 // A full run takes seconds, so one still going after this has failed
 const RUN_GRACE_MS = 10 * 60 * 1000;
+// A redraw can't be pulled until the cron's game start buffer clears, and a stale list
+// retries on its shorter period, so only a gap past both of those is worth reporting
+const REDRAW_GRACE_MS = 10 * 60 * 1000;
 
 // process.json holds the last complete run's time and warnings, plus "started" while a later run hasn't finished
-export const getDataStatus = (processed: Date, started: Date | null, warnings: string[], now = new Date()): DataStatus | null => {
+export const getDataStatus = (processed: Date, started: Date | null, warnings: string[], gameTimes: Date[], now = new Date()): DataStatus | null => {
 	const unfinished = started !== null && started.getTime() > processed.getTime() && now.getTime() - started.getTime() > RUN_GRACE_MS;
 	const stopped = now.getTime() - processed.getTime() > STALE_AFTER_MS;
-	return unfinished || stopped || warnings.length > 0 ? { processed, unfinished, stopped, warnings } : null;
+	// A game that started since the last run was redrawn upstream without the pull landing.
+	// The cron makes no runs after the day's last start, so that one never gets a pull to wait for
+	const lastStart = Math.max(...gameTimes.map((time) => time.getTime()));
+	const staleList = gameTimes.some((time) => time.getTime() < lastStart && time > processed && now.getTime() - time.getTime() > REDRAW_GRACE_MS);
+	return unfinished || stopped || staleList || warnings.length > 0 ? { processed, unfinished, stopped, staleList, warnings } : null;
 };
 
 interface SportsbookOddsItem {
@@ -222,8 +230,10 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 	}
 
 	const gamesList: Picks.GameData[] = [];
+	const gameTimes: Date[] = [];
 	for (const gameData of games) {
 		const game = new Picks.GameData(gameData);
+		gameTimes.push(game.time);
 		if (!cutoff || cutoff < game.time) gamesList.push(game);
 	}
 
@@ -257,7 +267,7 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 		return a.away.name.localeCompare(b.away.name);
 	});
 
-	const dataStatus = cutoff ? getDataStatus(cutoff, started, warnings) : null;
+	const dataStatus = cutoff ? getDataStatus(cutoff, started, warnings, gameTimes) : null;
 
 	return [playersList, gamesList, dataStatus];
 };
