@@ -31,24 +31,43 @@ relative. That is what lets the same build run from a subfolder.
 
 ## Cadence: not once a minute
 
-Cron fires every minute, but `update.php` throttles itself. Its two constants
-are an update period of one hour and a buffer of 60 seconds:
+Cron fires every minute, but `update.php` throttles itself. Its constants are an
+update period of one hour, a retry period of five minutes, and a buffer of 60
+seconds:
 
 - No updates between the day's last game and midnight.
 - Otherwise update once per period, or as soon as a game start time has passed
   since the previous run.
 - Never within the buffer of a game start time, or of midnight.
-- No retry within the period of a run that failed.
+- Inside the game window, a run that failed or a list the feed hadn't redrawn
+  yet waits only the retry period.
 
-The midnight buffer and the failed-run hold are checked on their own, before
-anything reads `games.json`. The rest of the gate needs both `process.json` and
-a today-dated `games.json` to parse, and at rollover `games.json` still holds
-yesterday's schedule — so a check that waited on it would be skipped at exactly
-the minute the upstream feeds are least likely to answer with JSON. The
-unthrottled fall-through that remains is what bootstraps a new day.
+Only the midnight buffer is checked on its own, before anything reads
+`games.json`. The rest of the gate needs both `process.json` and a today-dated
+`games.json` to parse, and at rollover `games.json` still holds yesterday's
+schedule — so a check that waited on it would be skipped at exactly the minute
+the upstream feeds are least likely to answer with JSON. The unthrottled
+fall-through that remains is what bootstraps a new day; a failed run still waits
+the full period while the window is unknown, or a rollover that can't reach the
+schedule feed would retry every minute.
+
+The retry period runs from an hour before the first game, and the last-game rule
+caps its other end. That is where a missed pull is expensive: the live list stays
+wrong until the next run, and the snapshot folder for the upcoming slot never
+gets written — a last-slot one can't be recovered afterwards. Outside the window
+a failure only costs hour-old odds, so it waits the hour.
+
+A list the feed hadn't redrawn yet is recognised from its own contents. The feed
+drops a team once its game starts, so a listed team whose game has already
+started means the stored list predates that redraw. The check reads `games.json`
+and `helper.json` and keeps no state, so it clears itself as soon as a pull lands
+with the new draw, and it ignores games whose `gameScheduleState` isn't `OK` so a
+postponed start time can't trigger it.
 
 The net effect is roughly hourly, plus a run shortly after each game start —
-about two dozen a day, not 1,440. Fewer snapshot folders than that appear, since
+about two dozen a day, not 1,440, with a floor of one per retry period while a
+list is stale or a feed is failing inside the window. Fewer snapshot folders
+than that appear, since
 each is named for the next upcoming game and every run before that puck drop
 overwrites it: the folder count tracks game slots, not runs. 2026-10-01 produced
 four.
@@ -86,6 +105,11 @@ mid-rollover used to look like. The exception is page 1 of `bet4`, where an
 unreachable feed has always counted as "no offers today"; it still does, but it
 records a warning now instead of passing for a quiet day.
 
+The History fetch tolerates one status of its own: a 404 means the challenge
+didn't run that day, so it is skipped as before. Every other failure stops the
+range, because an error envelope parses as JSON and would otherwise be saved as
+that day's history, with the day recorded as fetched for good.
+
 `$savesrc` dumps each raw upstream response next to the parsed one. Cron never
 enables it, and `fetch_service.php` hard-codes it to `false`.
 
@@ -118,10 +142,20 @@ is copied — that is the normal end-of-day state.
 `process.json` carries the run state: `startRun` stamps `started` when a run
 begins, and `processed` writes the finish time plus any warnings and clears
 `started`. The front end reads it and shows a notice when the data is over a day
-old, a run didn't finish, or the last run had warnings. A run that dies partway
-leaves `started` behind, which is both what the banner reports once its
-ten-minute grace is up and what holds the next cron attempt off for an update
-period — without it, a failing feed is retried every minute.
+old, a run didn't finish, a game has started since the last run, or the last run
+had warnings. A run that dies partway leaves `started` behind, which is both what
+the banner reports once its ten-minute grace is up and what the next cron attempt
+measures its wait from.
+
+The game-started notice is the app's own check rather than something the cron
+records: it compares the day's start times against `processed`, so it still fires
+when the cron has stopped running altogether — the one failure nothing
+server-side can report. It has a ten-minute grace of its own, since no pull is
+possible until the game start buffer clears and a stale list can take a retry
+period beyond that; a shorter grace would light the banner after every puck
+drop. It also leaves out the day's last start: the cron does no updates between
+the last game and midnight, so no pull ever follows that start, and counting it
+would light the banner every night until the first run after midnight.
 
 ## The admin page
 
