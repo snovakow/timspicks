@@ -10,6 +10,9 @@ App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hor
   disk, the update cadence, the history archive, and how to build and deploy
 - [Deploying](docs/deployment.md) — the daily merge, build and copy routine,
   the checks before a merge, and what changes at each end of a season
+- [History and the correlation table](docs/history-and-correlation.md) — how the
+  archive and the generated correlation factors are regenerated, in what order,
+  and why a run can come out byte-identical
 
 ## About
 During the 2025-2026 season, the Tim Hortons Hockey Challenge presented 6 Challenges in addition to the Playoffs.
@@ -50,6 +53,8 @@ Challenge 6 and the playoffs are the result of using sportsbook odds to make pic
 Reacts adaptively to light-dark scheme
 
 Shows a notice when the data is over a day old, an update didn't finish, a game has started since the last update, or the last update had warnings
+
+Clears the games and pick lists once the day's last game has started, since nothing is left to play until the next day's lists post
 
 # React + TypeScript + Vite
 
