@@ -38,14 +38,21 @@ const RUN_GRACE_MS = 10 * 60 * 1000;
 // retries on its shorter period, so only a gap past both of those is worth reporting
 const REDRAW_GRACE_MS = 10 * 60 * 1000;
 
+// The day's last start. The cron makes no runs between it and midnight, so nothing new
+// arrives after it and the app has nothing left to offer for the day
+export const getLastGameStart = (gameTimes: Date[]): Date | null => {
+	const times = gameTimes.map((time) => time.getTime()).filter((time) => !isNaN(time));
+	return times.length > 0 ? new Date(Math.max(...times)) : null;
+};
+
 // process.json holds the last complete run's time and warnings, plus "started" while a later run hasn't finished
 export const getDataStatus = (processed: Date, started: Date | null, warnings: string[], gameTimes: Date[], now = new Date()): DataStatus | null => {
 	const unfinished = started !== null && started.getTime() > processed.getTime() && now.getTime() - started.getTime() > RUN_GRACE_MS;
 	const stopped = now.getTime() - processed.getTime() > STALE_AFTER_MS;
 	// A game that started since the last run was redrawn upstream without the pull landing.
 	// The cron makes no runs after the day's last start, so that one never gets a pull to wait for
-	const lastStart = Math.max(...gameTimes.map((time) => time.getTime()));
-	const staleList = gameTimes.some((time) => time.getTime() < lastStart && time > processed && now.getTime() - time.getTime() > REDRAW_GRACE_MS);
+	const lastStart = getLastGameStart(gameTimes);
+	const staleList = lastStart !== null && gameTimes.some((time) => time.getTime() < lastStart.getTime() && time > processed && now.getTime() - time.getTime() > REDRAW_GRACE_MS);
 	return unfinished || stopped || staleList || warnings.length > 0 ? { processed, unfinished, stopped, staleList, warnings } : null;
 };
 
@@ -165,8 +172,16 @@ function isPlayerJson(val: unknown): val is RawPlayerJson {
 	return true;
 }
 
+type GamesAndPlayers = {
+	playersListing: Picks.Player[];
+	gamesListing: Picks.GameData[];
+	dataStatus: DataStatus | null;
+	processed: Date | null;
+	lastGameStart: Date | null;
+};
+
 // Async loader/validator for games.json that merges players into each game
-const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesSrc: string): Promise<[Picks.Player[], Picks.GameData[], DataStatus | null]> => {
+const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesSrc: string): Promise<GamesAndPlayers> => {
 	let cutoff: Date | null = null;
 	let started: Date | null = null;
 	let warnings: string[] = [];
@@ -269,7 +284,13 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 
 	const dataStatus = cutoff ? getDataStatus(cutoff, started, warnings, gameTimes) : null;
 
-	return [playersList, gamesList, dataStatus];
+	return {
+		playersListing: playersList,
+		gamesListing: gamesList,
+		dataStatus,
+		processed: cutoff,
+		lastGameStart: getLastGameStart(gameTimes),
+	};
 };
 
 interface InitialData {
@@ -277,6 +298,8 @@ interface InitialData {
 	playersListing: Picks.Player[];
 	gamesListing: Picks.GameData[];
 	dataStatus: DataStatus | null;
+	processed: Date | null;
+	lastGameStart: Date | null;
 	playerOddsDraftKings: SportsbookOddsItem[];
 	playerOddsFanDuel: SportsbookOddsItem[];
 	playerOddsBetMGM: SportsbookOddsItem[];
@@ -286,7 +309,7 @@ interface InitialData {
 export const loadInitialData = async (): Promise<InitialData> => {
 	const [
 		playerData,
-		[playersListing, gamesListing, dataStatus],
+		gamesAndPlayers,
 		playerOddsDraftKings,
 		playerOddsFanDuel,
 		playerOddsBetMGM,
@@ -302,9 +325,7 @@ export const loadInitialData = async (): Promise<InitialData> => {
 
 	return {
 		playerData,
-		playersListing,
-		gamesListing,
-		dataStatus,
+		...gamesAndPlayers,
 		playerOddsDraftKings,
 		playerOddsFanDuel,
 		playerOddsBetMGM,

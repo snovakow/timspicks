@@ -27,6 +27,10 @@ import './App.css';
 
 const precision = Picks.precision;
 
+// Ceiling on a single wait for the day's last start: well inside setTimeout's 32-bit limit,
+// and short enough that a sleeping device re-checks the clock soon after it wakes
+const CLOCK_CHECK_MAX_MS = 4 * 60 * 60 * 1000;
+
 let SIMULATE = Feature.analyze === 'GENERATE';
 let ANALYZE = Feature.analyze === 'OUTPUT';
 
@@ -139,6 +143,9 @@ function App() {
 	const [error, setError] = useState<string | null>(null);
 	const [data, setData] = useState<InitializedData | null>(null);
 	const [dataStatus, setDataStatus] = useState<DataProcessor.DataStatus | null>(null);
+	const [processed, setProcessed] = useState<Date | null>(null);
+	const [lastGameStart, setLastGameStart] = useState<Date | null>(null);
+	const [dayDone, setDayDone] = useState(false);
 
 	const [showPercentage, setShowPercentage] = useState(true);
 	const [deVigEnabled, setDeVigEnabled] = useState(false);
@@ -188,6 +195,8 @@ function App() {
 					table3Rows,
 				});
 				setDataStatus(initialData.dataStatus);
+				setProcessed(initialData.processed);
+				setLastGameStart(initialData.lastGameStart);
 				setError(null);
 			} catch (error: unknown) {
 				if (error instanceof Error && error.message === DataProcessor.NO_GAMES_ERROR) {
@@ -210,6 +219,41 @@ function App() {
 
 		initializeData();
 	}, []);
+
+	/*
+		The cron makes no runs between the day's last start and midnight, so the view has to move
+		on the clock rather than on a fetch. No re-fetch either: the next day's lists arrive on the
+		next load, by which time the post-midnight run has written them. A long wait is re-armed
+		from the clock instead of trusted once, since a background tab throttles its timers and a
+		device asleep past the start wakes with one already due.
+	*/
+	useEffect(() => {
+		if (!lastGameStart) return;
+
+		let timer: number | undefined;
+		const check = () => {
+			const remaining = lastGameStart.getTime() - Date.now();
+			if (remaining <= 0) {
+				setDayDone(true);
+				return;
+			}
+			setDayDone(false);
+			timer = window.setTimeout(check, Math.min(remaining, CLOCK_CHECK_MAX_MS));
+		};
+		check();
+
+		const handleVisibility = () => {
+			if (document.visibilityState !== 'visible') return;
+			window.clearTimeout(timer);
+			check();
+		};
+		document.addEventListener('visibilitychange', handleVisibility);
+
+		return () => {
+			window.clearTimeout(timer);
+			document.removeEventListener('visibilitychange', handleVisibility);
+		};
+	}, [lastGameStart]);
 
 	// Initialize sort configs - use ref to avoid recreating
 	const sortConfig1Ref = useRef<Picks.SortConfig>({ keyOrder: [] });
@@ -481,6 +525,14 @@ function App() {
 		{ key: "gameTime", title: "Start", sort: true },
 	];
 
+	/*
+		Data stale enough to trip "stopped" is likely holding an earlier day's schedule, whose last
+		start is long past, so that notice takes precedence over calling the day locked.
+	*/
+	const dayLocked = dayDone && !dataStatus?.stopped;
+	// Nothing is left to report once the locked day has swallowed the game-started notice
+	const bannerProblem = !!dataStatus && (dataStatus.unfinished || dataStatus.stopped || (dataStatus.staleList && !dayLocked) || dataStatus.warnings.length > 0);
+
 	const includeCorrelationSlider = false;
 	return (
 		<>
@@ -563,12 +615,19 @@ function App() {
 					</section>
 				)}
 
-				{!Feature.offseasonBanner && dataStatus && (
-					<section className="status-banner" role="status" aria-live="polite">
-						<p className="status-banner-primary">
-							Data last updated {dataStatus.processed.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-						</p>
-						{(dataStatus.unfinished || dataStatus.stopped || dataStatus.staleList) && (
+				{!Feature.offseasonBanner && (dataStatus || dayLocked) && (
+					<section className={`status-banner${dayLocked && !bannerProblem ? ' status-banner-info' : ''}`} role="status" aria-live="polite">
+						{processed && (
+							<p className="status-banner-primary">
+								Data last updated {processed.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+							</p>
+						)}
+						{dayLocked && (
+							<p className={processed ? 'status-banner-secondary' : 'status-banner-primary'}>
+								All of today's games have started, so picks are locked until tomorrow's lists post.
+							</p>
+						)}
+						{dataStatus && (dataStatus.unfinished || dataStatus.stopped || (dataStatus.staleList && !dayLocked)) && (
 							<p className="status-banner-secondary">
 								{dataStatus.unfinished
 									? "The latest update didn't finish"
@@ -577,7 +636,7 @@ function App() {
 										: "A game has started since the last update"}, so picks and odds may be out of date.
 							</p>
 						)}
-						{dataStatus.warnings.length > 0 && (
+						{dataStatus && dataStatus.warnings.length > 0 && (
 							<>
 								<p className="status-banner-secondary">
 									{dataStatus.warnings.length === 1 ? '1 warning' : `${dataStatus.warnings.length} warnings`} from the last {dataStatus.unfinished ? 'complete ' : ''}update:
@@ -592,7 +651,9 @@ function App() {
 
 				<CollapsibleSection title="Games">
 					<div className="scrollable-table-wrapper section-container">
-						{gamesList.length === 0 ? (
+						{dayLocked ? (
+							<div className="no-games-message">Today's games have all started</div>
+						) : gamesList.length === 0 ? (
 							<div className="no-games-message">No games today</div>
 						) : (
 							<Picks.Basic games={gamesList} darkTheme={darkTheme} xgMap={xgEnabled && xgMap ? xgMap : undefined} />
@@ -601,17 +662,29 @@ function App() {
 				</CollapsibleSection>
 				<CollapsibleSection title="Pick #1">
 					<div className="scrollable-table-wrapper section-container">
-						<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
+						{dayLocked ? (
+							<div className="no-games-message">Picks are locked</div>
+						) : (
+							<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
+						)}
 					</div>
 				</CollapsibleSection>
 				<CollapsibleSection title="Pick #2">
 					<div className="scrollable-table-wrapper section-container">
-						<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
+						{dayLocked ? (
+							<div className="no-games-message">Picks are locked</div>
+						) : (
+							<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
+						)}
 					</div>
 				</CollapsibleSection>
 				<CollapsibleSection title="Pick #3">
 					<div className="scrollable-table-wrapper section-container">
-						<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
+						{dayLocked ? (
+							<div className="no-games-message">Picks are locked</div>
+						) : (
+							<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} />
+						)}
 					</div>
 				</CollapsibleSection>
 				{Feature.allPlayersTable && (

@@ -145,6 +145,13 @@ button:hover {
 	background: light-dark(hsl(48, 96%, 89%), hsl(38, 70%, 16%));
 }
 
+/* The locked day is an expected nightly state, so it keeps the neutral tint of the shared
+   rule above and leaves the amber to mean something actually went wrong */
+.status-banner-info {
+	border: 1px solid color-mix(in srgb, var(--c-link) 35%, transparent);
+	background: color-mix(in srgb, var(--c-link) 10%, transparent);
+}
+
 .offseason-banner-primary,
 .status-banner-primary {
 	margin: 0;
