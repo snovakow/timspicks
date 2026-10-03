@@ -79,15 +79,18 @@ export default function InfoPopupContent() {
 
 			{Feature.correlation && (
 				<section className="info-popup-section">
-					<h3>Log Points (<i>𝑳%</i>) Correlation</h3>
+					<h3>Correlation</h3>
 					<p>
-						Log points: Used to denote logarithmic changes scaled to act like percentages,
-						used as a baseline for relative change.
+						Picks from the same game, whether on opposing teams or the same team,
+						do not hit independently. Each set of picks is classified by its shape,
+						and archived results give that shape a factor for how often it landed
+						relative to a baseline of independent picks from different games.
 					</p>
 					<p>
-						A log-ratio baseline correlation is used to estimate how much picks from the same game,
-						whether on opposing teams or the same team,
-						are correlated relative to a baseline of independent picks from different games.
+						The factor is applied to the odds rather than multiplied into the
+						percentage, so a boosted result rises toward its maximum without ever
+						passing it. Only factors above the baseline are applied, so correlation
+						can raise a set of picks but never penalize one.
 					</p>
 					<p>
 						With 2 or less games where all three picks cannot be independent from different games,

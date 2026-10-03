@@ -1,6 +1,6 @@
 import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
-import { calcAny, calcPnt, calcHit, resolvePoolKey, gamesCount } from './picksOptimizer';
+import { calcAny, calcPnt, calcHit, resolvePoolKey, gamesCount, applyCorrelation } from './picksOptimizer';
 import { correlations, } from './correlationData';
 import type { CorrelationStrategy } from './correlationData';
 import type {
@@ -126,15 +126,10 @@ const calculateStats = (
 			this.hits = calcHit(this.prob1, this.prob2, this.prob3);
 		}
 
-		// Scale correlation effect with linear interpolation:
-		// factor=0 => no effect, factor=1 => full effect, factor>1 => amplified effect.
 		correlate(strategy: ComboPattern, ref: CorrelationStrategy): void {
-			const least1 = ref.least1[strategy];
-			if (least1 !== null && least1 >= 1) this.least1 *= (least1 - 1) * factor + 1;
-			const points = ref.points[strategy];
-			if (points !== null && points >= 1) this.points *= (points - 1) * factor + 1;
-			const hits = ref.hits[strategy];
-			if (hits !== null && hits >= 1) this.hits *= (hits - 1) * factor + 1;
+			this.least1 = applyCorrelation('least1', this.least1, ref.least1[strategy], factor);
+			this.points = applyCorrelation('points', this.points, ref.points[strategy], factor);
+			this.hits = applyCorrelation('hits', this.hits, ref.hits[strategy], factor);
 		}
 	}
 

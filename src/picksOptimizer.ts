@@ -31,6 +31,35 @@ export const calcHit = (prob1: number, prob2: number, prob3: number): number => 
 	return prob1 + prob2 + prob3;
 };
 
+// Natural maximum of each strategy's value: least1 is a probability, points is the
+// challenge's top score, hits is the three picks.
+export const StrategyMax: Record<Strategy, number> = {
+	least1: 1,
+	points: 100,
+	hits: 3,
+};
+
+// Apply a correlation factor as an odds ratio rather than a raw multiply, so the result
+// cannot pass the strategy's natural maximum. factor scales the effect:
+// 0 => no effect, 1 => full effect, >1 => amplified effect.
+export const applyCorrelation = (
+	strategy: Strategy,
+	value: number,
+	correlation: number | null,
+	factor: number = 1
+): number => {
+	if (correlation === null || correlation < 1) return value;
+	const effective = (correlation - 1) * factor + 1;
+	if (effective === 1) return value;
+
+	const max = StrategyMax[strategy];
+	const p = value / max;
+	if (p <= 0 || p >= 1) return value;
+
+	const odds = (p / (1 - p)) * effective;
+	return max * odds / (1 + odds);
+};
+
 interface HistoryPlayer {
 	"nhlPlayerId": number;
 	"fullName": string;
@@ -923,7 +952,7 @@ export const bestPicks = async (
 	const strategyScore = (strategy: Strategy, prob1: number, prob2: number, prob3: number): number => {
 		if (strategy === 'least1') return calcAny(prob1, prob2, prob3);
 		if (strategy === 'points') return calcPnt(prob1, prob2, prob3);
-		return calcHit(prob1, prob2, prob3) / 3;
+		return calcHit(prob1, prob2, prob3);
 	};
 
 	const adjustedStrategyScore = (
@@ -937,7 +966,7 @@ export const bestPicks = async (
 		pick3: Picks.Player
 	): number => {
 		const correlation = correlate(poolKey, book, strategy, pick1, pick2, pick3);
-		return strategyScore(strategy, prob1, prob2, prob3) * correlation;
+		return applyCorrelation(strategy, strategyScore(strategy, prob1, prob2, prob3), correlation);
 	};
 
 	const strategyBookWeights: Record<Strategy, Map<LogStatsKey, number>> = {
