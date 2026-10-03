@@ -182,14 +182,26 @@ if ($live && isset($_GET['history'])) {
 			}
 
 			foreach ($datesToFetch as $date) {
-				curl_setopt($ch, CURLOPT_URL, $baseURL . $date);
+				$url = $baseURL . $date;
+				curl_setopt($ch, CURLOPT_URL, $url);
 
-				$response = curl_exec($ch);
-				if ($response === false) die('cURL Error: ' . curl_error($ch));
+				$fetched = fetchCurl($ch, $url);
 
+				// A day the challenge didn't run answers 404, which is normal across an off-season gap.
+				// Every other failure has to stop the range: an error envelope parses as JSON and carries
+				// its own status, so letting one through would save it as that day's history and record
+				// the day as fetched, and the range is never walked again.
+				if ($fetched['status'] === 404) {
+					echo "No data for {$date}<br>";
+					continue;
+				}
+				if ($fetched['error'] !== null) die($fetched['error']);
+
+				$response = $fetched['body'];
 				$data = json_decode($response, false);
 				if (json_last_error() !== JSON_ERROR_NONE) die('Error decoding JSON: ' . json_last_error_msg());
 
+				// Belt and braces, in case a 200 ever carries that envelope
 				if (($data->status ?? null) === 404) {
 					echo "No data for {$date}<br>";
 					continue;
