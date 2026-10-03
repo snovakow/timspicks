@@ -157,6 +157,18 @@ drop. It also leaves out the day's last start: the cron does no updates between
 the last game and midnight, so no pull ever follows that start, and counting it
 would light the banner every night until the first run after midnight.
 
+That window gets a state of its own instead. Once the day's last start has passed
+the app says every game has started, and clears the games table and the three
+pick lists — the lists it holds are the final draw, which can no longer be
+played, and leaving them up reads as picks still to make. It flips on the clock
+rather than on a fetch, so a page left open switches over by itself at the last
+puck drop; a long wait is re-armed from the clock each time, since a background
+tab throttles its timers and a sleeping device wakes with one already due. There
+is no re-fetch to go with it: the next day's lists arrive on the next load, by
+which time the post-midnight run has written them. Data stale enough to trip the
+over-a-day notice is likely holding an earlier day's schedule, whose last start
+is long past, so that notice takes precedence over calling the day locked.
+
 ## The admin page
 
 `fetch.php` sits in the site folder. It mints a CSRF token and posts credentials
