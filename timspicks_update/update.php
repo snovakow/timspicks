@@ -19,19 +19,24 @@ Delete all crontabs: crontab -r
 $codeRoot = $_GET['lib'] ?? 'public';
 require_once "../{$codeRoot}/fetch_lib.php";
 
+/* Decode a JSON file, or null when it's missing or unreadable */
+function readJson(string $path)
+{
+    if (!file_exists($path)) return null;
+
+    $data = file_get_contents($path);
+    if ($data === false) return null;
+
+    return json_decode($data, true);
+}
+
 /* A timestamp out of process.json: "processed" is the last complete run, "started" a run that never finished */
 function runTime(string $basePath, string $key)
 {
-    $local_file = $basePath . '/process.json';
-    if (!file_exists($local_file)) return null;
+    $data = readJson($basePath . '/process.json');
+    if (!is_array($data)) return null;
 
-    $data = file_get_contents($local_file);
-    if ($data === false) return null;
-
-    $data = json_decode($data, false);
-    if ($data === null) return null;
-
-    $data = $data->$key ?? null;
+    $data = $data[$key] ?? null;
     if (!isset($data)) return null;
 
     try {
@@ -45,19 +50,13 @@ function runTime(string $basePath, string $key)
 
 function processGames(DateTime $now, string $basePath)
 {
-    $local_file = $basePath . '/games.json';
-    if (!file_exists($local_file)) return null;
+    $data = readJson($basePath . '/games.json');
+    if (!is_array($data)) return null;
 
-    $data = file_get_contents($local_file);
-    if ($data === false) return null;
-
-    $data = json_decode($data, true);
-    if ($data === null) return null;
-
-    $data = $data["gameWeek"];
+    $data = $data["gameWeek"] ?? null;
     if (!isset($data)) return null;
 
-    $data = $data[0];
+    $data = $data[0] ?? null;
     if (!isset($data)) return null;
 
     if (!isset($data["date"])) return null;
@@ -67,7 +66,7 @@ function processGames(DateTime $now, string $basePath)
 
     if ($date->format('Y-m-d') !== $now->format('Y-m-d')) return null;
 
-    $games = $data["games"];
+    $games = $data["games"] ?? null;
     if (!isset($games)) return null;
 
     $gameTimes = [];
@@ -90,6 +89,47 @@ function processGames(DateTime $now, string $basePath)
     });
 
     return $gameTimes;
+}
+
+/*
+    True when helper.json still lists a team whose game has started, so the feed hadn't
+    redrawn its list yet when that list was pulled. Returns false on anything unexpected:
+    a missing or odd file shouldn't pin the gate to the retry period.
+*/
+function staleList(DateTime $now, int $updateBuffer, string $basePath)
+{
+    $games = readJson($basePath . '/games.json');
+    $helper = readJson($basePath . '/helper.json');
+    if (!is_array($games) || !is_array($helper)) return false;
+
+    $cutoff = $now->getTimestamp() - $updateBuffer;
+
+    $started = [];
+    foreach ($games["gameWeek"][0]["games"] ?? [] as $game) {
+        // A postponed game's start time isn't one a redraw would have reacted to
+        if (($game["gameScheduleState"] ?? 'OK') !== 'OK') continue;
+        if (!isset($game["startTimeUTC"])) continue;
+
+        try {
+            $gameTime = new DateTime((string)$game["startTimeUTC"]);
+        } catch (Exception $e) {
+            continue;
+        }
+        if ($gameTime->getTimestamp() > $cutoff) continue;
+
+        foreach ([$game["awayTeam"]["abbrev"] ?? null, $game["homeTeam"]["abbrev"] ?? null] as $abbrev) {
+            if ($abbrev !== null) $started[$abbrev] = true;
+        }
+    }
+    if (empty($started)) return false;
+
+    foreach (["1", "2", "3"] as $key) {
+        foreach ($helper[$key] ?? [] as $row) {
+            if (isset($row["team"]) && isset($started[$row["team"]])) return true;
+        }
+    }
+
+    return false;
 }
 
 function logOutput(array $output)
@@ -126,16 +166,18 @@ $minOutput = true;
 
 /*
     a. Don't update between the last game and midnight.
-    b. Update $updatePeriod since the previous update, unless a game start time has passed.
+    b. Update $period since the previous run, or as soon as a game start time has passed.
     c. Don't update within $updateBuffer seconds from a game start time or midnight.
-    d. Don't retry within $updatePeriod of a run that failed.
+    d. Inside the game window, a failed run or a list the feed hadn't redrawn yet
+       retries on $retryPeriod instead of $updatePeriod.
 */
 $updatePeriod = 60 * 60;
+$retryPeriod = 5 * 60;
 $updateBuffer = 1 * 60;
 
 /*
     The gate below needs a today-dated games.json, which the first run after rollover has
-    not fetched yet, so the two checks that must not depend on it come first.
+    not fetched yet, so the one check that must not depend on it comes first.
 */
 
 // c, midnight half
@@ -147,15 +189,12 @@ if ($nowTime <= $startOfDayTime + $updateBuffer) {
 $processDate = runTime($basePath, 'processed');
 $startedDate = runTime($basePath, 'started');
 
-// d. A run that died before writing "processed" holds off the next attempt for
-// $updatePeriod, so a failing feed is retried hourly instead of every minute
+// A run that died before writing "processed", which the next attempt measures from
 $failedDate = $startedDate !== null && ($processDate === null || $startedDate > $processDate) ? $startedDate : null;
-if ($failedDate !== null && $nowTime - $failedDate->getTimestamp() < $updatePeriod) {
-    if ($minOutput) die();
-    logEnd($now, "Not retrying within the update period of a failed run");
-}
-
 $lastRunDate = $failedDate ?? $processDate;
+
+// Narrowed to $retryPeriod below, once games.json gives the window
+$period = $updatePeriod;
 
 $gameTimes = processGames($now, $basePath);
 if ($lastRunDate !== null && $gameTimes !== null) {
@@ -172,7 +211,7 @@ if ($lastRunDate !== null && $gameTimes !== null) {
         logEnd($now, "Not updating between last game and midnight");
     }
 
-    $processTime = $lastRunDate->getTimestamp();
+    $lastRunTime = $lastRunDate->getTimestamp();
 
     $gamePassedSinceLastUpdate = false;
     foreach ($gameTimes as $gameDate) {
@@ -186,17 +225,35 @@ if ($lastRunDate !== null && $gameTimes !== null) {
             logEnd($now, "Not updating near game start time");
         }
         // Check if a game has passed since last update
-        if ($gameTime >= $processTime && $gameTime <= $nowTime) {
+        if ($gameTime >= $lastRunTime && $gameTime <= $nowTime) {
             $gamePassedSinceLastUpdate = true;
         }
     }
 
-    // b. Only update if $updatePeriod has passed since last update, unless a game start time has passed since previous update
-    $timeSinceProcess = $nowTime - $processTime;
-    if (!$gamePassedSinceLastUpdate && $timeSinceProcess < $updatePeriod) {
+    /*
+        d. A missed pull between the first and last game costs a draw twice over: the live
+        list is wrong until the next run, and that slot's snapshot never gets written. So a
+        failed run, or a list the feed hadn't redrawn yet, retries on the shorter period
+        there and stays on the full one outside the window. Rule a caps the window's end.
+    */
+    $inGameWindow = $nowTime >= $gameTimes[0]->getTimestamp() - $updatePeriod;
+    if ($inGameWindow && ($failedDate !== null || staleList($now, $updateBuffer, $basePath))) {
+        $period = $retryPeriod;
+    }
+
+    // b. Only update if $period has passed since the last run, unless a game start time has passed since then
+    if (!$gamePassedSinceLastUpdate && $nowTime - $lastRunTime < $period) {
         if ($minOutput) die();
         logEnd($now, "Not updating");
     }
+} else if ($failedDate !== null && $nowTime - $failedDate->getTimestamp() < $period) {
+    /*
+        No today-dated games.json, so the window is unknown: a failed run waits out the full
+        period rather than the retry one, keeping a rollover that can't reach the schedule
+        feed from being retried every minute.
+    */
+    if ($minOutput) die();
+    logEnd($now, "Not retrying within the update period of a failed run");
 }
 
 if (!$minOutput) echo "Data Downloader\n";
