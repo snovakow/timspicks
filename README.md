@@ -25,6 +25,9 @@ Finding the challenge fun, I continued using goals per game stats, began using s
 
 Challenge 6 and the playoffs are the result of using sportsbook odds to make picks. The Challenge 6 ranked in the top 0.38%, and the Playoffs in the top 1.33%.
 
+## 2026-2027 Season
+The rewards changed for the 2026-2027 season. Per game day, 1 correct pick now earns 10 points, 2 earn 25 and 3 still earn 100, down from 25 and 50. Getting at least one pick correct for 7 straight days earns a free donut a day for a week, in place of last season's week of free coffee. The Points strategy ranks picks by the new values.
+
 ## 2025-2026 Season Results
 | Challenge   | Period               | Ranking  | Players | Top %  |
 | ----------- | -------------------- | -------: | ------: | -----: |
@@ -52,7 +55,7 @@ Challenge 6 and the playoffs are the result of using sportsbook odds to make pic
 
 Reacts adaptively to light-dark scheme
 
-Shows a notice when the data is over a day old, an update didn't finish, a game has started since the last update, or the last update had warnings
+Shows a notice when the data is over a day old, an update didn't finish, a game has started since the last update, today's pick lists haven't posted yet, or the last update had warnings
 
 Clears the games and pick lists once the day's last game has started, since nothing is left to play until the next day's lists post
 
