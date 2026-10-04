@@ -263,10 +263,12 @@ last pushed version commit.
 
 ## Feature flags and release checks
 
-`src/features.ts` holds five flags; three are currently off. `correlation` is
-on, and `analyze` selects between generating the correlation table, logging
-correlations, and off.
+`src/features.ts` holds the build-time feature flags; read the file for which
+are on. A flag gates its feature end to end, so turning `correlation` off also
+hides the strategy dots, the Pick Strategies settings, the correlation slider
+and the Legend button. `analyze` is the odd one: rather than on and off, it
+selects between generating the correlation table, logging correlations, and off.
 
-Two of them are release gates that the `/commit` scan checks: `analyze` must be
+Two settings are release gates that the `/commit` scan checks: `analyze` must be
 `'OFF'`, and `$savesrc` in `fetch_service.php` must be `false`. The scan also
 flags any history `end` date at or after today, for the reason given above.
