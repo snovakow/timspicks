@@ -7,9 +7,10 @@ interface PopupProps {
     closePopUp: () => void;
     children: ReactNode;
     top?: boolean;
+    pinned?: ReactNode;
 }
 
-function Popup({ showPopUp, title, closePopUp, children, top }: PopupProps) {
+function Popup({ showPopUp, title, closePopUp, children, top, pinned }: PopupProps) {
     if (!showPopUp) {
         return null;
     }
@@ -29,6 +30,7 @@ function Popup({ showPopUp, title, closePopUp, children, top }: PopupProps) {
                         &times;
                     </button>
                 </div>
+                {pinned && <div className="popup-pinned">{pinned}</div>}
                 <div className="popup-body">
                     {children}
                 </div>

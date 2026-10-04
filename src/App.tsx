@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as Picks from './components/Table';
 import Popup from './components/Popup';
 import InfoPopupContent, { LegendPopupContent } from './components/InfoPopupContent';
-import StatsPopupContent from './components/StatsPopupContent';
+import StatsPopupContent, { StatsSportsbookList } from './components/StatsPopupContent';
 import type { SportsbookLog, LogStatsKey, StrategyMode } from './dataTypes';
 import { Sportsbooks } from './dataTypes';
 import SettingsPanel from './components/Settings';
@@ -585,7 +585,10 @@ function App() {
 				</div>
 			</header>
 			<main className='content'>
-				<Popup title={showPopup.title} showPopUp={showPopup.visible} closePopUp={closePopup} top={popupView === 'stats'}>
+				<Popup title={showPopup.title} showPopUp={showPopup.visible} closePopUp={closePopup} top={popupView === 'stats'}
+					pinned={popupView === 'stats' && popupStats && (
+						<StatsSportsbookList selectedKey={selectedStatsKey} onSelectKey={setSelectedStatsKey} />
+					)}>
 					{popupView === 'info' ? (
 						<InfoPopupContent />
 					) : popupView === 'legend' ? (
@@ -604,7 +607,7 @@ function App() {
 							onXgEnabledChange={setXgEnabled}
 						/>
 					) : (
-						<StatsPopupContent bookStats={popupStats} selectedKey={selectedStatsKey} onSelectKey={setSelectedStatsKey} />
+						<StatsPopupContent bookStats={popupStats} selectedKey={selectedStatsKey} />
 					)}
 				</Popup>
 

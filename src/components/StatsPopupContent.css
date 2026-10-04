@@ -4,10 +4,6 @@
 	font-size: 1em;
 }
 
-.stats-layout:not(:first-child) {
-	margin-top: 1em;
-}
-
 .stats-title {
 	font-size: 1.2em;
 }
@@ -33,4 +29,15 @@
 
 .stats-align-center {
 	text-align: center;
+}
+
+/* Pinned above the stats, the badges share one row, narrowing on small screens instead of wrapping.
+   The label shrinks below about 360px so the longest title still fits its badge at 320px. */
+.stats-sportsbook-list .sportsbook-item {
+	flex: 1 1 0;
+	min-width: 0;
+	max-width: 4.8rem;
+	padding-left: 0;
+	padding-right: 0;
+	font-size: clamp(0.66rem, 3.3vw, 0.74rem);
 }
