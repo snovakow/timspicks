@@ -863,6 +863,9 @@ function startRun(DateTime $now, string $basePath)
 	$data = file_exists($local_file) ? json_decode(file_get_contents($local_file), true) : null;
 	if (!is_array($data) || !isset($data['processed'])) return;
 
+	// A "started" still here is an attempt that never finished. Each attempt restamps "started", which the cron's
+	// retry wait measures from, so "failingSince" keeps the first attempt of the unbroken failures for the banner
+	if (isset($data['started'])) $data['failingSince'] = $data['failingSince'] ?? $data['started'];
 	$data['started'] = $now->format(DateTime::ATOM);
 	file_put_contents($local_file, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), LOCK_EX);
 }

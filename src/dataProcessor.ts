@@ -48,7 +48,8 @@ export const getLastGameStart = (gameTimes: Date[]): Date | null => {
 	return times.length > 0 ? new Date(Math.max(...times)) : null;
 };
 
-// process.json holds the last complete run's time and warnings, plus "started" while a later run hasn't finished
+// process.json holds the last complete run's time and warnings. While later runs haven't finished, started is
+// when the first of them began ("failingSince", else "started"), so a run of retries can't keep resetting the grace
 export const getDataStatus = (processed: Date, started: Date | null, warnings: string[], gameTimes: Date[], earlierDraw = false, now = new Date()): DataStatus | null => {
 	const unfinished = started !== null && started.getTime() > processed.getTime() && now.getTime() - started.getTime() > RUN_GRACE_MS;
 	const stopped = now.getTime() - processed.getTime() > STALE_AFTER_MS;
@@ -213,9 +214,10 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 		}
 
 		// Status fields only feed the banner, so ignore them rather than fail the page when they're malformed
-		if (typeof metaData.started === 'string' && !isNaN(new Date(metaData.started).getTime())) {
-			started = new Date(metaData.started);
-		}
+		const parseTime = (value: unknown): Date | null => typeof value === 'string' && !isNaN(new Date(value).getTime()) ? new Date(value) : null;
+		// Each failed attempt restamps "started", and inside the game window the cron retries sooner than the
+		// banner's grace, so a run of failures is timed from "failingSince", its first attempt
+		started = parseTime(metaData.failingSince) ?? parseTime(metaData.started);
 		if (Array.isArray(metaData.warnings)) {
 			warnings = metaData.warnings.filter((warning: unknown): warning is string => typeof warning === 'string');
 		}
