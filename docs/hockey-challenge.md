@@ -87,19 +87,24 @@ before that slot.
 
 ## Scoring
 
-Per game day, by number of correct picks (`calcPnt` and `Outcome` in
-`src/picksOptimizer.ts`):
+Per game day, by number of correct picks (`PointsByHits` in
+`src/picksOptimizer.ts`, which `calcPnt` and the back-tests both score with):
 
 | Correct | Points |
 | ------: | -----: |
 | 0       | 0      |
-| 1       | 25     |
-| 2       | 50     |
+| 1       | 10     |
+| 2       | 25     |
 | 3       | 100    |
 
-At least one correct pick on seven straight days earns a week of free coffee.
-Nothing in the app tracks a streak; the `least1` strategy is a single-day proxy
-for it.
+At least one correct pick on seven straight days earns a free donut a day for a
+week. Nothing in the app tracks a streak; the `least1` strategy is a single-day
+proxy for it.
+
+These are the 2026-27 values. The 2025-26 season paid 25 and 50 points for one
+and two correct, and a week of free coffee for the streak. The correlation table
+is derived with the points values, so changing them means regenerating it
+(`docs/history-and-correlation.md`).
 
 ## The three strategies
 

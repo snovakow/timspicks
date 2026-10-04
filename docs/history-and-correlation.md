@@ -90,6 +90,8 @@ changed:
 
 - Added game days to `history/`? The factors should move.
 - Changed how `Correlation.calculate` derives a factor? The factors should move.
+- Changed the points table (`PointsByHits`)? The `points` factors should move,
+  and others can too, since `calcPnt` decides which groups count at all.
 - Neither — only set `analyze` and ran it? Byte-identical output is correct.
 
 The derivation lives in `Correlation.calculate` in `src/picksOptimizer.ts`: it
