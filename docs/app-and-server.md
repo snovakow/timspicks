@@ -84,7 +84,7 @@ start, with a floor of one per retry period while a list is stale or a feed is
 failing inside the window — nowhere near the 1,440 times a day cron fires. Fewer
 snapshot folders than runs appear, since each is named for the next upcoming
 game and every run before that puck drop overwrites it: the folder count tracks
-game slots, not runs. 2026-10-01 produced four.
+game slots, not runs. On 2026-10-03, a full day, 23 runs left five folders.
 
 Backups are additionally skipped for the first few hours after local midnight, to
 let any time-zone shift pass first — times are stored in local time, so a shift
