@@ -837,10 +837,15 @@ function backup(DateTime $now, DateTimeZone $timezone, string $basePath, array $
 		if (!copy($basePath . $bet3file, $backupSubPath . $bet3file)) $copyErrors[] = $bet3file;
 		if (!copy($basePath . $bet4file, $backupSubPath . $bet4file)) $copyErrors[] = $bet4file;
 		if (!copy($basePath . $helperfile, $backupSubPath . $helperfile)) $copyErrors[] = $helperfile;
-		if (!empty($copyErrors)) $output['error'] = "Failed to copy: " . implode(", ", $copyErrors);
 
 		$output['title'] = "Backup";
 		$output['content'] = "$backupSubPath";
+
+		// Return without calling processed, so "started" stays behind: a lost snapshot is a failed run, and the next attempt retries on it
+		if (!empty($copyErrors)) {
+			$output['error'] = "Failed to copy: " . implode(", ", $copyErrors);
+			return $output;
+		}
 	} else {
 		if (empty($games)) $output['title'] = 'No games scheduled for today';
 		else $output['title'] = 'No game found after the current time';
