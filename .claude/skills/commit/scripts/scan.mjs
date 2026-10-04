@@ -281,28 +281,63 @@ for (const file of [LIB, 'public/fetch_service.php', 'timspicks_update/update.ph
 	}
 }
 
-// --- Docs: maintained by hand, so only flag what provably outdates one --------------------------
+// --- Docs: generated prose, so keep the code out of them ----------------------------------------
 
 // Repo paths a doc names. Build and runtime output (dist/, data/, players/, history/, auth.json)
 // is written on the server and absent here, so a missing one of those proves nothing.
 const DOC_PATH = /`((?:src|public|docs|timspicks_update|\.claude)\/[A-Za-z0-9_./-]*)`/g;
+
+// Backticks in these pages mark code, so every span is a candidate and the exceptions are listed
+// instead. A page that carries the runbook marker is allowed to name what a step needs; it is
+// reported separately rather than silently, since the allowance covers steps and not prose.
+const RUNBOOK_MARKER = /^<!--\s*runbook\s*-->\s*$/;
+const SPAN = /`([^`\n]+)`/g;
+// Commands, git refs, and the data files and folders the server writes: a rename in src/ can't
+// falsify any of them, so they aren't code references.
+const NOT_CODE = [
+	/^(?:npm|npx|node|git|php|curl|crontab|python3|sh|tsc|eslint|diff|grep)\b/,
+	/^(?:main|development)$/,
+	/^Version [X\d]/,
+	/^\/[a-z-]+$/,
+	/\.md$/,
+	// Step 3 requires these as the app's own words for the books, so they belong in prose.
+	/^bet[1-4](?:[–-]bet4)?$/,
+	/^[A-Z][a-z]+\/[A-Z][A-Za-z_]+$/,
+	/^(?:data|players|history)\/[A-Za-z0-9_<>.…\s-]*$/,
+	/^[a-z][a-z0-9]*(?:\.\.[a-z0-9]+)?\.json$/,
+	/^<[A-Za-z0-9_-]+>$/,
+	/^<season>_<date>_<format>\.json$/,
+];
 const docFiles = [...lines(tryGit('ls-files', '--cached', '--others', '--exclude-standard', 'docs') ?? ''), 'README.md']
 	.filter((file) => PROSE_FILE.test(file));
 const dangling = [];
+const codeRefs = new Map();
 const seenRef = new Set();
 for (const file of docFiles) {
-	(readText(file) ?? '').split('\n').forEach((text, index) => {
-		for (const [, path] of text.matchAll(DOC_PATH)) {
+	const text = readText(file) ?? '';
+	const runbook = text.split('\n').some((line) => RUNBOOK_MARKER.test(line));
+	const hits = new Map();
+	let fenced = false;
+	text.split('\n').forEach((line, index) => {
+		if (/^\s*```/.test(line)) { fenced = !fenced; return; }
+		for (const [, path] of line.matchAll(DOC_PATH)) {
 			const key = `${file}\t${path}`;
 			if (seenRef.has(key) || existsSync(path.replace(/\/$/, ''))) continue;
 			seenRef.add(key);
 			dangling.push(`${file}:${index + 1}  ${path}`);
 		}
+		// A fenced block is a command or a data layout, not a claim about the code.
+		if (fenced) return;
+		for (const [, span] of line.matchAll(SPAN)) {
+			if (NOT_CODE.some((pattern) => pattern.test(span))) continue;
+			if (!hits.has(span)) hits.set(span, index + 1);
+		}
 	});
+	if (hits.size) codeRefs.set(file, { runbook, hits });
 }
 
-// An added, deleted or renamed source file is what outdates a doc's layout or source map; an edit
-// inside an existing file would name a doc nearly every batch, so it doesn't count.
+// An added, deleted or renamed source file can outdate what a page says exists, or a runbook step
+// that names it. Edits inside existing files are left out; they would fill the list every batch.
 const SOURCE_PATH = /^(?:src|public)\//;
 const structural = baseline
 	? lines(git('diff', '--name-status', '--find-renames', baseline)).flatMap((line) => {
@@ -419,7 +454,12 @@ for (const line of flagChanges) say(`    ${line}`);
 say(`Calls into fetch_lib.php (${signatures.size} function(s)): ${arity.length ? '' : 'all match'}`);
 for (const line of arity) say(`    ${line}`);
 
-section('Docs (maintained by hand; report, never rewrite)');
+section('Docs (generated prose; keep the code out, see step 5a)');
+say(`Code references: ${codeRefs.size ? '' : 'none'}`);
+for (const [file, { runbook, hits }] of codeRefs) {
+	const names = [...hits].map(([span, line]) => `${span} (:${line})`).join(', ');
+	say(`    ${file}${runbook ? ' [runbook: allowed in steps only]' : ''} — ${hits.size}: ${names}`);
+}
 say(`Dangling path references: ${dangling.length ? '' : 'none'}`);
 for (const line of dangling) say(`    ${line}`);
 say(`Added, deleted or renamed under src/ or public/: ${structural.length ? '' : 'none'}`);

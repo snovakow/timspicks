@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Review and finalize everything since the last version commit for pushing. Fixes messages and site mentions, updates the README where needed, commits it all, ends with a version commit, and lists what to copy to the live server.
+description: Review and finalize everything since the last version commit for pushing. Fixes messages and site mentions, updates the README and docs where needed, commits it all, ends with a version commit, and lists what to copy to the live server.
 disable-model-invocation: true
 argument-hint: "[x.y.z]"
 model: opus
@@ -24,7 +24,7 @@ This repo is public: whatever gets pushed (code, comments and commit messages) s
 
   Everything after the newest such commit is under review, however much a commit looks like a version commit. A subject that mentions "version", a bump made by hand, or `Version X.Y.Z` with a trailer are all ordinary range commits. Before the first version commit exists, the baseline is the newest pushed commit.
 - **Rewriting.** A commit can be rewritten only if it comes after the baseline and isn't reachable from any remote branch, because rewriting a pushed commit would take a force push. The scan prints this rewrite base. Pushed commits in the range are still reviewed, and their problems reported.
-- **Order.** Plan the batch before staging anything. Fixes to existing commits come first, then new commits, then a README commit if one is needed. The version commit always comes last.
+- **Order.** Plan the batch before staging anything. Fixes to existing commits come first, then new commits, then the prose commits — README and `docs/` — if any are needed. The version commit always comes last.
 
 ## 1. Survey
 
@@ -117,18 +117,40 @@ Update README.md if the range adds or changes something it describes, or somethi
 
 Keep its voice, follow step 3 for anything you add, and leave the external link list and the
 template section as they are. The Documentation list is part of what you maintain: keep it pointing
-at whatever `docs/` holds. Never invent results. The README change is its own commit, just before
-the version commit.
+at whatever `docs/` holds. Never invent results. The README change is its own commit, after the
+code and before the version commit.
 
-README.md is the only prose this skill writes. The pages under `docs/` are maintained by hand, so
-never rewrite one to match the range. Report them instead, in two cases:
-- the scan's **Docs** section lists a dangling path reference, which means a doc names a file that
-  no longer exists
-- the range adds, deletes or renames a file under `src/` or `public/`, the kind of change that
-  outdates a doc's layout or source map
+## 5a. The pages under `docs/`
 
-Edits inside an existing file aren't worth reporting; the scan would name a doc on nearly every
-batch, since the docs reference most of `src/` and `public/` between them.
+They are generated prose this skill maintains, the same as README.md. Update any page the range
+outdates, and hold every page to the rule below.
+
+**A doc explains the idea, never the code.** A page that states what the code *is* goes wrong
+silently on the next rename, value change or flag flip, and nothing checks it. So a page carries
+what a reader can't recover from the source — why a rule exists, what breaks without it, what was
+measured — and leaves the code as the only record of itself. Out of every page:
+- identifiers: file paths, and function, type, constant or variable names
+- values that live in the code: periods, thresholds, limits, cutoffs
+- counts of code entities, and which flags or settings are currently set how
+- a table that mirrors the file tree, such as a source map
+
+Values the code doesn't own stay, since no rename can falsify them: the contest's rules and rewards,
+what a feed returns, what the archive measures, and the names of the files on disk that the server
+writes. Date a measurement so a reader can judge it.
+
+**Keep the reason a value was worth printing.** Cutting the digits shouldn't cut the warning with
+them. A threshold nobody calibrated earns a sentence saying exactly that; the number itself is one
+grep away.
+
+**A runbook may name what a step needs.** Mark such a page with `<!-- runbook -->` on its own line.
+Its steps may name the one setting or file a step would be unfollowable without, and the value a
+step tells you to set, since that value *is* the step. A value the prose merely describes — a
+period, a threshold, a limit — stays out either way, and the page's explanatory passages follow the
+rule above in full. A page without the marker is strict throughout. Where a runbook already owns an executable detail, an explanatory page
+describes it instead of repeating it.
+
+The scan's **Docs** section is the worklist: the code references found per page, runbook pages
+counted separately, and dangling paths, where a page names a file that no longer exists.
 
 ## 6. Version
 
@@ -166,7 +188,7 @@ tidy.
    - Keep message files outside the repo (the session scratchpad if there is one), so they never get committed.
 3. Fix site mentions in the working-tree changes.
 4. Commit the groups from step 7, in the planned order. Stage explicit paths, never `-A` or `.`, and check `git diff --cached --stat` against the group's subject before committing: if something unrelated is staged, unstage it rather than widen the message. Commit untracked files that belong to the project and ask about the rest. Never delete the user's files or edit `.gitignore` without asking.
-5. Make the README commit, if step 5 calls for one.
+5. Make the prose commits, if steps 5 and 5a call for them: README and `docs/`, one concern each.
 6. Make the version commit.
 
 ## 9. Verify and report
@@ -183,7 +205,7 @@ Then report, briefly:
 - problems in pushed commits that couldn't be fixed
 - the version change, and any feature-flag changes
 - new site or brand names in code, files left uncommitted, and the checks that ran
-- any `docs/` page the batch may have outdated, per step 5, as something for the user to pick up later; never edited here
+- anything in `docs/` that step 5a couldn't settle, such as a claim only the user can confirm
 - the starting sha (the undo point, also in the reflog), and that nothing was pushed
 - how far `origin/main` is behind this branch, and whether main has commits this branch lacks, as a reminder to merge before the server pulls
 - last, the scan's live update list:
