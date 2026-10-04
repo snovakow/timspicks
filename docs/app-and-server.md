@@ -134,7 +134,7 @@ data/
   games.json         today's schedule
   helper.json        today's three pick lists
   bet1..bet4.json    today's odds, one file per book
-  process.json       run state: processed, started, warnings
+  process.json       run state: processed, started, failingSince, warnings
   <Y-m-d>/
     games.json       that day's schedule
     <HHmm>/
@@ -157,9 +157,14 @@ is copied — that is the normal end-of-day state.
 begins, and `processed` writes the finish time plus any warnings and clears
 `started`. The front end reads it and shows a notice when the data is over a day
 old, a run didn't finish, a game has started since the last run, or the last run
-had warnings. A run that dies partway leaves `started` behind, which is both what
-the banner reports once its ten-minute grace is up and what the next cron attempt
-measures its wait from.
+had warnings. A run that dies partway, including one whose snapshot copy fails,
+leaves `started` behind, and the next cron attempt measures its wait from it.
+
+Each attempt restamps `started`, and inside the game window failures retry every
+five minutes, so `started` alone would never age past the banner's ten-minute
+grace while a feed kept failing. When `startRun` finds an unfinished `started`,
+it keeps the earliest one as `failingSince`, and the banner times its grace from
+that. `processed` clears both.
 
 The game-started notice is the app's own check rather than something the cron
 records: it compares the day's start times against `processed`, so it still fires
