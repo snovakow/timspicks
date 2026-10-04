@@ -12,9 +12,10 @@ Delete all crontabs: crontab -r
 */
 
 /*
-    This file and fetch_lib.php are deployed to different folders and have to be copied together:
-    nothing here is built or type-checked, so a signature change over there surfaces as a fatal in
-    the cron log, and only in whichever branch happens to be reachable at that hour.
+    This file and fetch_lib.php are deployed to different folders and have to be copied together,
+    fetch_lib.php first (docs/deployment.md, step 5): nothing here is built or type-checked, so a
+    signature change over there surfaces as a fatal in the cron log, and only in whichever branch
+    happens to be reachable at that hour.
 */
 $codeRoot = $_GET['lib'] ?? 'public';
 require_once "../{$codeRoot}/fetch_lib.php";

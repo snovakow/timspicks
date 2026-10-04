@@ -34,10 +34,17 @@ the live site is a copy made out of that checkout's build.
    first, then `dist/index.html`. The index names the hashed asset files, so
    putting it first means anyone loading the site in between asks for files that
    aren't there yet.
-5. **Copy changed PHP:** `public/*` into the live folder, `update.php` into the
-   update folder. This is the step that's easy to skip, because the build
-   doesn't involve it — and until it happens the scrapers haven't changed at
-   all. The cron loads `fetch_lib.php` out of the live folder, not the checkout.
+5. **Copy changed PHP**, in this order: `public/*` into the live folder first,
+   then `update.php` into the update folder. This is the step that's easy to
+   skip, because the build doesn't involve it — and until it happens the
+   scrapers haven't changed at all. The cron loads `fetch_lib.php` out of the
+   live folder, not the checkout. The order matters because `fetch_lib.php`
+   gives every new parameter a default, so a new library still works under the
+   old `update.php`, but nothing protects the reverse: a new `update.php` that
+   calls a function the old library doesn't have yet (as it did with
+   `startRun()`) dies on every cron run until the library catches up. Dying
+   before `startRun()` also means no `started` gets recorded, so the failed-run
+   gate never engages and it retries every minute.
 
 **Never copy `dist/data`, `dist/history`, `dist/players` or `dist/auth.json`.**
 The build fills those from the checkout's own stale `public/`, while the server
