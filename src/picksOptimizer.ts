@@ -17,6 +17,10 @@ export const calcAny = (prob1: number, prob2: number, prob3: number): number => 
 	return 1 - (1 - prob1) * (1 - prob2) * (1 - prob3);
 };
 
+// Challenge points for a game day, indexed by the number of correct picks. The
+// correlation table is derived with these, so a change means regenerating it.
+const PointsByHits = [0, 10, 25, 100] as const;
+
 export const calcPnt = (prob1: number, prob2: number, prob3: number): number => {
 	const not1 = 1 - prob1;
 	const not2 = 1 - prob2;
@@ -24,7 +28,7 @@ export const calcPnt = (prob1: number, prob2: number, prob3: number): number => 
 	const p1 = prob1 * not2 * not3 + not1 * prob2 * not3 + not1 * not2 * prob3;
 	const p2 = prob1 * prob2 * not3 + prob1 * not2 * prob3 + not1 * prob2 * prob3;
 	const p3 = prob1 * prob2 * prob3;
-	return p1 * 25 + p2 * 50 + p3 * 100;
+	return p1 * PointsByHits[1] + p2 * PointsByHits[2] + p3 * PointsByHits[3];
 };
 
 export const calcHit = (prob1: number, prob2: number, prob3: number): number => {
@@ -35,7 +39,7 @@ export const calcHit = (prob1: number, prob2: number, prob3: number): number => 
 // challenge's top score, hits is the three picks.
 export const StrategyMax: Record<Strategy, number> = {
 	least1: 1,
-	points: 100,
+	points: PointsByHits[3],
 	hits: 3,
 };
 
@@ -174,7 +178,7 @@ class ResultTotal implements Total {
 		const hitCount = (hit1 ? 1 : 0) + (hit2 ? 1 : 0) + (hit3 ? 1 : 0);
 
 		if (hitCount > 0) this.least1++;
-		this.points += hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100;
+		this.points += PointsByHits[hitCount];
 		this.hits += hitCount;
 		this.count++;
 	}
@@ -285,7 +289,7 @@ class Outcome {
 			count: 1,
 		};
 		this.points = {
-			value: hitCount === 0 ? 0 : hitCount === 1 ? 25 : hitCount === 2 ? 50 : 100,
+			value: PointsByHits[hitCount],
 			predicted: calcPnt(prob1, prob2, prob3),
 			count: 1,
 		};

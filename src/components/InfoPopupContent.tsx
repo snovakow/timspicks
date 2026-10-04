@@ -130,12 +130,12 @@ export function LegendPopupContent() {
 				<h3>Strategy</h3>
 				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-least1-left-dot" aria-hidden="true" />
 					<span className="legend-strategy-text"><strong>{StrategyLabels.least1} (Green): </strong>
-						Best picks for streaks. Getting at least one pick correct for 7 straight days earns free coffee for a week.
+						Best picks for streaks. Getting at least one pick correct for 7 straight days earns a free donut a day for a week.
 					</span>
 				</p>
 				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-points-left-dot" aria-hidden="true" />
 					<span className="legend-strategy-text"><strong>{StrategyLabels.points} (Blue): </strong>
-						Best picks for maximum points. 1 correct = 25 points, 2 correct = 50 points, 3 correct = 100 points.
+						Best picks for maximum points. 1 correct = 10 points, 2 correct = 25 points, 3 correct = 100 points.
 					</span>
 				</p>
 				<p className="legend-strategy-row"><span className="legend-strategy-dot info-chip-hits-left-dot" aria-hidden="true" />
