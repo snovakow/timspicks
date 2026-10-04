@@ -13,7 +13,8 @@
     background: #f8fafc;
     border: 1px solid #cbd5e1;
     border-radius: 10px;
-    padding: 0.85rem 1rem;
+    --section-padding-x: 1rem;
+    padding: 0.85rem var(--section-padding-x);
     box-sizing: border-box;
 }
 
@@ -40,13 +41,25 @@
 
 .legend-pick-row {
     display: flex;
-    align-items: flex-start;
-    gap: 0.35rem;
+    align-items: center;
+    /* Matches the section's side padding, so the sample has the same space on both sides */
+    gap: var(--section-padding-x);
 }
 
 .legend-pick-row .legend-badge-cell {
     margin-right: 0;
     flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1;
+    padding: 0.4em 0.5em;
+}
+
+/* Dots flow under the text instead of pinning to the bottom edge, so equal padding centers the pair */
+.legend-pick-row .cell-strategy-dots {
+    position: static;
+    transform: none;
 }
 
 .legend-pick-text {
