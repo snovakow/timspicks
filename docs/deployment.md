@@ -1,5 +1,7 @@
 # Deploying
 
+<!-- runbook -->
+
 The daily routine for getting a finished batch onto the live site, plus the
 things that only come up at the two ends of a season. As in the other docs,
 exact hosts and paths are left out: "the live folder" and "the update folder"
@@ -37,20 +39,20 @@ the live site is a copy made out of that checkout's build.
 5. **Copy changed PHP**, in this order: `public/*` into the live folder first,
    then `update.php` into the update folder. This is the step that's easy to
    skip, because the build doesn't involve it — and until it happens the
-   scrapers haven't changed at all. The cron loads `fetch_lib.php` out of the
-   live folder, not the checkout. The order matters because `fetch_lib.php`
+   scrapers haven't changed at all. The cron loads the scraping library out of
+   the live folder, not the checkout. The order matters because the library
    gives every new parameter a default, so a new library still works under the
-   old `update.php`, but nothing protects the reverse: a new `update.php` that
-   calls a function the old library doesn't have yet (as it did with
-   `startRun()`) dies on every cron run until the library catches up. Dying
-   before `startRun()` also means no `started` gets recorded, so the failed-run
-   gate never engages and it retries every minute.
+   old update script, but nothing protects the reverse: a new update script that
+   calls a library function the old library doesn't have yet dies on every cron
+   run until the library catches up. Dying that early also means no start stamp
+   gets recorded, so the failed-run gate never engages and it retries every
+   minute.
 
 **Never copy `dist/data`, `dist/history`, `dist/players` or `dist/auth.json`.**
-The build fills those from the checkout's own stale `public/`, while the server
-owns the live ones: cron writes `data/` and `players/`, the History action
-builds `history/`, and `auth.json` is rewritten in place on rehash. Copying
-`dist/` wholesale overwrites the live history index.
+The build fills those from the checkout's own stale copies, while the server owns
+the live ones: cron writes the data and players folders, the History action builds
+the archive, and the credentials file is rewritten in place on rehash. Copying the
+build output wholesale overwrites the live history index.
 
 ## Before the merge
 
@@ -61,8 +63,8 @@ three — this is the list it's checking against:
   analysis in the app.
 - `$savesrc` in `public/fetch_service.php` is `false`, or the server starts
   writing raw feed dumps.
-- No history `end` date is today or later. See the season notes below for why
-  that one matters so much.
+- No history range's `end` date is today or later. See the season notes below for
+  why that one matters so much.
 
 ## After
 
@@ -88,19 +90,19 @@ three — this is the list it's checking against:
 ## Beginning a season
 
 - Add the new season to the range table in `public/fetch_service.php`: a
-  `regular` row from the opener, and a `playoff` row once those dates exist.
+  regular-season row from the opener, and a playoff row once those dates exist.
   Finished seasons stay commented out above it.
-- Keep `end` at the last completed day, every time you bump it. The history API
-  returns 404 for a day that isn't over, and the incremental index writes that
-  day down as done and never asks for it again.
+- Keep the `end` at the last completed day, every time you bump it. The history
+  feed returns 404 for a day that isn't over, and the incremental index writes
+  that day down as done and never asks for it again.
 - Confirm the cron is running before the first game day, not after it.
 - Turn `offseasonBanner` back off.
 - If days were missed, backfill them: one closing price per player in every slot
   from an odds archive into `public/data/<date>`, with the pick lists rebuilt
-  from the history API's `availableTimes`. Then copy those dated folders into
-  the live folder's `data/`, along with `fetch_service.php`. That is a specific
-  exception to the never-copy rule above — dated folders by hand, never
-  `dist/data` wholesale.
+  from the per-player available times the history feed reports. Then copy those
+  dated folders into the live folder's data folder, along with
+  `fetch_service.php`. That is a specific exception to the never-copy rule above
+  — dated folders by hand, never `dist/data` wholesale.
 - One trap when backfilling: the live `history.json` only ever extends forward
   from the end it has stored. If it already holds an entry for the new season
   that starts after the days you just backfilled, that entry has to be deleted,
