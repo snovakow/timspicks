@@ -11,11 +11,13 @@ type RawPlayerJson = {
 };
 
 type PickBucket = "1" | "2" | "3";
-type PlayerDataByPick = Record<PickBucket, Picks.OddsItem[]>;
+// dateTimeAvailable is when the feed made the draw, in ET with no offset; files older than the stamp lack it
+type PlayerDataByPick = Record<PickBucket, Picks.OddsItem[]> & { dateTimeAvailable?: string };
 type GameDataInput = ConstructorParameters<typeof Picks.GameData>[0];
 // Structure of games.json
 type GameListingData = {
 	gameWeek: {
+		date?: string;
 		games: GameDataInput[];
 	}[];
 };
@@ -27,6 +29,7 @@ export interface DataStatus {
 	unfinished: boolean;
 	stopped: boolean;
 	staleList: boolean;
+	earlierDraw: boolean;
 	warnings: string[];
 }
 
@@ -46,14 +49,14 @@ export const getLastGameStart = (gameTimes: Date[]): Date | null => {
 };
 
 // process.json holds the last complete run's time and warnings, plus "started" while a later run hasn't finished
-export const getDataStatus = (processed: Date, started: Date | null, warnings: string[], gameTimes: Date[], now = new Date()): DataStatus | null => {
+export const getDataStatus = (processed: Date, started: Date | null, warnings: string[], gameTimes: Date[], earlierDraw = false, now = new Date()): DataStatus | null => {
 	const unfinished = started !== null && started.getTime() > processed.getTime() && now.getTime() - started.getTime() > RUN_GRACE_MS;
 	const stopped = now.getTime() - processed.getTime() > STALE_AFTER_MS;
 	// A game that started since the last run was redrawn upstream without the pull landing.
 	// The cron makes no runs after the day's last start, so that one never gets a pull to wait for
 	const lastStart = getLastGameStart(gameTimes);
 	const staleList = lastStart !== null && gameTimes.some((time) => time.getTime() < lastStart.getTime() && time > processed && now.getTime() - time.getTime() > REDRAW_GRACE_MS);
-	return unfinished || stopped || staleList || warnings.length > 0 ? { processed, unfinished, stopped, staleList, warnings } : null;
+	return unfinished || stopped || staleList || earlierDraw || warnings.length > 0 ? { processed, unfinished, stopped, staleList, earlierDraw, warnings } : null;
 };
 
 interface SportsbookOddsItem {
@@ -282,7 +285,16 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 		return a.away.name.localeCompare(b.away.name);
 	});
 
-	const dataStatus = cutoff ? getDataStatus(cutoff, started, warnings, gameTimes) : null;
+	/*
+		The first run after midnight can land before the feed posts the day's first draw, which it
+		stamps midnight, so a draw dated other than the schedule's day is yesterday's final list
+		set against today's games. Both dates are ET, so they compare as strings.
+	*/
+	const scheduleDate = gamesJson.gameWeek[0].date;
+	const drawn = typeof playerData.dateTimeAvailable === 'string' ? playerData.dateTimeAvailable : null;
+	const earlierDraw = drawn !== null && typeof scheduleDate === 'string' && drawn.slice(0, 10) !== scheduleDate;
+
+	const dataStatus = cutoff ? getDataStatus(cutoff, started, warnings, gameTimes, earlierDraw) : null;
 
 	return {
 		playersListing: playersList,

@@ -133,6 +133,20 @@ function staleList(DateTime $now, int $updateBuffer, string $basePath)
     return false;
 }
 
+/*
+    True when helper.json holds a draw the feed made on an earlier day: the first run after
+    midnight can land before the feed posts the day's first draw, leaving yesterday's final list
+    up against today's games. Returns false when helper.json predates the stamp, for the same
+    reason staleList does.
+*/
+function earlierDraw(DateTime $now, string $basePath)
+{
+    $helper = readJson($basePath . '/helper.json');
+    if (!is_array($helper) || !is_string($helper["dateTimeAvailable"] ?? null)) return false;
+
+    return substr($helper["dateTimeAvailable"], 0, 10) !== $now->format('Y-m-d');
+}
+
 function logOutput(array $output)
 {
     if (isset($output['title'])) echo "{$output['title']}";
@@ -170,7 +184,8 @@ $minOutput = true;
     b. Update $period since the previous run, or as soon as a game start time has passed.
     c. Don't update within $updateBuffer seconds from a game start time or midnight.
     d. Inside the game window, a failed run or a list the feed hadn't redrawn yet
-       retries on $retryPeriod instead of $updatePeriod.
+       retries on $retryPeriod instead of $updatePeriod, and so does a list left over from
+       an earlier day in the hour after midnight.
 */
 $updatePeriod = 60 * 60;
 $retryPeriod = 5 * 60;
@@ -236,9 +251,17 @@ if ($lastRunDate !== null && $gameTimes !== null) {
         list is wrong until the next run, and that slot's snapshot never gets written. So a
         failed run, or a list the feed hadn't redrawn yet, retries on the shorter period
         there and stays on the full one outside the window. Rule a caps the window's end.
+
+        A list left over from an earlier day also retries on the shorter period, but only in the
+        hour after midnight, where a feed slow to roll over leaves one. Past that hour it waits
+        the full period, so a day the feed never posts doesn't pull every few minutes until the
+        last game.
     */
     $inGameWindow = $nowTime >= $gameTimes[0]->getTimestamp() - $updatePeriod;
+    $inRollover = $nowTime < $startOfDayTime + $updatePeriod;
     if ($inGameWindow && ($failedDate !== null || staleList($now, $updateBuffer, $basePath))) {
+        $period = $retryPeriod;
+    } else if ($inRollover && earlierDraw($now, $basePath)) {
         $period = $retryPeriod;
     }
 

@@ -231,11 +231,16 @@ function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool 
 		$output['error'] = "Missing playerLists in response from $helper";
 		return $output;
 	}
+	// When the feed made this draw, in ET with no offset. The day's first draw is stamped midnight,
+	// so a date other than today's is a list still left over from an earlier day
+	$drawn = isset($json->dateTimeAvailable) && is_string($json->dateTimeAvailable) ? $json->dateTimeAvailable : null;
+
 	$json = $json->playerLists;
 	$data = [];
 	$data["1"] = [];
 	$data["2"] = [];
 	$data["3"] = [];
+	if ($drawn !== null) $data["dateTimeAvailable"] = $drawn;
 
 	if (!is_dir($playerPath)) mkdir($playerPath, 0755, true);
 	foreach ($json as $item) {

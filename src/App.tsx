@@ -531,7 +531,7 @@ function App() {
 	*/
 	const dayLocked = dayDone && !dataStatus?.stopped;
 	// Nothing is left to report once the locked day has swallowed the game-started notice
-	const bannerProblem = !!dataStatus && (dataStatus.unfinished || dataStatus.stopped || (dataStatus.staleList && !dayLocked) || dataStatus.warnings.length > 0);
+	const bannerProblem = !!dataStatus && (dataStatus.unfinished || dataStatus.stopped || ((dataStatus.staleList || dataStatus.earlierDraw) && !dayLocked) || dataStatus.warnings.length > 0);
 
 	const includeCorrelationSlider = false;
 	return (
@@ -627,13 +627,15 @@ function App() {
 								All of today's games have started, so picks are locked until tomorrow's lists post.
 							</p>
 						)}
-						{dataStatus && (dataStatus.unfinished || dataStatus.stopped || (dataStatus.staleList && !dayLocked)) && (
+						{dataStatus && (dataStatus.unfinished || dataStatus.stopped || ((dataStatus.staleList || dataStatus.earlierDraw) && !dayLocked)) && (
 							<p className="status-banner-secondary">
 								{dataStatus.unfinished
 									? "The latest update didn't finish"
 									: dataStatus.stopped
 										? "There hasn't been an update in over a day"
-										: "A game has started since the last update"}, so picks and odds may be out of date.
+										: dataStatus.earlierDraw
+											? "Today's pick lists haven't posted yet"
+											: "A game has started since the last update"}, so picks and odds may be out of date.
 							</p>
 						)}
 						{dataStatus && dataStatus.warnings.length > 0 && (
