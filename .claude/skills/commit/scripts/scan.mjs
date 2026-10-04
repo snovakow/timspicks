@@ -288,9 +288,10 @@ for (const file of [LIB, 'public/fetch_service.php', 'timspicks_update/update.ph
 const DOC_PATH = /`((?:src|public|docs|timspicks_update|\.claude)\/[A-Za-z0-9_./-]*)`/g;
 
 // Backticks in these pages mark code, so every span is a candidate and the exceptions are listed
-// instead. A page that carries the runbook marker is allowed to name what a step needs; it is
-// reported separately rather than silently, since the allowance covers steps and not prose.
-const RUNBOOK_MARKER = /^<!--\s*runbook\s*-->\s*$/;
+// instead. The two runbooks are allowed to name what a step needs; they are reported separately
+// rather than silently, since the allowance covers steps and not prose. Step 5a of the skill is the
+// authority on this list.
+const RUNBOOKS = new Set(['docs/deployment.md', 'docs/history-and-correlation.md']);
 const SPAN = /`([^`\n]+)`/g;
 // Commands, git refs, and the data files and folders the server writes: a rename in src/ can't
 // falsify any of them, so they aren't code references.
@@ -315,7 +316,7 @@ const codeRefs = new Map();
 const seenRef = new Set();
 for (const file of docFiles) {
 	const text = readText(file) ?? '';
-	const runbook = text.split('\n').some((line) => RUNBOOK_MARKER.test(line));
+	const runbook = RUNBOOKS.has(file);
 	const hits = new Map();
 	let fenced = false;
 	text.split('\n').forEach((line, index) => {

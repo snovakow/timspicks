@@ -1,7 +1,5 @@
 # Deploying
 
-<!-- runbook -->
-
 The daily routine for getting a finished batch onto the live site, plus the
 things that only come up at the two ends of a season. As in the other docs,
 exact hosts and paths are left out: "the live folder" and "the update folder"

@@ -1,7 +1,5 @@
 # History and the correlation table
 
-<!-- runbook -->
-
 The correlation factors the app ships are not written by hand. They are derived
 from the day-by-day archive the server keeps, by a simulation that runs inside
 the app. This is the order things have to happen in, and the traps that make a

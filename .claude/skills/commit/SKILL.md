@@ -142,12 +142,13 @@ writes. Date a measurement so a reader can judge it.
 them. A threshold nobody calibrated earns a sentence saying exactly that; the number itself is one
 grep away.
 
-**A runbook may name what a step needs.** Mark such a page with `<!-- runbook -->` on its own line.
-Its steps may name the one setting or file a step would be unfollowable without, and the value a
-step tells you to set, since that value *is* the step. A value the prose merely describes — a
-period, a threshold, a limit — stays out either way, and the page's explanatory passages follow the
-rule above in full. A page without the marker is strict throughout. Where a runbook already owns an executable detail, an explanatory page
-describes it instead of repeating it.
+**The two runbooks may name what a step needs.** They are `docs/deployment.md` and
+`docs/history-and-correlation.md`, the pages whose steps get executed. Their steps may name the one
+setting or file a step would be unfollowable without, and the value a step tells you to set, since
+that value *is* the step. A value the prose merely describes — a period, a threshold, a limit —
+stays out either way, and their explanatory passages follow the rule above in full. Every other page
+is strict throughout. Where a runbook owns an executable detail, an explanatory page describes it
+instead of repeating it. The scan holds the same two paths; a new runbook goes in both places.
 
 The scan's **Docs** section is the worklist: the code references found per page, runbook pages
 counted separately, and dangling paths, where a page names a file that no longer exists.
