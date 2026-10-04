@@ -79,6 +79,7 @@ function playerFileCurrent(string $local_file, string $team)
 /* Manual player ids for pick-list entries with a missing or wrong id, keyed by the full name in the pick-list feed */
 const PLAYER_ID_OVERRIDES = [
 	'Oskar Back' => 8480840, // The pick-list feed sends id 0
+	'Viggo Bjorck' => 8486025, // The pick-list feed sends id 0
 ];
 
 /* Lowercase ASCII without punctuation, so "Oskar Bäck" matches "Oskar Back" and "J.T. Miller" matches "JT Miller" */
