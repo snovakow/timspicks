@@ -7,7 +7,8 @@ App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hor
   three picks a game day from three tiered pools, how the lists are redrawn as
   games start, scoring, and the strategies the app optimizes for
 - [The app and the server](docs/app-and-server.md) — the feeds, what lands on
-  disk, the update cadence, the history archive, and how to build and deploy
+  disk, the update cadence, the history archive, and how a change reaches the
+  live site
 - [Deploying](docs/deployment.md) — the daily merge, build and copy routine,
   the checks before a merge, and what changes at each end of a season
 - [History and the correlation table](docs/history-and-correlation.md) — how the
