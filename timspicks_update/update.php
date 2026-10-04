@@ -319,9 +319,9 @@ $warnings = array_merge($warnings, logStep($now, $output, $minOutput));
 // Don't backup before 3am to make sure any time zone changes have passed
 if ($nowTime > $startOfDayTime + 60 * 60 * 3) {
     $output = backup($now, $timezone, $basePath, $warnings);
-    $warnings = array_merge($warnings, logStep($now, $output, $minOutput));
+    logStep($now, $output, $minOutput);
+    logEnd($now, $output['content'] ?? "Complete");
 } else {
     processed($now, $basePath, $warnings);
+    logEnd($now, "Complete, no backup before 3am");
 }
-
-logEnd($now, $output['content'] ?? "Complete");
