@@ -64,6 +64,20 @@ and `helper.json` and keeps no state, so it clears itself as soon as a pull land
 with the new draw, and it ignores games whose `gameScheduleState` isn't `OK` so a
 postponed start time can't trigger it.
 
+The other way a list goes stale is at rollover. Nothing runs from the day's last
+game until midnight, so the final draw is still in `helper.json` when the first
+run after midnight fetches. If the feed hasn't posted the new day's first draw by
+then, that run saves yesterday's final list against today's schedule. The feed
+stamps each draw with `dateTimeAvailable`, in ET with no offset, and the day's
+first draw is stamped midnight. `updatePicks` keeps that stamp in `helper.json`,
+and a stamp dated other than today marks a list left over from an earlier day.
+Such a list also retries on the retry period, but only in the hour after
+midnight; after that hour it goes back to the update period, so on a day the feed
+never posts, the cron doesn't pull every five minutes until the last game. The
+app runs the same check against `games.json`'s date and reports that today's
+lists haven't posted yet. A `helper.json` written before the stamp was kept
+counts as current.
+
 The net effect is roughly hourly, plus a run shortly after each game start —
 about two dozen a day, not 1,440, with a floor of one per retry period while a
 list is stale or a feed is failing inside the window. Fewer snapshot folders
