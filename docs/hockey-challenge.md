@@ -2,7 +2,9 @@
 
 How the contest works, and how this app reasons about it. The app is advisory
 only: it ranks candidates from odds, and the picks are entered by hand in the
-contest's own app.
+contest's own app. It has no notion of a pick being entered or locked — the
+highlights it draws are its own recommendation, recomputed from scratch and
+never saved.
 
 ## Three picks a game day
 
@@ -18,20 +20,13 @@ table for each, under the headings Pick #1, Pick #2 and Pick #3.
 
 ## The pools are tiered, but only in the data
 
-Pool 1 holds the strongest scorers, pool 2 the middle, pool 3 the weakest.
+Pool 1 holds the strongest scorers, pool 2 the middle, pool 3 the weakest, and
+the tiers separate cleanly on both scoring odds and goals per game.
 
 That ordering is a property of the pick-list feed, inherited silently. Nothing in
 the app encodes or enforces it: the three lists are never compared with each
-other, and the scoring functions are symmetric in the three probabilities. The
-tiers separate cleanly all the same — measured across one archived slot:
-
-| Pool | Mean implied probability | Mean goals per game |
-| ---- | -----------------------: | ------------------: |
-| 1    | 26.9%                    | 0.276               |
-| 2    | 16.3%                    | 0.148               |
-| 3    | 9.4%                     | 0.082               |
-
-Treat the ordering as a reliable observation, not an invariant.
+other, and the scoring functions are symmetric in the three probabilities. So
+treat the ordering as a reliable observation, not an invariant.
 
 ## Lists are redrawn as games start
 
@@ -44,17 +39,15 @@ How to read the lists, based on a season of archived draws:
 
 - **The final pool is every game in the day's last time slot.** A game missing
   from the current lists will not necessarily be missing from the final draw.
-- **A list holds at most 15 players.** Confirmed at exactly 15 across all 132
-  archived snapshots on hand. The cap is real, but it lives only in the data —
-  nothing in the app asserts or enforces it.
-- **An under-cap list is complete for its tier.** Across the 2025-26 history, a
-  list of fewer than 15 held every eligible player of that tier from every game
-  still in the pool, in 1,615 of 1,615 checks. So an under-cap list holding none
-  of a game's players is real evidence that the game was not in that draw —
-  strong evidence, not proof. A full list proves nothing either way.
-- **Top stars are never listed.** The most expensive scorers had zero
-  appearances across the whole 2025-26 history. Leave them out when judging what
-  a redraw could add.
+- **A list holds at most 15 players.** The cap is real, but it lives only in the
+  data — nothing in the app asserts or enforces it.
+- **An under-cap list is complete for its tier.** A list of fewer than 15 has
+  held every eligible player of that tier from every game still in the pool. So
+  an under-cap list holding none of a game's players is real evidence that the
+  game was not in that draw — strong evidence, not proof. A full list proves
+  nothing either way.
+- **Top stars are never listed.** The most expensive scorers have never turned
+  up in a pool. Leave them out when judging what a redraw could add.
 - **A last-slot game can still be skipped.** On 2026-10-01 a late game was left
   out of every draw that day — the first such case on record, and the under-cap
   evidence above predicted it.
@@ -147,13 +140,3 @@ Widening the band widens every shape's sample.
 "Pick #1 / #2 / #3" are the three pools. "Pool Slots" are the **number of games
 on the slate**, used to bucket the correlation data. Two unrelated axes that both
 count 1, 2, 3.
-
-## What the app doesn't model
-
-- **Challenge periods and the leaderboard.** A season is only regular or playoff
-  in the history archive. The Challenge windows and rankings are described in the
-  README, not in the app.
-- **Submitted picks.** There is no notion of a pick being entered or locked;
-  derived pick state is cleared on every recompute.
-- **The contest's tie-break rules.** The app's own tie-breaks are its preferences
-  for presenting equally probable tickets, nothing more.
