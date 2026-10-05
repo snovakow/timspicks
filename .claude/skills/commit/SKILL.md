@@ -16,7 +16,7 @@ This repo is public: whatever gets pushed (code, comments and commit messages) s
 
 ## How the pieces fit
 
-- **Baseline.** A version commit is the review checkpoint: everything before the newest one has been reviewed. Only this skill writes version commits. The scan counts a commit as one only if all of these hold:
+- **Baseline.** A version commit is the review checkpoint: everything before the newest one has been reviewed. Only a run of this skill writes version commits, and a run ends at its report (step 10). The scan counts a commit as one only if all of these hold:
   - its whole message is exactly `Version X.Y.Z`, with no body and no trailer
   - its author is snovakow
   - it changes exactly `package.json` and `package-lock.json`, nothing more or less
@@ -215,3 +215,7 @@ Then report, briefly:
   - what needs no update
 
   Mention that PHP changes reach the cron only once copied. `dist/data`, `dist/history`, `dist/players` and `dist/auth.json` are never copied, because the server writes the live copies.
+
+## 10. After the report
+
+The run ends with the report. This skill stays in context afterwards, but anything the user asks for next in the same thread is ordinary development, not part of the run: make and commit that work as usual, with the session's attribution trailer, and stop there. Don't bump the version or make a version commit, even when the follow-up commits come straight after one. The next batch gets its own `/commit`, which the user starts in a fresh thread so the review begins from a clean context. If the follow-up work leaves a batch ready to go, say so instead.
