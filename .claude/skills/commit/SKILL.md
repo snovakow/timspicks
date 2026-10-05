@@ -184,7 +184,7 @@ tidy.
    - **The tip:** stage the fixed files, then run `git commit --amend -F <message file>`. For a message-only change, use `git commit --amend --only -F <message file>`, which leaves the index alone.
    - **An older commit, content fix:** edit, stage only the fix, and run `git commit --fixup=<sha>`.
    - **An older commit, message fix:** write `amend! <sha>`, a blank line and the new message to a file, then run `git commit --allow-empty --only -F <file>`.
-   - **Then fold the fixups in:** `GIT_EDITOR=true git rebase --autosquash --autostash <rewrite base>`.
+   - **Then fold the fixups in:** `GIT_EDITOR=true git rebase --autosquash --autostash <rewrite base>`. Check afterwards that the `fixup!` commits are gone, because an older git (2.37, for one) ignores `--autosquash` unless the rebase is interactive: it reports success, rewrites nothing and leaves them sitting at the tip. If that happens, run `GIT_SEQUENCE_EDITOR=true GIT_EDITOR=true git rebase -i --autosquash --autostash <rewrite base>`, which honours it and still needs no editor.
    - If the rebase stops on a conflict, run `git rebase --abort` and ask. If a merge commit sits anywhere but the tip, report it and ask rather than flatten it. If a fix touches a file that also has uncommitted edits, `git stash push --include-untracked` first and `git stash pop` after.
    - Keep message files outside the repo (the session scratchpad if there is one), so they never get committed.
 3. Fix site mentions in the working-tree changes.
