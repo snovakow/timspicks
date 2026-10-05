@@ -230,10 +230,10 @@ Two consequences worth knowing before editing that table:
 [Deploying](deployment.md) has the steps. Two properties of the arrangement are
 worth understanding before following them.
 
-The built front end is copied out of the server's checkout into the live folder,
-so the live site is a copy and not the checkout itself. PHP is copied the same
-way and changes nothing until it is: cron loads the scraping library out of the
-live folder, never out of the checkout.
+The built front end is copied out of the checkout into the live folder, so the
+live site is a copy and not the checkout itself. PHP is copied the same way and
+changes nothing until it is: cron loads the scraping library out of the live
+folder, never out of the checkout.
 
 The build also fills the data, players, history and credentials paths from the
 checkout's own stale copies, while the server owns the live ones — cron writes the

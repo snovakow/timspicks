@@ -5,18 +5,19 @@ things that only come up at the two ends of a season. As in the other docs,
 exact hosts and paths are left out: "the live folder" and "the update folder"
 stand in for them, the same way the `/commit` scan reports them.
 
-Two machines are involved. The dev Mac holds the working checkout where batches
-are built. The server has its own checkout, separate from the live folder, and
-the live site is a copy made out of that checkout's build.
+One machine does both jobs: it holds the working checkout where batches are
+built, and it serves the live site. Neither the live folder nor the update
+folder is that checkout — both hold copies made out of it, which is why the
+copying below is a step at all.
 
 ## The daily flow
 
-1. **Finish the batch** on the dev Mac with `/commit`. It reviews everything
-   since the last version commit, commits it in groups, and ends with a
-   `Version X.Y.Z` commit on `development`. It never pushes, and it prints the
-   copy list for step 4 and 5.
-2. **Merge and push.** `main` is what the server pulls, so the batch has to land
-   there:
+1. **Finish the batch** with `/commit`. It reviews everything since the last
+   version commit, commits it in groups, and ends with a `Version X.Y.Z` commit
+   on `development`. It never pushes, and it prints the copy list for step 4
+   and 5.
+2. **Merge and push.** `main` is the branch a deploy is built from, so the batch
+   has to land there:
 
    ```
    git checkout main
@@ -28,8 +29,10 @@ the live site is a copy made out of that checkout's build.
    The merge is a fast-forward as long as nothing commits directly to `main`.
    `/commit` reports how far `main` is behind, and whether it holds anything
    `development` lacks, which is the signal that it won't be.
-3. **Pull and build** in the server's checkout: `git pull`, then `npm install`
-   only if dependencies changed, then `npm run build`.
+3. **Build** in that same checkout: `npm install` only if dependencies changed,
+   then `npm run build`. Nothing needs pulling, since the merge happened right
+   here, and a fast-forward leaves `main` and `development` on the same commit,
+   so either one builds the batch you just merged.
 4. **Copy the front end** into the live folder, in this order: `dist/assets/*`
    first, then `dist/index.html`. The index names the hashed asset files, so
    putting it first means anyone loading the site in between asks for files that

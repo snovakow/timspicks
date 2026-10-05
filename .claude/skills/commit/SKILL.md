@@ -208,7 +208,7 @@ Then report, briefly:
 - new site or brand names in code, files left uncommitted, and the checks that ran
 - anything in `docs/` that step 5a couldn't settle, such as a claim only the user can confirm
 - the starting sha (the undo point, also in the reflog), and that nothing was pushed
-- how far `origin/main` is behind this branch, and whether main has commits this branch lacks, as a reminder to merge before the server pulls
+- how far `origin/main` is behind this branch, and whether main has commits this branch lacks, as a reminder to merge before the next deploy build
 - last, the scan's live update list:
   - whether the built frontend needs a rebuild, and its server steps
   - the individual files to copy, and where

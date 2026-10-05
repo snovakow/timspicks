@@ -468,7 +468,7 @@ for (const line of structural) say(`    ${line}`);
 
 section(`Live update (since ${deployBase ? `${short(deployBase)} ${git('log', '-1', '--format=%s', deployBase)}` : 'the first commit'})`);
 say(`Built frontend: rebuild (${frontend.length ? `changed: ${frontend.join(', ')}` : 'version only'})`);
-say(`    On the server: git pull, ${dependenciesChanged ? 'npm install (dependencies changed), ' : ''}npm run build, then copy dist/assets/* and after it dist/index.html into ${LIVE_FOLDER}`);
+say(`    After the merge to main: ${dependenciesChanged ?'npm install (dependencies changed), ' : ''}npm run build, then copy dist/assets/* and after it dist/index.html into ${LIVE_FOLDER}`);
 say('Individual files:');
 for (const line of copies.length ? copies : ['(none)']) say(`    ${line}`);
 say(`Never copy: ${NEVER_COPY}`);
