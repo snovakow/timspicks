@@ -532,6 +532,9 @@ function App() {
 	const dayLocked = dayDone && !dataStatus?.stopped;
 	// Nothing is left to report once the locked day has swallowed the game-started notice
 	const bannerProblem = !!dataStatus && (dataStatus.unfinished || dataStatus.stopped || ((dataStatus.staleList || dataStatus.earlierDraw) && !dayLocked) || dataStatus.warnings.length > 0);
+	// A locked day with nothing wrong is the expected nightly state, and the update time is only
+	// worth showing as context for a problem
+	const lockedOnly = dayLocked && !bannerProblem;
 
 	const includeCorrelationSlider = false;
 	return (
@@ -619,14 +622,14 @@ function App() {
 				)}
 
 				{!Feature.offseasonBanner && (dataStatus || dayLocked) && (
-					<section className={`status-banner${dayLocked && !bannerProblem ? ' status-banner-info' : ''}`} role="status" aria-live="polite">
-						{processed && (
+					<section className={`status-banner${lockedOnly ? ' status-banner-info' : ''}`} role="status" aria-live="polite">
+						{processed && !lockedOnly && (
 							<p className="status-banner-primary">
 								Data last updated {processed.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
 							</p>
 						)}
 						{dayLocked && (
-							<p className={processed ? 'status-banner-secondary' : 'status-banner-primary'}>
+							<p className={processed && !lockedOnly ? 'status-banner-secondary' : 'status-banner-primary'}>
 								All of today's games have started, so picks are locked until tomorrow's lists post.
 							</p>
 						)}
