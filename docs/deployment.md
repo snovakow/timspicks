@@ -92,7 +92,10 @@ three — this is the list it's checking against:
 
 - Add the new season to the range table in `public/fetch_service.php`: a
   regular-season row from the opener, and a playoff row once those dates exist.
-  Finished seasons stay commented out above it.
+  Append them below the existing rows and leave finished seasons as they are:
+  the index is positional, so commenting out or reordering a row misaligns the
+  file lists it has stored. The rows already commented out are seasons from
+  before recording began, and they stay that way.
 - Keep the `end` at the last completed day, every time you bump it. The history
   feed returns 404 for a day that isn't over, and the incremental index writes
   that day down as done and never asks for it again.
