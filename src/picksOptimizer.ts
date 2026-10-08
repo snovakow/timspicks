@@ -2,7 +2,7 @@ import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
 import { correlations } from "./correlationData";
 import type { CorrelationData, CorrelationResult, CorrelationStrategy } from "./correlationData";
-import { deVig, oddsNameMap, removeAccentsNormalize } from "./dataProcessor";
+import { deVig, oddsNameCandidates, removeAccentsNormalize } from "./dataProcessor";
 import type { ComboPattern, LogStatsKey, Strategy, PoolSlots } from "./dataTypes";
 import {
 	AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels,
@@ -616,7 +616,7 @@ export const runHistoricalStrategyAudit = async (
 							}
 
 							const fullName = `${item.firstName} ${item.lastName}`;
-							const candidates = [fullName, oddsNameMap.get(fullName)].filter((name): name is string => Boolean(name));
+							const candidates = oddsNameCandidates(fullName);
 							const probs: Array<number | null> = [null, null, null, null];
 
 							for (let index = 0; index < oddsMaps.length; index++) {
@@ -1877,7 +1877,7 @@ export const runSimulation = async (minSportsbooks: number, correlationPercent: 
 							}
 
 							const fullName = `${item.firstName} ${item.lastName}`;
-							const candidates = [fullName, oddsNameMap.get(fullName)].filter((name): name is string => Boolean(name));
+							const candidates = oddsNameCandidates(fullName);
 							const probs: Array<number | null> = [null, null, null, null];
 
 							for (let index = 0; index < oddsMaps.length; index++) {

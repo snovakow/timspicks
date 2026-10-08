@@ -395,6 +395,15 @@ oddsNameMap.set("Trevor van Riemsdyk", "Trevor Van Riemsdyk"); // BetRivers
 oddsNameMap.set("Vasily Podkolzin", "Vasili Podkolzin"); // BetRivers (lang)
 oddsNameMap.set("Zachary Bolduc", "Zack Bolduc"); // DraftKings
 
+// The map is keyed by roster names, but the pick-list feed can name a player by the form
+// the map points to instead ("Mitchell Marner" for "Mitch Marner"). A lookup that starts
+// from the feed's name, as the archive replays do, has to read the map both ways.
+const oddsNameReverse = new Map([...oddsNameMap].map(([roster, odds]): [string, string] => [odds, roster]));
+export const oddsNameCandidates = (fullName: string): string[] => {
+	return [fullName, oddsNameMap.get(fullName), oddsNameReverse.get(fullName)]
+		.filter((name): name is string => Boolean(name));
+};
+
 export const removeAccentsNormalize = (name: string): string => {
 	return name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 }
