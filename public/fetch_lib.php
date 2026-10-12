@@ -645,6 +645,21 @@ function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 				];
 			}
 		}
+
+		// From 2026-10-12 each player has a market of their own, "<Player> to Score 1 or more Goals", priced on its Yes option
+		foreach ($json_data->fixture->optionMarkets ?? [] as $market) {
+			if (!preg_match('/^(.+) to Score 1 or more Goals$/', $market->name->value, $match)) continue;
+
+			if ($savesrc) $items[] = [$market];
+
+			foreach ($market->options as $option) {
+				if ($option->name->value !== 'Yes' || !isset($option->price->odds)) continue;
+				$map[] = [
+					"name" => $match[1],
+					"odds" => $option->price->odds
+				];
+			}
+		}
 	}
 
 	if ($savesrc && isset($items)) {
