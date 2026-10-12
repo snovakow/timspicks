@@ -378,6 +378,7 @@ oddsNameMap.set("Martin Pospisil", "Martin Pospíšil"); // BetRivers (lang)
 oddsNameMap.set("Matt Boldy", "Matthew Boldy"); // BetRivers
 oddsNameMap.set("Matt Coronato", "Matthew Coronato"); // BetRivers
 oddsNameMap.set("Matt Savoie", "Matthew Savoie"); // BetRivers
+oddsNameMap.set("Michael McCarron", "Mike McCarron"); // bet3
 oddsNameMap.set("Mike Matheson", "Michael Matheson"); // BetRivers
 oddsNameMap.set("Mitch Marner", "Mitchell Marner"); // FanDuel BetRivers (lang)
 oddsNameMap.set("Nick Paul", "Nicholas Paul"); // FanDuel
