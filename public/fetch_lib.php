@@ -486,6 +486,8 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 
 		foreach ($markets as $market) {
 			foreach ($market->runners as $runner) {
+				// Skip a runner listed without a price: dividing by its missing denominator stops the whole run
+				if (empty($runner->winRunnerOdds->trueOdds->fractionalOdds->denominator)) continue;
 				$num = $runner->winRunnerOdds->trueOdds->fractionalOdds->numerator;
 				$den = $runner->winRunnerOdds->trueOdds->fractionalOdds->denominator;
 				$trueOdds = $num / $den + 1;
