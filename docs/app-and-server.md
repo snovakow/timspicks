@@ -152,6 +152,11 @@ before that puck drop, which is what makes the archive a usable record of each
 redraw. When no future game is left, nothing is copied — that is the normal
 end-of-day state.
 
+A book that comes back completely empty doesn't replace a copy the folder already
+holds. Without that, a feed that drops its market partway through the day would
+wipe the last prices the slot captured. The kept file is older than the rest of
+its folder, which is the trace that it happened.
+
 The run-state file carries when a run began, when it last finished, and any
 warnings it raised. The front end reads it and shows a notice when the data is
 over a day old, a run didn't finish, a game has started since the last run, or
