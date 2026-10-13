@@ -197,6 +197,8 @@ function App() {
 				setDataStatus(initialData.dataStatus);
 				setProcessed(initialData.processed);
 				setLastGameStart(initialData.lastGameStart);
+				// Set alongside the data so a locked day never paints its tables before the clock effect runs
+				setDayDone(!!initialData.lastGameStart && initialData.lastGameStart.getTime() <= Date.now());
 				setError(null);
 			} catch (error: unknown) {
 				if (error instanceof Error && error.message === DataProcessor.NO_GAMES_ERROR) {
