@@ -788,6 +788,18 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 	return $output;
 }
 
+/* True when a book came back empty and the snapshot already holds its prices from an earlier run.
+   A feed that drops its market partway through the day would otherwise wipe the last prices the
+   slot captured; the kept file's older time stamp is the trace */
+function keepsEarlierPrices(string $source, string $target)
+{
+	if (!file_exists($source) || !file_exists($target)) return false;
+	if (json_decode((string)file_get_contents($source), true) !== []) return false;
+
+	$earlier = json_decode((string)file_get_contents($target), true);
+	return is_array($earlier) && count($earlier) > 0;
+}
+
 /* Backup */
 function backup(DateTime $now, DateTimeZone $timezone, string $basePath, array $warnings = [])
 {
@@ -850,10 +862,10 @@ function backup(DateTime $now, DateTimeZone $timezone, string $basePath, array $
 		$helperfile = '/helper.json';
 		$copyErrors = [];
 		if (!copy($basePath . $gamesfile, $backupPath . $gamesfile)) $copyErrors[] = $gamesfile;
-		if (!copy($basePath . $bet1file, $backupSubPath . $bet1file)) $copyErrors[] = $bet1file;
-		if (!copy($basePath . $bet2file, $backupSubPath . $bet2file)) $copyErrors[] = $bet2file;
-		if (!copy($basePath . $bet3file, $backupSubPath . $bet3file)) $copyErrors[] = $bet3file;
-		if (!copy($basePath . $bet4file, $backupSubPath . $bet4file)) $copyErrors[] = $bet4file;
+		foreach ([$bet1file, $bet2file, $bet3file, $bet4file] as $betfile) {
+			if (keepsEarlierPrices($basePath . $betfile, $backupSubPath . $betfile)) continue;
+			if (!copy($basePath . $betfile, $backupSubPath . $betfile)) $copyErrors[] = $betfile;
+		}
 		if (!copy($basePath . $helperfile, $backupSubPath . $helperfile)) $copyErrors[] = $helperfile;
 
 		$output['title'] = "Backup";
