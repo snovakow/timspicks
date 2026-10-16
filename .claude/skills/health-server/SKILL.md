@@ -1,8 +1,8 @@
 ---
-name: server-health
+name: health-server
 description: Check the live server's health from the machine it runs on. Reads the cron log and the two places cron failures hide (the PHP error log and cron mail), the live data folder (run state, today's feeds, the site banner, snapshot folders), and whether the files deployed to the live and update folders match main. Read-only. Use when asked whether the live site or the cron is healthy, why the live data looks stale, or whether a deploy is complete.
 argument-hint: "[ref] [--days N] [--no-build]"
-allowed-tools: Read, Grep, Glob, Bash(node .claude/skills/server-health/scripts/health.mjs:*), Bash(git fetch:*), Bash(git show:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Bash(crontab -l), Bash(tail:*), Bash(ls:*), Bash(cmp:*), Bash(diff:*)
+allowed-tools: Read, Grep, Glob, Bash(node .claude/skills/health-server/scripts/health.mjs:*), Bash(git fetch:*), Bash(git show:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Bash(crontab -l), Bash(tail:*), Bash(ls:*), Bash(cmp:*), Bash(diff:*)
 ---
 
 # Live server health
@@ -25,7 +25,7 @@ Update the remote refs first, so the deploy check compares against the current m
 
 Then run the survey, passing the arguments through:
 
-    node .claude/skills/server-health/scripts/health.mjs $ARGUMENTS
+    node .claude/skills/health-server/scripts/health.mjs $ARGUMENTS
 
 - `[ref]` or `--ref <ref>`: what the live files should match. Defaults to `origin/main`.
 - `--days N`: how far back the history sections look. Defaults to 7.

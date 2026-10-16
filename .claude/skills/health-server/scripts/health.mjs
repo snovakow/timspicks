@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Read-only health survey of the live server, for the server-health skill. It finds the cron line,
+// Read-only health survey of the live server, for the health-server skill. It finds the cron line,
 // the cron log, the update and live folders and the PHP error log by itself, then reports on the
 // cron's runs, the live data and whether the deployed files match a git ref. The one thing it
 // writes is a temp folder for building that ref, which it removes before exiting.
 //
-//   node .claude/skills/server-health/scripts/health.mjs [ref] [--days N] [--no-build]
+//   node .claude/skills/health-server/scripts/health.mjs [ref] [--days N] [--no-build]
 //       [--update <dir>] [--lib <path>] [--log <file>] [--php-log <file>]
 //
 // The repo is public, so nothing here names a host or a path on the server. Everything is found at
@@ -814,7 +814,7 @@ guard('deploy', () => {
 	const branch = git('symbolic-ref', '--short', '-q', 'HEAD');
 	if (branch && branch !== 'main') say(`This checkout is on ${branch}; work there isn't live until it's released, so it isn't compared`);
 
-	const work = mkdtempSync(join(tmpdir(), 'server-health-'));
+	const work = mkdtempSync(join(tmpdir(), 'health-server-'));
 	const linked = join(work, 'src', 'node_modules');
 	try {
 		const src = join(work, 'src');
