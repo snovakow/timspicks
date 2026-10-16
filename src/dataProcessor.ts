@@ -364,13 +364,17 @@ oddsNameMap.set("Danila Yurov", "Yurov Danila"); // BetMGM
 oddsNameMap.set("Dmitry Orlov", "Dimitri Orlov"); // BetRivers
 oddsNameMap.set("Egor Chinakhov", "Yegor Chinakhov"); // DraftKings BetRivers
 oddsNameMap.set("Ethan Del Mastro", "Ethan del Mastro"); // FanDuel
+oddsNameMap.set("Frederick Gaudreau", "Freddy Gaudreau"); // bet1 bet2 bet3 bet4
 oddsNameMap.set("Gabe Perreault", "Gabriel Perreault"); // BetMGM
+oddsNameMap.set("Isaac Howard", "Issac Howard"); // bet2
 oddsNameMap.set("J.J. Moser", "Janis Jérôme Moser"); // BetRivers
 oddsNameMap.set("J.T. Compher", "JT Compher"); // BetRivers
 oddsNameMap.set("Jake Middleton", "Jacob Middleton"); // BetRivers (lang)
 oddsNameMap.set("James van Riemsdyk", "James Van Riemsdyk"); // BetMGM
 oddsNameMap.set("JJ Peterka", "John-Jason Peterka"); // BetRivers
 oddsNameMap.set("Josh Morrissey", "Joshua Morrissey"); // BetRivers
+oddsNameMap.set("Josh Norris", "Joshua Norris"); // bet1 bet2 bet3 bet4
+oddsNameMap.set("Josh Samanski", "Joshua Samanski"); // bet3
 oddsNameMap.set("Lenni Hameenaho", "Lenni Hämeenaho"); // BetRivers
 oddsNameMap.set("Liam Ohgren", "Liam Öhgren"); // BetRivers (lang)
 oddsNameMap.set("Martin Fehérváry", "Martin Fehervary");
@@ -378,10 +382,13 @@ oddsNameMap.set("Martin Pospisil", "Martin Pospíšil"); // BetRivers (lang)
 oddsNameMap.set("Matt Boldy", "Matthew Boldy"); // BetRivers
 oddsNameMap.set("Matt Coronato", "Matthew Coronato"); // BetRivers
 oddsNameMap.set("Matt Savoie", "Matthew Savoie"); // BetRivers
+oddsNameMap.set("Maxim Tsyplakov", "Maksim Tsyplakov"); // bet1
 oddsNameMap.set("Michael McCarron", "Mike McCarron"); // bet3
 oddsNameMap.set("Mike Matheson", "Michael Matheson"); // BetRivers
 oddsNameMap.set("Mitch Marner", "Mitchell Marner"); // FanDuel BetRivers (lang)
 oddsNameMap.set("Nick Paul", "Nicholas Paul"); // FanDuel
+oddsNameMap.set("Nick Robertson", "Nicholas Robertson"); // bet1 bet2 bet3 bet4
+oddsNameMap.set("Nick Suzuki", "Nicholas Suzuki"); // bet1 bet2 bet3 bet4
 oddsNameMap.set("Oliver Bjorkstrand", "Oliver Björkstrand"); // BetRivers
 oddsNameMap.set("Olli Määttä", "Olli Maatta"); // DraftKings FanDuel (lang)
 oddsNameMap.set("Ondrej Palat", "Ondrej Palát"); // BetRivers (lang mix and match)
@@ -394,7 +401,9 @@ oddsNameMap.set("Tim Stützle", "Tim Stuetzle"); // DraftKings
 oddsNameMap.set("Tommy Novak", "Thomas Novak"); // BetRivers (lang)
 oddsNameMap.set("Trevor van Riemsdyk", "Trevor Van Riemsdyk"); // BetRivers
 oddsNameMap.set("Vasily Podkolzin", "Vasili Podkolzin"); // BetRivers (lang)
+oddsNameMap.set("Vincent Trocheck", "Vincent Trochek"); // bet3
 oddsNameMap.set("Zachary Bolduc", "Zack Bolduc"); // DraftKings
+oddsNameMap.set("Zachary L'Heureux", "Zachary L’Heureux"); // bet4
 
 // The map is keyed by roster names, but the pick-list feed can name a player by the form
 // the map points to instead ("Mitchell Marner" for "Mitch Marner"). A lookup that starts
