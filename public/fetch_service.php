@@ -99,7 +99,7 @@ if ($live && isset($_GET['history'])) {
 		['season' => '2025-2026', 'format' => 'playoff', 'start' => '2026-04-18', 'end' => '2026-06-14'],
 		// 2026-10-12's 1300 slot has bet3 odds for FLA@BUF only, backfilled from Rotowire's US prices (the capture came back empty)
 		// 2026-09-29 and 2026-09-30 odds were backfilled from closing lines on Covers' odds tab, with gaps from Action Network (cron was off)
-		['season' => '2026-2027', 'format' => 'regular', 'start' => '2026-09-29', 'end' => '2026-10-07'],
+		['season' => '2026-2027', 'format' => 'regular', 'start' => '2026-09-29', 'end' => '2026-10-15'],
 	];
 
 	$index_file = $baseHistoryPath . '/history.json';
