@@ -4,7 +4,8 @@
 // rebuild by deriving the correlation table from it and matching runSimulation's own, then tests three
 // questions on actual results: whether picks from one game score together beyond their odds and whether the
 // correlation table improves picks, whether one time slot gives better picks, and whether one book or the
-// average of the books picks better.
+// average of the books picks better. Each answer is then measured within the regular season and within the
+// playoffs, and the two are compared.
 //
 //   node .claude/skills/analyze/scripts/analyze.mjs [--since YYYY-MM-DD] [--until YYYY-MM-DD]
 //       [--format regular|playoff] [--root <site folder>]... [--live <dir>] [--seed N] [--boot N] [--out <dir>]
@@ -27,6 +28,7 @@ const PERMUTATIONS = 20000; // book-label shuffles for the any-book tests
 const SIGN_DRAWS = 50000; // random sign patterns, when a test has too many days to try every pattern
 const EXACT_SIGNS = 16; // up to this many days, every sign pattern is tried
 const SHOW = 5; // how many of the smallest p-values a long family lists
+const CONTRAST_DAYS = 8; // days each format needs before its results are compared with the other format's
 
 // --- Options ------------------------------------------------------------------------------------
 
@@ -900,6 +902,8 @@ const choose = (book, strategy, factors) => {
 };
 const heldOutTables = new Map(days.map((day) => [day, tableFrom(windows.filter((window) => window.day !== day))]));
 const backtest = {};
+// Each backtest's per-day differences, held out minus off, for the format comparison
+const backtestDays = new Map();
 for (const key of KEYS) {
 	backtest[key] = {};
 	for (const strategy of STRATEGIES) {
@@ -923,6 +927,7 @@ for (const key of KEYS) {
 			perDay.set(window.day, day);
 		}
 		if (!sums.windows) continue;
+		backtestDays.set(`${key}|${strategy}`, perDay);
 		backtest[key][strategy] = {
 			windows: sums.windows, changed: sums.changed,
 			off: sums.off / sums.windows, inSample: sums.inSample / sums.windows, heldOut: sums.heldOut / sums.windows,
@@ -1137,7 +1142,8 @@ const slotRows = BUCKETS.map((bucket) => {
 	};
 });
 const SLOT_PAIRS = [['4+', '3'], ['4+', '2'], ['4+', '1'], ['3', '2'], ['3', '1'], ['2', '1'], ['first', 'last']];
-const slotPairs = SLOT_PAIRS.map(([a, b]) => {
+// The days that had both slots, with each slot's window that day
+const matchSlots = (a, b) => {
 	const matched = [];
 	for (const [day, firsts] of firstOfBucket) {
 		if (a === 'first') {
@@ -1145,6 +1151,10 @@ const slotPairs = SLOT_PAIRS.map(([a, b]) => {
 			if (list.length >= 2) matched.push([list[0], list.at(-1)]);
 		} else if (firsts.has(a) && firsts.has(b)) matched.push([firsts.get(a), firsts.get(b)]);
 	}
+	return matched;
+};
+const slotPairs = SLOT_PAIRS.map(([a, b]) => {
+	const matched = matchSlots(a, b);
 	const label = a === 'first' ? 'first vs last window' : `${a} vs ${bucketName(b)}`;
 	const diffs = (pick) => matched.map(([x, y]) => ({ sum: pick(metric(x)) - pick(metric(y)), count: 1 }));
 	return {
@@ -1286,6 +1296,185 @@ const perPoolBooks = LISTS.map((sid, list) => ({
 holm(perPoolBooks.map((row) => row.p)).forEach((adjusted, index) => { perPoolBooks[index].adjusted = adjusted; });
 results.books = { rows: bookRows, anyBook, versusAvg, players: playerRows, fourBooks: fourBooks.length, perSlot: perSlotBooks, perPool: perPoolBooks };
 
+// --- 4. Regular season vs playoffs ---------------------------------------------------------------
+
+// Playoff days have fewer games, lower odds and the same two teams night after night, so a result could hold in
+// one format and not the other, and the pooled result could hide that. Each primary result, and the player-level
+// AUC, is measured within each format by the same test as the pooled one, and the two formats are compared
+const FORMATS = ['regular', 'playoff'];
+const formatName = (format) => (format === 'playoff' ? 'the playoffs' : 'the regular season');
+const dayFormat = days.map((day) => formatOf.get(day));
+const formatDays = FORMATS.map((format) => everyDay.filter((index) => dayFormat[index] === format));
+const splitFormats = formatDays.every((list) => list.length >= 2);
+const bounds = (sorted) => {
+	const [low, high] = interval(sorted);
+	return { low, high };
+};
+// With fewer days in a format, the shuffle below finds differences that aren't there more often than it should
+const comparable = (sizes) => sizes.every((size) => size >= CONTRAST_DAYS);
+// Resamples each format's days on their own, so each keeps its size: each format's draws give its interval,
+// and the draws taken together give the interval of the contrast between them
+const bootstrapFormats = (label, sizes, statistic, contrast) => {
+	const random = rngFor(label);
+	const picks = sizes.map((size) => new Array(size));
+	const each = sizes.map(() => []);
+	const contrasts = [];
+	for (let draw = 0; draw < options.boot; draw += 1) {
+		const values = sizes.map((size, f) => {
+			for (let index = 0; index < size; index += 1) picks[f][index] = Math.floor(random() * size);
+			return statistic(f, picks[f]);
+		});
+		values.forEach((value, f) => { if (Number.isFinite(value)) each[f].push(value); });
+		const value = contrast(values[0], values[1]);
+		if (Number.isFinite(value)) contrasts.push(value);
+	}
+	return { each: each.map((list) => list.sort((a, b) => a - b)), contrasts: contrasts.sort((a, b) => a - b) };
+};
+// Whether paired differences change between the formats: the format labels are shuffled among the days. Most days
+// differ by a whole result or not at all, which resampling can't test with few days, so the test is a shuffle.
+// Each component's gap between the formats is studentized, since the formats' days vary by different amounts;
+// with several components (each book against the Avg), the largest is the statistic. Units: { f, sums, count }
+const formatShuffleP = (label, units, components) => {
+	const statistic = (labels) => {
+		let largest = 0;
+		for (let component = 0; component < components; component += 1) {
+			const parts = [0, 1].map((f) => {
+				let sum = 0;
+				let count = 0;
+				let size = 0;
+				units.forEach((unit, index) => {
+					if (labels[index] !== f) return;
+					sum += unit.sums[component];
+					count += unit.count;
+					size += 1;
+				});
+				const mean = sum / count;
+				let squares = 0;
+				units.forEach((unit, index) => { if (labels[index] === f) squares += (unit.sums[component] - mean * unit.count) ** 2; });
+				return { mean, variance: (size / (size - 1)) * squares / count ** 2 };
+			});
+			const gap = Math.abs(parts[0].mean - parts[1].mean);
+			const error = Math.sqrt(parts[0].variance + parts[1].variance);
+			const t = gap < 1e-12 ? 0 : error > 0 ? gap / error : Infinity;
+			if (t > largest) largest = t;
+		}
+		return largest;
+	};
+	const labels = units.map((unit) => unit.f);
+	const observed = statistic(labels) * (1 - 1e-9);
+	const random = rngFor(label);
+	let hits = 0;
+	for (let draw = 0; draw < PERMUTATIONS; draw += 1) {
+		for (let index = labels.length - 1; index > 0; index -= 1) {
+			const swap = Math.floor(random() * (index + 1));
+			[labels[index], labels[swap]] = [labels[swap], labels[index]];
+		}
+		if (statistic(labels) >= observed) hits += 1;
+	}
+	return (hits + 1) / (PERMUTATIONS + 1);
+};
+// A paired difference from per-day sums, as pairedTest measures it, within each format
+const formatPaired = (label, units) => {
+	const parts = FORMATS.map((format) => units.filter((unit) => dayFormat[unit.day] === format));
+	if (parts.some((part) => part.length < 2)) return null;
+	const mean = (part, pick) => {
+		let sum = 0;
+		let count = 0;
+		for (const index of pick) {
+			sum += part[index].sum;
+			count += part[index].count;
+		}
+		return sum / count;
+	};
+	const estimates = parts.map((part) => mean(part, part.keys()));
+	const { each, contrasts } = bootstrapFormats(`format-${label}`, parts.map((part) => part.length), (f, pick) => mean(parts[f], pick), (a, b) => a - b);
+	return {
+		days: parts.map((part) => part.length),
+		formats: parts.map((part, f) => ({ estimate: estimates[f], ...bounds(each[f]), p: signFlipP(`format-${label}-${FORMATS[f]}`, part.map((unit) => unit.sum)) })),
+		contrast: {
+			estimate: estimates[0] - estimates[1], ...bounds(contrasts),
+			p: comparable(parts.map((part) => part.length))
+				? formatShuffleP(`format-shuffle-${label}`, parts.flatMap((part, f) => part.map((unit) => ({ f, sums: [unit.sum], count: unit.count }))), 1)
+				: NaN,
+		},
+	};
+};
+// A pair lift within each format; the contrast is the ratio of the two lifts
+const formatLift = (kind) => {
+	const estimates = formatDays.map((list) => pairLift(list, kind));
+	const { each, contrasts } = bootstrapFormats(`format-pairs-${kind}`, formatDays.map((list) => list.length), (f, pick) => pairLift(pick.map((index) => formatDays[f][index]), kind), (a, b) => a / b);
+	return {
+		days: formatDays.map((list) => list.length),
+		formats: estimates.map((estimate, f) => ({ estimate, ...bounds(each[f]), p: bootstrapP(each[f], 1) })),
+		contrast: { estimate: estimates[0] / estimates[1], ...bounds(contrasts), p: comparable(formatDays.map((list) => list.length)) ? bootstrapP(contrasts, 1) : NaN },
+	};
+};
+// A book's AUC minus the Avg's, within each format's player-days
+const formatAucs = FORMATS.map((format) => {
+	const rows = fourBooks.filter((row) => dayFormat[row.dayIndex] === format);
+	return { rows: rows.length, auc: Object.fromEntries(KEYS.map((key) => [key, aucOf(rows, (row) => row[key])])) };
+});
+const formatAuc = (key) => {
+	const weights = new Float64Array(days.length);
+	const gap = (f, pick) => {
+		weights.fill(0);
+		for (const index of pick) weights[formatDays[f][index]] += 1;
+		return formatAucs[f].auc[key](weights) - formatAucs[f].auc.betAvg(weights);
+	};
+	const estimates = FORMATS.map((_, f) => formatAucs[f].auc[key]() - formatAucs[f].auc.betAvg());
+	const { each, contrasts } = bootstrapFormats(`format-auc-${key}`, formatDays.map((list) => list.length), gap, (a, b) => a - b);
+	return {
+		days: formatDays.map((list) => list.length),
+		formats: estimates.map((estimate, f) => ({ estimate, ...bounds(each[f]), p: bootstrapP(each[f], 0) })),
+		contrast: { estimate: estimates[0] - estimates[1], ...bounds(contrasts), p: comparable(formatDays.map((list) => list.length)) ? bootstrapP(contrasts, 0) : NaN },
+	};
+};
+// The any-book test within each format, each book against the Avg there (read only where that format's test is
+// significant), and whether any book's gap to the Avg changes between the formats
+const formatBooks = (measure) => {
+	const parts = FORMATS.map((format) => allFiveDays.filter((list) => list[0].format === format));
+	if (parts.some((part) => part.length < 2)) return null;
+	const sums = parts.map((part) => part.map((list) => ({ values: KEYS.map((key) => total(list, (window) => metric(window, key)[measure])), count: list.length })));
+	const avg = KEYS.indexOf('betAvg');
+	const units = sums.flatMap((list, f) => list.map((day) => ({ f, sums: BOOKS.map((book) => day.values[KEYS.indexOf(book)] - day.values[avg]), count: day.count })));
+	return {
+		days: parts.map((part) => part.length),
+		formats: parts.map((part, f) => ({
+			rates: KEYS.map((_, book) => total(sums[f], (day) => day.values[book]) / total(sums[f], (day) => day.count)),
+			p: anyDifferenceP(`format-books-${measure}-${FORMATS[f]}`, sums[f].map((day) => day.values), total(part, (list) => list.length)),
+			versus: versusAvgOn(`format-versus-${measure}-${FORMATS[f]}`, part, (window, key) => metric(window, key)[measure]),
+		})),
+		contrast: { p: comparable(parts.map((part) => part.length)) ? formatShuffleP(`format-books-${measure}`, units, BOOKS.length) : NaN },
+	};
+};
+const formatTests = [];
+if (splitFormats) {
+	const add = (test, result) => { if (result) formatTests.push({ ...test, ...result }); };
+	for (const [kind, label] of [['same', 'teammates'], ['opp', 'opponents']]) add({ question: 'correlation', primary: true, type: 'lift', label }, formatLift(kind));
+	for (const strategy of ['least1', 'points']) {
+		const perDay = backtestDays.get(`betAvg|${strategy}`);
+		if (!perDay) continue;
+		add({ question: 'correlation', primary: true, type: 'backtest', strategy, label: `Avg ${strategyName(strategy)} backtest` },
+			formatPaired(`backtest-${strategy}`, [...perDay].map(([day, entry]) => ({ day: dayIndex.get(day), ...entry }))));
+	}
+	for (const pair of slotPairs) {
+		add({ question: 'time slot', primary: true, type: 'slot', a: pair.a, b: pair.b, label: `${pair.label}, Streak` },
+			formatPaired(`slot-${pair.label}`, matchSlots(pair.a, pair.b).map(([x, y]) => ({ day: dayIndex.get(x.day), sum: metric(x).streak - metric(y).streak, count: 1 }))));
+	}
+	for (const measure of ['streak', 'picks']) {
+		add({ question: 'sportsbooks', primary: true, type: 'books', measure, label: `any book, ${measure === 'streak' ? 'Streak' : 'picks correct'}` }, formatBooks(measure));
+	}
+	for (const key of BOOKS) add({ question: 'sportsbooks', primary: false, type: 'auc', key, label: `${key}'s AUC vs the Avg's` }, formatAuc(key));
+	// Holm within each family: the contrasts there were days enough for, and both formats' own tests together
+	for (const tests of groupBy(formatTests, (test) => `${test.question}|${test.primary}`).values()) {
+		const compared = tests.filter((test) => Number.isFinite(test.contrast.p));
+		holm(compared.map((test) => test.contrast.p)).forEach((adjusted, index) => { compared[index].contrast.adjusted = adjusted; });
+		const parts = tests.flatMap((test) => test.formats);
+		holm(parts.map((part) => part.p)).forEach((adjusted, index) => { parts[index].adjusted = adjusted; });
+	}
+}
+results.formats = { days: formatDays.map((list) => list.length), playerDays: formatAucs.map((entry) => entry.rows), tests: formatTests };
+
 // --- Verdicts -----------------------------------------------------------------------------------
 
 const backtestFormat = (strategy) => (strategy === 'points' ? (v) => signed(v, 2, 1, '') : strategy === 'hits' ? (v) => signed(v / 3) : (v) => signed(v));
@@ -1314,7 +1503,9 @@ const slotPrimary = slotPairs.map((pair) => ({
 	text: `${pair.label}: Streak ${signed(pair.streak.estimate)} ${span([pair.streak.low, pair.streak.high], (v) => signed(v))} over ${plural(pair.days, 'day')} (better on ${pair.aBetter} vs ${pair.bBetter})`,
 	p: pair.streak.p, adjusted: pair.streak.adjusted,
 }));
-const closest = (tests) => tests.reduce((best, test) => (!best || test.adjusted < best.adjusted ? test : best), null);
+// The smallest Holm p, and among equal ones (often 1.000) the smallest raw p
+const nearer = (a, b) => a.adjusted < b.adjusted || (a.adjusted === b.adjusted && a.p < b.p);
+const closest = (tests) => tests.reduce((best, test) => (!best || nearer(test, best) ? test : best), null);
 const verdictLine = (tests) => {
 	const hits = tests.filter((test) => test.adjusted < ALPHA);
 	if (hits.length) return `SIGNIFICANT: ${hits.map((test) => `${test.text} (p ${pText(test.p)}, Holm ${pText(test.adjusted)})`).join('; ')}`;
@@ -1338,12 +1529,21 @@ const consider = (finding) => {
 	if (finding.adjusted < ALPHA) findings.push(finding);
 };
 const ciText = (test, format) => span([test.low, test.high], format);
+// What a result would change in the picks, worded the same for the pooled result and for one format's
+const slotName = (side) => (side === 'first' || side === 'last' ? `at the day's ${side} window` : `with ${bucketName(side)} left`);
+const liftShort = (label, lift) => `${lift > 1 ? 'keeping' : 'putting'} ${label} ${lift > 1 ? 'apart on Streak tickets and together on Points tickets' : 'together on Streak tickets and apart on Points tickets'} (they score together ${times(lift)} as often as their odds say)`;
+const backtestShort = (strategy, estimate) => `correlation on for the Avg ${strategyName(strategy)} pick (${backtestFormat(strategy)(estimate)} per window)`;
+const slotShort = (a, b, estimate, label) => {
+	const [winner, loser] = estimate > 0 ? [a, b] : [b, a];
+	return `picking ${slotName(winner)} rather than ${slotName(loser)} (${signed(Math.abs(estimate))} ${label} on the same days)`;
+};
+const aucShort = (key, diff) => `${key}'s prices (AUC ${signed(diff, 4, 1, '')} against the Avg's)`;
 for (const [kind, label] of [['same', 'teammates'], ['opp', 'opponents']]) {
 	const pair = pairs[kind];
 	consider({
 		primary: true, question: 'correlation', p: pair.p, adjusted: pair.adjusted,
 		text: `${label} both scored ${times(pair.lift)} ${span(pair.interval, (v) => v.toFixed(2))} as often as pairs from different games`, favors: 'other',
-		short: `${pair.lift > 1 ? 'keeping' : 'putting'} ${label} ${pair.lift > 1 ? 'apart on Streak tickets and together on Points tickets' : 'together on Streak tickets and apart on Points tickets'} (they score together ${times(pair.lift)} as often as their odds say)`,
+		short: liftShort(label, pair.lift),
 	});
 }
 for (const key of KEYS) {
@@ -1354,7 +1554,7 @@ for (const key of KEYS) {
 		consider({
 			primary: avg && strategy !== 'hits', question: 'correlation', p: result.test.p, adjusted: result.test.adjusted, text: backtestText(key, strategy, result),
 			favors: !avg ? 'none' : result.test.estimate > 0 ? 'other' : 'avg',
-			short: `correlation on for the Avg ${strategyName(strategy)} pick (${backtestFormat(strategy)(result.test.estimate)} per window)`,
+			short: backtestShort(strategy, result.test.estimate),
 		});
 	}
 }
@@ -1370,15 +1570,13 @@ for (const [measure, label] of [['above', 'above 1 at the end'], ['settled', 'se
 		text: `${settling[measure].observed} factors ${label}, where chance leaves ${settling[measure].median}`,
 	});
 }
-const slotName = (side) => (side === 'first' || side === 'last' ? `at the day's ${side} window` : `with ${bucketName(side)} left`);
 for (const pair of slotPairs) {
 	for (const [measure, label, primary] of [['streak', 'Streak', true], ['picks', 'picks correct', false]]) {
 		const test = pair[measure];
-		const [winner, loser] = test.estimate > 0 ? [pair.a, pair.b] : [pair.b, pair.a];
 		consider({
 			primary, question: 'time slot', p: test.p, adjusted: test.adjusted, favors: 'when',
 			text: `${pair.label}: ${label} ${signed(test.estimate)} ${ciText(test, (v) => signed(v))} over ${plural(pair.days, 'day')}`,
-			short: `picking ${slotName(winner)} rather than ${slotName(loser)} (${signed(Math.abs(test.estimate))} ${label} on the same days)`,
+			short: slotShort(pair.a, pair.b, test.estimate, label),
 		});
 	}
 }
@@ -1402,7 +1600,7 @@ for (const row of playerRows) {
 	consider({
 		primary: false, question: 'sportsbooks', p: row.p, adjusted: row.adjusted, favors: row.diff > 0 ? 'other' : 'avg',
 		text: `${row.key}'s AUC vs the Avg's: ${signed(row.diff, 4, 1, '')} ${span(row.interval, (v) => signed(v, 4, 1, ''))}`,
-		short: `${row.key}'s prices (AUC ${signed(row.diff, 4, 1, '')} against the Avg's)`,
+		short: aucShort(row.key, row.diff),
 	});
 }
 for (const [rows, name, label] of [[perSlotBooks, (row) => `${bucketName(row.bucket)} windows`, 'Streak'], [perPoolBooks, (row) => `Pick #${row.sid}`, 'scored']]) {
@@ -1411,18 +1609,72 @@ for (const [rows, name, label] of [[perSlotBooks, (row) => `${bucketName(row.buc
 		if (row.adjusted < ALPHA) versusFindings(row.versus, false, ` in ${name(row)}`, label);
 	}
 }
-const shorts = (list) => list.map((finding) => finding.short).join('; ');
-const primaryOther = findings.filter((finding) => finding.primary && finding.favors === 'other');
+// Regular season vs playoffs. A result within one format is primary only when its pooled test is primary and the
+// result also differs significantly between the formats; otherwise the pooled result stands, and it's for rechecking
+const FORMAT_QUESTION = 'regular season vs playoffs';
+const formatValue = (test, value) => (test.type === 'lift' ? times(value) : test.type === 'auc' ? signed(value, 4, 1, '') : test.type === 'backtest' ? backtestFormat(test.strategy)(value) : signed(value));
+const formatCell = (test, part) => {
+	if (test.type === 'books') return part.rates ? `${pct(Math.min(...part.rates), 0)}–${pct(Math.max(...part.rates), 0)}` : '';
+	const bound = test.type === 'lift' ? (v) => v.toFixed(2) : (v) => formatValue(test, v);
+	return `${formatValue(test, part.estimate)} ${ciText(part, bound)}`;
+};
+const formatContrastText = (test) => (test.type === 'books'
+	? `${test.label}: the books' gaps differ between the regular season and the playoffs`
+	: `${test.label}: ${formatCell(test, test.formats[0])} in the regular season, ${formatCell(test, test.formats[1])} in the playoffs (${test.type === 'lift' ? 'ratio' : 'difference'} ${formatCell(test, test.contrast)})`);
+for (const test of formatTests) {
+	const differs = test.contrast.adjusted < ALPHA;
+	consider({
+		primary: test.primary, question: FORMAT_QUESTION, p: test.contrast.p, adjusted: test.contrast.adjusted, favors: 'none', text: formatContrastText(test),
+		short: test.type === 'books'
+			? `the books' gaps on ${test.measure === 'streak' ? 'Streak' : 'picks correct'}`
+			: `${test.label} (${formatValue(test, test.formats[0].estimate)} in the regular season, ${formatValue(test, test.formats[1].estimate)} in the playoffs)`,
+	});
+	test.formats.forEach((part, f) => {
+		const format = FORMATS[f];
+		const primary = test.primary && differs;
+		const where = `in ${formatName(format)}, `;
+		if (test.type === 'books') {
+			const label = test.measure === 'streak' ? 'Streak' : 'picks correct';
+			consider({ primary, question: 'sportsbooks', format, p: part.p, adjusted: part.adjusted, favors: 'none', text: `${where}the five tickets' ${label} rates differ (any-book test)` });
+			if (part.adjusted >= ALPHA) return;
+			for (const entry of part.versus) {
+				consider({
+					primary, question: 'sportsbooks', format, p: entry.test.p, adjusted: entry.test.adjusted, favors: entry.test.estimate > 0 ? 'other' : 'avg',
+					text: `${where}${entry.key} vs Avg, ${label}: ${signed(entry.test.estimate)} ${ciText(entry.test, (v) => signed(v))}`,
+					short: `${entry.key}'s pick instead of the Avg's (${signed(entry.test.estimate)} ${label})`,
+				});
+			}
+			return;
+		}
+		const favors = test.type === 'slot' ? 'when' : test.type === 'lift' ? 'other' : part.estimate > 0 ? 'other' : 'avg';
+		const short = test.type === 'lift' ? liftShort(test.label, part.estimate)
+			: test.type === 'backtest' ? backtestShort(test.strategy, part.estimate)
+				: test.type === 'slot' ? slotShort(test.a, test.b, part.estimate, 'Streak') : aucShort(test.key, part.estimate);
+		consider({ primary, question: test.question, format, p: part.p, adjusted: part.adjusted, favors, text: `${where}${test.label}: ${formatCell(test, part)} over ${plural(test.days[f], 'day')}`, short });
+	});
+}
+const shortOf = (finding) => `${finding.format ? `in ${formatName(finding.format)}, ` : ''}${finding.short}`;
+const shorts = (list) => list.map(shortOf).join('; ');
+const primaryOther = findings.filter((finding) => finding.primary && finding.favors === 'other' && !finding.format);
+const formatOther = findings.filter((finding) => finding.primary && finding.favors === 'other' && finding.format);
 const primaryWhen = findings.filter((finding) => finding.primary && finding.favors === 'when');
 const secondaryBeats = findings.filter((finding) => !finding.primary && (finding.favors === 'other' || finding.favors === 'when'));
 const worse = findings.filter((finding) => finding.favors === 'avg');
+const formatDiffers = findings.filter((finding) => finding.question === FORMAT_QUESTION);
+const AVG_PICK = 'selecting the top Avg player in each pick pool (the app\'s Avg pick, with correlation off)';
+const formatsBeaten = FORMATS.filter((format) => formatOther.some((finding) => finding.format === format));
+const holdsIn = FORMATS.filter((format) => !formatsBeaten.includes(format));
 const conclusion = [
 	primaryOther.length
 		? `the top Avg player in each pick pool is no longer the clear best option. Significant: ${shorts(primaryOther)}`
-		: 'selecting the top Avg player in each pick pool (the app\'s Avg pick, with correlation off) is the best option: no alternative tested beats it significantly',
+		: !formatsBeaten.length
+			? `${AVG_PICK} is the best option: no alternative tested beats it significantly`
+			: holdsIn.length && `${AVG_PICK} is the best option in ${holdsIn.map(formatName).join(' and ')}: no alternative tested beats it significantly there`,
+	...formatsBeaten.map((format) => `in ${formatName(format)}, the top Avg player in each pick pool is no longer the clear best option. Significant there: ${formatOther.filter((finding) => finding.format === format).map((finding) => finding.short).join('; ')}`),
 	primaryWhen.length && `significant on when to pick: ${shorts(primaryWhen)}`,
 	worse.length && `significantly worse than the Avg pick: ${shorts(worse)}`,
 	secondaryBeats.length && `secondary results to recheck as the archive grows: ${shorts(secondaryBeats)}`,
+	formatDiffers.length && `results that differ between the regular season and the playoffs: ${shorts(formatDiffers)}`,
 ].filter(Boolean).map((part) => `${part[0].toUpperCase()}${part.slice(1)}`).join('. ');
 results.findings = findings;
 results.conclusion = conclusion;
@@ -1465,6 +1717,24 @@ say(`  Settling: ${settling.settled.observed} factors settled above 1, where cha
 say(`Time slot: ${verdictLine(slotPrimary)}`);
 const anyBookText = `any-book test p ${pText(anyBook.streak)} on Streak, ${pText(anyBook.picks)} on picks (Holm ${pText(anyBook.streakAdjusted)}, ${pText(anyBook.picksAdjusted)})`;
 say(`Sportsbooks: ${anyBook.streakAdjusted < ALPHA || anyBook.picksAdjusted < ALPHA ? `SIGNIFICANT: ${anyBookText}${bookHits.length ? `; ${bookHits.join('; ')}` : '; no single book differs from Avg after Holm'}` : `no book picks differently from the others: ${anyBookText}`}`);
+if (formatTests.length) {
+	const contrasts = formatTests.filter((test) => Number.isFinite(test.contrast.p)).map((test) => ({ text: formatContrastText(test), p: test.contrast.p, adjusted: test.contrast.adjusted }));
+	const differ = contrasts.filter((test) => test.adjusted < ALPHA);
+	const nearest = closest(contrasts);
+	say(`Regular season vs playoffs: ${differ.length
+		? `SIGNIFICANT: ${differ.map((test) => `${test.text} (p ${pText(test.p)}, Holm ${pText(test.adjusted)})`).join('; ')}`
+		: nearest ? `no result differs between them. Closest: ${nearest.text} (p ${pText(nearest.p)}, Holm ${pText(nearest.adjusted)})` : `nothing to compare: no result has ${CONTRAST_DAYS}+ days in both`}`);
+	const within = formatTests.flatMap((test) => (test.type === 'books' ? [] : test.formats.map((part, f) => ({ test, part, format: FORMATS[f] }))));
+	const withinHits = within.filter(({ part }) => part.adjusted < ALPHA);
+	const withinNearest = within.reduce((best, entry) => (!best || nearer(entry.part, best.part) ? entry : best), null);
+	const withinText = ({ test, part, format }) => `in ${formatName(format)}, ${test.label}: ${formatCell(test, part)} (p ${pText(part.p)}, Holm ${pText(part.adjusted)})`;
+	const booksWithin = formatTests.filter((test) => test.type === 'books').flatMap((test) => test.formats.map((part, f) => `${test.label} in ${formatName(FORMATS[f])} p ${pText(part.p)} (Holm ${pText(part.adjusted)})`));
+	say(`  Within each format: ${withinHits.length ? `SIGNIFICANT: ${withinHits.map(withinText).join('; ')}` : `nothing significant. Closest: ${withinNearest ? withinText(withinNearest) : '-'}`}`);
+	if (booksWithin.length) say(`  Any-book tests within each format: ${booksWithin.join(', ')}`);
+} else {
+	const only = FORMATS.filter((_, f) => formatDays[f].length);
+	say(`Regular season vs playoffs: not compared; this run has ${only.length === 1 ? `${formatName(only[0])} only` : 'too few days in one format'}`);
+}
 say('');
 if (findings.length) {
 	say('Significant results (after Holm within each family):');
@@ -1586,6 +1856,47 @@ table(['slot', 'days', ...KEYS.map(keyName), 'any book p', 'Holm'], perSlotBooks
 	bucketName(row.bucket), row.days, ...KEYS.map((key) => pct(row.rates[key], 0)), pText(row.p), pText(row.adjusted),
 ]));
 versusRows(perSlotBooks, (row) => `${bucketName(row.bucket)} windows`);
+
+if (formatTests.length) {
+	section('4. Regular season vs playoffs');
+	const seasonsOf = (format) => [...daysByFormat].filter(([key]) => key.endsWith(` ${format}`)).map(([key, count]) => `${key.split(' ')[0]} ${count}`).join(', ');
+	say(FORMATS.map((format, f) => {
+		const name = formatName(format).replace(/^the /, '');
+		return `${name[0].toUpperCase()}${name.slice(1)}: ${plural(formatDays[f].length, 'day')} (${seasonsOf(format)}), ${plural(windows.filter((window) => window.format === format).length, 'window')}`;
+	}).join('; '));
+	say('Each result within each format, by the same test as the pooled one. Intervals resample days within each format.');
+	say('Holm runs over both formats\' tests in each family, and over the differences on their own. The difference is the regular season\'s minus the playoffs\' (for the lifts, their ratio).');
+	say('A result within one format is primary only when the difference is significant too; otherwise the pooled result above stands.');
+	const formatTable = (title, tests) => {
+		if (!tests.length) return;
+		say('');
+		say(title);
+		table(['result', 'days', 'regular season', 'p', 'Holm', 'playoffs', 'p', 'Holm', 'difference', 'p', 'Holm'], tests.map((test) => [
+			test.label, test.days.join('/'),
+			...test.formats.flatMap((part) => [formatCell(test, part), pText(part.p), pText(part.adjusted)]),
+			Number.isFinite(test.contrast.p) ? formatCell(test, test.contrast) : '-', pText(test.contrast.p), pText(test.contrast.adjusted),
+		]));
+	};
+	formatTable('Correlation (primary): the pair lifts and the Avg\'s held-out backtests', formatTests.filter((test) => test.question === 'correlation'));
+	formatTable('Time slot (primary): same-day comparisons of the Avg top ticket', formatTests.filter((test) => test.question === 'time slot'));
+	formatTable('Sportsbooks (primary): the range of the five tickets\' rates; the difference tests whether the books\' gaps change', formatTests.filter((test) => test.type === 'books'));
+	formatTable(`Player level (secondary): each book's AUC minus the Avg's, over ${formatAucs.map((entry) => entry.rows.toLocaleString('en-US')).join(' and ')} player-days`, formatTests.filter((test) => test.type === 'auc'));
+	for (const test of formatTests.filter((entry) => entry.type === 'books')) {
+		test.formats.forEach((part, f) => {
+			if (part.adjusted >= ALPHA) return;
+			say('');
+			say(`In ${formatName(FORMATS[f])}, ${test.label}: each book vs the Avg (Holm over the four):`);
+			table(['vs Avg', 'difference', '95% CI', 'p', 'Holm'], part.versus.map((entry) => [
+				entry.key, signed(entry.test.estimate), ciText(entry.test, (v) => signed(v)), pText(entry.test.p), pText(entry.test.adjusted),
+			]));
+		});
+	}
+	say('');
+	say(`A difference needs ${CONTRAST_DAYS}+ days in each format ("-" otherwise; with fewer, its test finds differences that aren't there too often).`);
+	say('Differences of paired results are tested by shuffling the formats among the days, since most days differ by a whole result or not at all.');
+	say('Not split: the table\'s factors and settling, since the app keeps one table for both formats and a format difference in');
+	say('correlation shows in the lifts and backtests here; the other backtests; the secondary slot and book tests.');
+}
 
 if (options.out) {
 	const outDir = expand(options.out);

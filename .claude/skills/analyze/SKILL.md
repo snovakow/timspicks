@@ -1,6 +1,6 @@
 ---
 name: analyze
-description: Test the recorded history for real effects. Correlation - whether picks from one game score together beyond their odds, and whether the correlation table's factors hold up, settle, or improve the app's picks. Time slot - whether picks made with 1, 2, 3 or 4+ games left in the lists, or early versus late in the day, do better. Sportsbooks - whether one book's picks, or the average's, do better. Rebuilds every archived pick window the way the app's archive replays do, proves the rebuild against the app's own correlation table, and tests actual results by day with multiple-comparison correction. Read-only. Use when asked whether correlation, a time slot or a sportsbook has a significant edge, whether to turn the correlation feature on, or whether the correlation factors are settling.
+description: Test the recorded history for real effects. Correlation - whether picks from one game score together beyond their odds, and whether the correlation table's factors hold up, settle, or improve the app's picks. Time slot - whether picks made with 1, 2, 3 or 4+ games left in the lists, or early versus late in the day, do better. Sportsbooks - whether one book's picks, or the average's, do better. Regular season vs playoffs - whether any of those results changes between the two. Rebuilds every archived pick window the way the app's archive replays do, proves the rebuild against the app's own correlation table, and tests actual results by day with multiple-comparison correction. Read-only. Use when asked whether correlation, a time slot or a sportsbook has a significant edge, whether to turn the correlation feature on, or whether the correlation factors are settling.
 argument-hint: "[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--format regular|playoff] [--root <site folder>]..."
 model: opus
 effort: max
@@ -11,10 +11,11 @@ allowed-tools: Read, Grep, Glob, Bash(node .claude/skills/analyze/scripts/analyz
 
 Arguments: $ARGUMENTS
 
-This skill answers three questions from the archive: the recorded pick lists, odds and results.
+This skill answers four questions from the archive: the recorded pick lists, odds and results.
 - **Correlation.** Do picks from one game, on one team or on opposing teams, score together more or less than their odds say? Do the correlation table's factors show it, settle as the archive grows, or improve the app's picks?
 - **Time slot.** A slot is the number of games left in the lists when the picks are made, 1, 2, 3 or 4+: the app's Pool Slots, so it's also how late in the day they're made. Does any slot, or picking at the day's first or last window, give better results?
 - **Sportsbooks.** Does one book's top ticket, or the Avg's, hit more often?
+- **Regular season vs playoffs.** Does any of those answers change between the two? Playoff days have fewer games, lower odds and the same two teams night after night, so a result can hold in one and not the other, and pooling can hide it.
 
 The strategies are the app's: Streak is at least one correct pick, Points scores the day by number correct, and Pick% is the share of picks correct. docs/hockey-challenge.md explains them and the ticket shapes.
 
@@ -32,7 +33,7 @@ The repo is public. The report shows local paths and the books' names, so keep b
 
 It takes about 20 seconds.
 - `--since`, `--until`: only these days, inclusive. `--since` with a season's first day, from the history index, keeps that season alone.
-- `--format regular` or `--format playoff`.
+- `--format regular` or `--format playoff`: that format alone. The default run already compares the two, in the report's section 4.
 - `--root <site folder>`, repeatable: read only these folders, in this order, instead of the live folder and then `public/`. `--root public` sees exactly what a GENERATE run on the dev server sees.
 - `--live <dir>`: the live folder, when discovery fails.
 - `--out <dir>`: save the rebuilt windows (`windows.json`), every number (`results.json`) and this archive's table (`table.json`). Use a scratchpad folder.
@@ -52,12 +53,13 @@ History days come from every site folder's `history/`, so a day fetched into onl
 
 - The unit is the day. Windows on one day share players and results, so every interval resamples whole days, and every paired test flips whole days.
 - Each family of tests is corrected together (Holm). A result is significant only when its Holm-adjusted p is under 0.05. A raw p under 0.05 among many tests is what chance produces now and then.
-- **Primary** tests answer the three questions and decide the conclusion:
+- **Primary** tests answer the four questions and decide the conclusion:
   - the two pair lifts, and the Avg's Streak and Points backtests
   - the same-day slot comparisons on Streak
   - the any-book tests, and only then each book against the Avg
+  - the difference between the formats in each of those, and each of those within one format when its difference is significant
 - Everything else is **secondary**. It's listed when significant, but it doesn't change the pick on its own: with this many families, one comes up by chance now and then.
-- The verdicts end with **Significant results**, every result significant within its own family, and a **Conclusion**. The Conclusion keeps the top Avg player in each pick pool as the best option unless a primary result beats it. A significant slot comparison adds when to pick. It also names anything that did significantly worse, and any secondary result to recheck.
+- The verdicts end with **Significant results**, every result significant within its own family, and a **Conclusion**. The Conclusion keeps the top Avg player in each pick pool as the best option unless a primary result beats it. A significant slot comparison adds when to pick. A primary result within one format changes the pick for that format only. It also names anything that did significantly worse, any secondary result to recheck, and any result that differs between the formats.
 
 ### 1. Correlation
 
@@ -82,9 +84,18 @@ History days come from every site folder's `history/`, so a day fetched into onl
 - **By pick pool.** How often each book's top player in Pick #1, #2 and #3 scored, with an any-book test per pool. It checks the Avg as the guide for each pool on its own. A book is compared with the Avg only in a pool whose test is significant.
 - **By slot.** The rates Best Streak Picks weights each book with, slot by slot. When no slot's any-book test is significant, that weighting rests on noise.
 
+### 4. Regular season vs playoffs
+
+- Each primary result, and each book's AUC against the Avg's, measured within the regular season and within the playoffs by the same test as the pooled one, and the difference between them. The regular season pools every season's regular days. A run with one format only says so and skips this.
+- Two families per question: both formats' own tests together, and the differences together. The verdicts give the closest of each.
+- **The difference** is what says whether the format changes a result. Most paired days differ by a whole result or not at all, so it's tested by shuffling the format labels among the days, not by resampling. It needs 8 days in each format, and a row with fewer shows none: with fewer, the test finds differences that aren't there too often.
+- **Within one format.** Without a significant difference, a result within one format is secondary: the pooled result stands, and the format only shows where the effect sits. A near-miss that points the same way in both formats is more likely real than one carried by a single format.
+- Not split: the table's factors and settling. The app keeps one table for both formats, and a format difference in correlation would show in the lifts and backtests. The other backtests and the secondary slot and book tests aren't split either.
+- The formats' days differ in more than format. Playoff days are mostly 1- and 2-game windows, and each format comes from its own part of the calendar. A difference says the result changed between the two sets of days, not why.
+
 ## 3. When a verdict is close
 
-- Rerun with `--since` at the season's start, or `--format regular`, to see whether a near-miss holds in this season alone. A real effect points the same way in both.
+- Rerun with `--since` at the season's start to see whether a near-miss holds in this season alone. The format comparison already shows whether it holds in the regular season and the playoffs. A real effect points the same way in both.
 - Rerun with `--seed 2` to see whether resampling noise moves a p that sits near 0.05. Exact tests don't move.
 - With `--out`, `windows.json` holds every window's lists, prices, results and tickets, for looking at particular days.
 
@@ -93,13 +104,13 @@ Stop there. Slicing the archive until something comes out significant is just ru
 ## 4. Report
 
 Keep it short, and lead with the bottom line, from the script's Significant results and Conclusion:
-- **Something is significant:** list each result. Give what it is, the effect with its 95% interval, the Holm-adjusted p, and whether it's primary or secondary. Then say what it means for the picks, as the Conclusion does.
+- **Something is significant:** list each result. Give what it is, the effect with its 95% interval, the Holm-adjusted p, whether it's primary or secondary, and its format when it holds in one only. Then say what it means for the picks, as the Conclusion does.
 - **Nothing is significant:** say so in one line, and that selecting the top Avg player in each pick pool remains the best option, because nothing tested beats it.
 
-Then three lines, one per question: the verdict, the one or two numbers behind it (the effect with its 95% interval, and the Holm-adjusted p), and what it means for the app in a few words. For example: nothing in correlation is significant, so there's no case for turning it on. The correlation line also says whether the factors settle above 1 more often than chance.
+Then four lines, one per question: the verdict, the one or two numbers behind it (the effect with its 95% interval, and the Holm-adjusted p), and what it means for the app in a few words. For example: nothing in correlation is significant, so there's no case for turning it on. The correlation line also says whether the factors settle above 1 more often than chance. The format line says whether any result differs between the regular season and the playoffs, and names the closest difference with its Holm p.
 
 Then add, only when they apply:
 - A failed rebuild check, or a gap in the archive: history days without snapshots, or a table in `src/correlationData.ts` that doesn't match this archive. Say which days it lacks. Regenerating it is the user's step.
-- The closest result to significance, when its Holm p is under 0.2, and what keeps it from significance: few days, or days shared with another comparison.
+- The closest result to significance, when its Holm p is under 0.2, and what keeps it from significance: few days, or days shared with another comparison. Say whether it points the same way in the regular season and the playoffs, from the report's section 4.
 
 Leave out the method, the tables and the per-book numbers unless asked.
