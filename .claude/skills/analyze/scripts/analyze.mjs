@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Archive analysis for the analyze skill. It rebuilds every archived pick window the way the app's archive
 // replays build them (runSimulation and runHistoricalStrategyAudit in src/picksOptimizer.ts), proves the
-// rebuild by deriving the correlation table from it and matching runSimulation's own, then tests three
+// rebuild by fitting the correlation lifts from it and matching runSimulation's own, then tests three
 // questions on actual results: whether picks from one game score together beyond their odds and whether the
-// correlation table improves picks, whether one time slot gives better picks, and whether one book or the
+// correlation lifts improve picks, whether one time slot gives better picks, and whether one book or the
 // average of the books picks better. Each answer is then measured within the regular season and within the
 // playoffs, and the two are compared.
 //
@@ -212,31 +212,6 @@ const holm = (ps) => {
 	});
 	return adjusted;
 };
-// Exact distribution of a sum of independent items, each a list of [step, probability] on an integer grid
-const sumDistribution = (items) => {
-	let dist = new Float64Array([1]);
-	for (const item of items) {
-		const reach = Math.max(...item.map(([step]) => step));
-		const next = new Float64Array(dist.length + reach);
-		for (let value = 0; value < dist.length; value += 1) {
-			if (!dist[value]) continue;
-			for (const [step, probability] of item) next[value + step] += dist[value] * probability;
-		}
-		dist = next;
-	}
-	return dist;
-};
-const exactP = (dist, observed) => {
-	let atLeast = 0;
-	let atMost = 0;
-	for (let value = 0; value < dist.length; value += 1) {
-		if (value >= observed - 1e-6) atLeast += dist[value];
-		if (value <= observed + 1e-6) atMost += dist[value];
-	}
-	return Math.min(1, 2 * Math.min(atLeast, atMost));
-};
-const gcd = (a, b) => (b ? gcd(b, a % b) : a);
-
 // --- Output -------------------------------------------------------------------------------------
 
 const out = [];
@@ -338,13 +313,12 @@ const setting = (pattern, source, fallback, what) => {
 	notes.push(`Couldn't read ${what} from src/, so ${fallback} was used`);
 	return fallback;
 };
-// App.tsx's starting Books setting, and the band its table simulation runs with
+// App.tsx's starting Books setting, which its lift fitting runs with
 const minSportsbooks = setting(/\[\s*minSportsbooks\s*,\s*setMinSportsbooks\s*\]\s*=\s*useState\(\s*(\d+)\s*\)/, appSource, 3, 'the default number of books');
-const correlationPercent = setting(/correlationPercent\s*=\s*([\d.]+)/, appSource, 0.999, 'the near-tie band');
 const cutoffs = [...optimizerSource.matchAll(/oldestDate\s*=\s*new Date\(\s*["'](\d{4}-\d{2}-\d{2})["']\s*\)/g)].map((match) => match[1]);
 const oldestDay = cutoffs.at(-1) ?? null;
 if (!cutoffs.length) notes.push("Couldn't read the archive's earliest date from src/picksOptimizer.ts, so every archived day was read");
-else if (new Set(cutoffs).size > 1) notes.push(`src/picksOptimizer.ts holds different earliest dates (${[...new Set(cutoffs)].join(', ')}); the table's, ${oldestDay}, was used`);
+else if (new Set(cutoffs).size > 1) notes.push(`src/picksOptimizer.ts holds different earliest dates (${[...new Set(cutoffs)].join(', ')}); the lift fitting's, ${oldestDay}, was used`);
 
 // --- The archive: history days from every site folder, snapshots from the first that has them ----
 
@@ -458,12 +432,12 @@ try {
 	const shipped = await load('/src/correlationData.ts');
 	app = {
 		calcAny: optimizer.calcAny, calcPnt: optimizer.calcPnt, calcHit: optimizer.calcHit,
-		applyCorrelation: optimizer.applyCorrelation, runSimulation: optimizer.runSimulation,
-		getStrategy: selection.getStrategy, ComboGroup: selection.ComboGroup,
+		correlatedValue: optimizer.correlatedValue, pairLift: optimizer.pairLift, runSimulation: optimizer.runSimulation,
+		ComboGroup: selection.ComboGroup,
 		oddsNameCandidates: processor.oddsNameCandidates, removeAccentsNormalize: processor.removeAccentsNormalize, deVig: processor.deVig,
-		AllCombos: types.AllCombos, SportsbookKeys: types.SportsbookKeys, LogStatsKeys: types.LogStatsKeys,
-		AllStrategies: types.AllStrategies, StrategyLabels: types.StrategyLabels, strategyTitle: types.strategyTitle, Sportsbooks: types.Sportsbooks,
-		normalizeSportsbooks: features.normalizeSportsbooks, shippedTable: shipped.correlations,
+		SportsbookKeys: types.SportsbookKeys, LogStatsKeys: types.LogStatsKeys,
+		StrategyLabels: types.StrategyLabels, Sportsbooks: types.Sportsbooks,
+		normalizeSportsbooks: features.normalizeSportsbooks, shippedLifts: shipped.pairLifts,
 	};
 	const missing = Object.entries(app).filter(([name, value]) => value === undefined && name !== 'normalizeSportsbooks').map(([name]) => name);
 	if (missing.length) throw new Error(`src/ no longer exports ${missing.join(', ')}`);
@@ -472,16 +446,15 @@ try {
 	await cleanup();
 	process.exit(1);
 }
-const { calcAny, calcPnt, calcHit, applyCorrelation, getStrategy, ComboGroup, oddsNameCandidates, removeAccentsNormalize } = app;
+const { calcAny, calcPnt, calcHit, ComboGroup, oddsNameCandidates, removeAccentsNormalize } = app;
 const BOOKS = [...app.SportsbookKeys];
 const KEYS = [...app.LogStatsKeys];
-const SHAPES = [...app.AllCombos];
-const STRATEGIES = [...app.AllStrategies];
+// Correlation can't change the expected number of correct picks, so only these two are backtested
+const CORRELATED = ['least1', 'points'];
 // The challenge's points by number of correct picks, as calcPnt scores them
 const POINTS = [0, calcPnt(1, 0, 0), calcPnt(1, 1, 0), calcPnt(1, 1, 1)];
 const keyName = (key) => (key === 'betAvg' ? 'Avg' : key);
 const strategyName = (strategy) => app.StrategyLabels?.[strategy] ?? strategy;
-const shapeName = (shape) => `${shape} (${app.strategyTitle(shape)})`;
 const bucketOf = (games) => (games === 1 ? '1' : games === 2 ? '2' : games === 3 ? '3' : '4+');
 const bucketName = (bucket) => `${bucket} ${bucket === '1' ? 'game' : 'games'}`;
 
@@ -524,7 +497,7 @@ const countGames = (helper, playerSets) => {
 	}
 	return games;
 };
-// A ticket's result, averaged over the tickets tied with it, as ResultTotal keeps it
+// A ticket's result, averaged over the tickets tied with it
 const outcome = (combos) => {
 	let least1 = 0;
 	let points = 0;
@@ -545,7 +518,6 @@ const outcome = (combos) => {
 	}
 	return { least1, points, hits, count };
 };
-const NONE = { least1: 0, points: 0, hits: 0, count: 0 };
 const scoreOf = (group) => ({
 	least1: calcAny(group.prob1, group.prob2, group.prob3),
 	points: calcPnt(group.prob1, group.prob2, group.prob3),
@@ -639,42 +611,21 @@ for (const [day, file] of historyByDay) {
 		if (slotRoot(day, time) !== dayRoot(day)) coverage.borrowed.push(`${day} ${time} from ${shortPath(slotRoot(day, time))}`);
 		const window = { day, format: formatOf.get(day), time, slotIndex, gameCount, bucket: bucketOf(gameCount), rows, books: {} };
 		for (const key of KEYS) {
+			// The book's lists: the players it prices, among those with an Avg
+			const lists = sets.map((set) => set.filter((row) => row[key] !== null));
 			const top = new ComboGroup();
-			const groups = new Map(SHAPES.map((shape) => [shape, new ComboGroup()]));
-			for (const pick1 of sets[0]) {
-				for (const pick2 of sets[1]) {
-					for (const pick3 of sets[2]) {
-						const prob1 = pick1[key];
-						const prob2 = pick2[key];
-						const prob3 = pick3[key];
-						if (prob1 === null || prob2 === null || prob3 === null) continue;
-						const candidate = { pick1, pick2, pick3, prob1, prob2, prob3, strategy: getStrategy(pick1, pick2, pick3) };
-						top.add(candidate);
-						groups.get(candidate.strategy)?.add(candidate);
+			for (const pick1 of lists[0]) {
+				for (const pick2 of lists[1]) {
+					for (const pick3 of lists[2]) {
+						top.add({ pick1, pick2, pick3, prob1: pick1[key], prob2: pick2[key], prob3: pick3[key] });
 					}
 				}
 			}
 			if (!top.combos.length) continue;
-			const baseline = scoreOf(top);
-			const book = {
-				top: { probs: [top.prob1, top.prob2, top.prob3], pred: baseline, real: outcome(top.combos), ticket: ticketOf(top.combos), combos: idsOf(top.combos) },
-				shapes: {},
-				totals: { baseline: outcome(top.combos) },
+			window.books[key] = {
+				top: { probs: [top.prob1, top.prob2, top.prob3], pred: scoreOf(top), real: outcome(top.combos), ticket: ticketOf(top.combos), combos: idsOf(top.combos) },
+				lists,
 			};
-			for (const shape of SHAPES) {
-				const group = groups.get(shape);
-				if (!group.combos.length) {
-					book.totals[shape] = NONE;
-					continue;
-				}
-				const pred = scoreOf(group);
-				// The table's near-tie band: a shape counts when its best ticket is within the band of the best ticket on any strategy
-				const included = STRATEGIES.some((strategy) => baseline[strategy] > 0 && pred[strategy] >= baseline[strategy] * correlationPercent);
-				const real = outcome(group.combos);
-				book.shapes[shape] = { probs: [group.prob1, group.prob2, group.prob3], pred, real, included, combos: idsOf(group.combos) };
-				book.totals[shape] = included ? real : NONE;
-			}
-			window.books[key] = book;
 		}
 		windows.push(window);
 		kept += 1;
@@ -687,91 +638,21 @@ if (!windows.length) {
 	process.exit(1);
 }
 
-// --- The correlation table from the rebuild, by the Correlation class's arithmetic --------------
+// --- The app's own lift fitting over the same archive, to check the rebuild against -------------
 
-const emptySums = () => ({
-	least1: Object.fromEntries(SHAPES.map((shape) => [shape, null])),
-	points: Object.fromEntries(SHAPES.map((shape) => [shape, null])),
-	hits: Object.fromEntries(SHAPES.map((shape) => [shape, null])),
-	count: Object.fromEntries(SHAPES.map((shape) => [shape, 0])),
-	baseline: { least1: 0, points: 0, hits: 0, count: 0 },
-});
-const addTotals = (sums, totals) => {
-	for (const shape of SHAPES) {
-		const result = totals[shape];
-		if (result.count === 0) continue;
-		for (const strategy of STRATEGIES) {
-			if (sums[strategy][shape] === null) sums[strategy][shape] = 0;
-			sums[strategy][shape] += result[strategy];
-		}
-		sums.count[shape] += result.count;
-	}
-	for (const strategy of STRATEGIES) sums.baseline[strategy] += totals.baseline[strategy];
-	sums.baseline.count += totals.baseline.count;
-};
-const factorsOf = (sums) => {
-	const result = { least1: { ...sums.least1 }, points: { ...sums.points }, hits: { ...sums.hits } };
-	const baseline = { ...sums.baseline };
-	if (baseline.count === 0) return result;
-	for (const strategy of STRATEGIES) baseline[strategy] /= baseline.count;
-	for (const shape of SHAPES) {
-		const count = sums.count[shape];
-		if (count === 0) continue;
-		for (const strategy of STRATEGIES) result[strategy][shape] = (sums[strategy][shape] ?? 0) / (count * baseline[strategy]);
-	}
-	return result;
-};
-// As pasted into src/correlationData.ts: through JSON, where an empty or undefined factor is null
-const tableFrom = (items) => {
-	const result = Object.fromEntries([...BUCKETS, 'all'].map((bucket) => [bucket, {}]));
-	for (const key of KEYS) {
-		const sums = Object.fromEntries([...BUCKETS, 'all'].map((bucket) => [bucket, emptySums()]));
-		for (const item of items) {
-			const book = item.books[key];
-			if (!book) continue;
-			addTotals(sums[item.bucket], book.totals);
-			addTotals(sums.all, book.totals);
-		}
-		for (const bucket of [...BUCKETS, 'all']) result[bucket][key] = factorsOf(sums[bucket]);
-	}
-	return JSON.parse(JSON.stringify(result));
-};
-const compareTables = (a, b) => {
-	let cells = 0;
-	let same = 0;
-	const differ = [];
-	for (const bucket of [...BUCKETS, 'all']) {
-		for (const key of KEYS) {
-			for (const strategy of STRATEGIES) {
-				for (const shape of SHAPES) {
-					cells += 1;
-					const x = a?.[bucket]?.[key]?.[strategy]?.[shape] ?? null;
-					const y = b?.[bucket]?.[key]?.[strategy]?.[shape] ?? null;
-					if (x === y) same += 1;
-					else differ.push(`${bucket}/${key}/${strategy}/${shape} ${x === null ? 'empty' : x.toFixed(4)} vs ${y === null ? 'empty' : y.toFixed(4)}`);
-				}
-			}
-		}
-	}
-	return { cells, same, differ };
-};
-const fullTable = tableFrom(windows);
-let appTable = null;
-let appTableError = null;
+let appLifts = null;
+let appLiftsError = null;
 {
 	const saved = [console.log, console.info, console.warn, console.error];
 	console.log = console.info = console.warn = console.error = () => {};
 	try {
-		appTable = JSON.parse(JSON.stringify(await app.runSimulation(minSportsbooks, correlationPercent)));
+		appLifts = await app.runSimulation(minSportsbooks);
 	} catch (error) {
-		appTableError = clip(String(error?.message ?? error), 200);
+		appLiftsError = clip(String(error?.message ?? error), 200);
 	} finally {
 		[console.log, console.info, console.warn, console.error] = saved;
 	}
 }
-const rebuild = appTable ? compareTables(fullTable, appTable) : null;
-const rebuildOk = !!rebuild && rebuild.same === rebuild.cells;
-const shippedMatch = compareTables(fullTable, JSON.parse(JSON.stringify(app.shippedTable ?? null)));
 
 const days = [...new Set(windows.map((window) => window.day))];
 const dayIndex = new Map(days.map((day, index) => [day, index]));
@@ -812,12 +693,12 @@ for (const [index, players] of groupBy(playerDays, (row) => row.dayIndex)) {
 		}
 	}
 }
-const pairLift = (pick, kind) => {
+const pooledLift = (pick, kind, cells = pairDays) => {
 	let upper = 0;
 	let lower = 0;
 	for (const index of pick) {
-		const cell = pairDays[index][kind];
-		const control = pairDays[index].diff;
+		const cell = cells[index][kind];
+		const control = cells[index].diff;
 		const weight = cell.expected + control.expected;
 		if (!(weight > 0)) continue;
 		upper += (cell.both * control.expected) / weight;
@@ -831,96 +712,117 @@ for (const kind of PAIR_KINDS) {
 	const cells = pairDays.map((day) => day[kind]);
 	pairs[kind] = { pairs: total(cells, (cell) => cell.pairs), both: total(cells, (cell) => cell.both), expected: total(cells, (cell) => cell.expected) };
 	if (kind === 'diff') continue;
-	const draws = bootstrap(`pairs-${kind}`, days.length, (pick) => pairLift(pick, kind));
-	Object.assign(pairs[kind], { lift: pairLift(everyDay, kind), interval: interval(draws), p: bootstrapP(draws, 1) });
+	const draws = bootstrap(`pairs-${kind}`, days.length, (pick) => pooledLift(pick, kind));
+	Object.assign(pairs[kind], { lift: pooledLift(everyDay, kind), interval: interval(draws), p: bootstrapP(draws, 1) });
 }
 results.pairs = pairs;
 
-// 1b. Each factor the app would apply (above 1), tested against its own shape's odds: under no correlation,
-// the shape's tickets on the windows it was counted in score as their picks' calibrated odds say
-const factorTests = [];
-for (const bucket of BUCKETS) {
-	for (const key of KEYS) {
-		const items = windows.filter((window) => window.bucket === bucket && window.books[key]);
-		if (!items.length) continue;
-		// The books' margin, measured on this bucket's top tickets: actual correct picks over odds-implied ones
-		const calibration = total(items, (window) => window.books[key].top.real.hits) / total(items, (window) => total(window.books[key].top.probs));
-		for (const strategy of STRATEGIES) {
-			for (const shape of SHAPES) {
-				const factor = fullTable[bucket][key][strategy][shape];
-				if (factor === null || !(factor > 1)) continue;
-				const counted = items.filter((window) => window.books[key].shapes[shape]?.included);
-				const steps = strategy === 'least1' ? [0, 1, 1, 1] : strategy === 'hits' ? [0, 1, 2, 3] : null;
-				const grid = steps ?? (() => {
-					const cents = POINTS.map((value) => Math.round(value * 100));
-					const unit = cents.slice(1).reduce(gcd);
-					return cents.map((value) => value / unit);
-				})();
-				const unit = strategy === 'points' ? POINTS[3] / grid[3] : 1;
-				const dists = counted.map((window) => {
-					const q = window.books[key].shapes[shape].probs.map((p) => Math.min(0.999, calibration * p));
-					const byHits = [1, 0, 0, 0];
-					for (const chance of q) {
-						for (let k = 3; k >= 0; k -= 1) byHits[k] = byHits[k] * (1 - chance) + (k ? byHits[k - 1] * chance : 0);
-					}
-					const merged = new Map();
-					byHits.forEach((probability, k) => merged.set(grid[k], (merged.get(grid[k]) ?? 0) + probability));
-					return [...merged];
-				});
-				const dist = sumDistribution(dists);
-				const observed = total(counted, (window) => window.books[key].shapes[shape].real[strategy]);
-				let expected = 0;
-				dist.forEach((probability, value) => { expected += probability * value; });
-				factorTests.push({
-					bucket, key, strategy, shape, factor, windows: counted.length, days: new Set(counted.map((window) => window.day)).size,
-					observed, expected: expected * unit, p: exactP(dist, observed / unit),
-				});
-			}
+// The lifts as the app fits them. The rebuild check: runSimulation, reading the same archive, must give these
+// exactly. And whether the lifts shipped in src/correlationData.ts were fitted on this archive
+const sortedDays = [...days].sort();
+const fitted = {
+	teammates: pairs.same.lift, opponents: pairs.opp.lift,
+	from: sortedDays[0] ?? '', through: sortedDays.at(-1) ?? '', days: days.length, playerDays: playerDays.length,
+};
+const LIFT_FIELDS = Object.keys(fitted);
+const liftsDiffer = (other) => LIFT_FIELDS.filter((field) => !Object.is(fitted[field], other?.[field]));
+const liftField = (lifts, field) => {
+	const value = lifts?.[field];
+	return typeof value === 'number' && !Number.isInteger(value) ? value.toFixed(6) : JSON.stringify(value ?? null);
+};
+const differText = (other, fields) => fields.map((field) => `${field} ${liftField(other, field)} vs ${liftField(fitted, field)}`).join(', ');
+const rebuildDiffer = appLifts ? liftsDiffer(appLifts) : null;
+const rebuildOk = !!rebuildDiffer && !rebuildDiffer.length;
+const shippedDiffer = liftsDiffer(app.shippedLifts);
+results.lifts = { fitted, app: appLifts, shipped: app.shippedLifts };
+
+// The same lifts among the players near the top of their lists, whom the picks come from, against all other
+// pairs. A player's strength is their Avg price over their list's top Avg price, the best over the day's
+// windows. The app fits on every pair; a difference here would mean fitting on these instead. The cutoff
+// was chosen, not calibrated
+const NEAR_TOP = 0.75;
+const strength = new Map();
+for (const window of windows) {
+	const priced = window.rows.filter((row) => row.betAvg !== null && row.betCount >= minSportsbooks);
+	const tops = new Map(LISTS.map((sid) => [sid, Math.max(...priced.filter((row) => row.sid === sid).map((row) => row.betAvg))]));
+	for (const row of priced) {
+		const key = `${window.day}|${row.id}`;
+		strength.set(key, Math.max(strength.get(key) ?? 0, row.betAvg / tops.get(row.sid)));
+	}
+}
+const nearTop = (row) => strength.get(`${row.day}|${row.id}`) >= NEAR_TOP;
+const tierDays = Object.fromEntries(['near', 'rest'].map((tier) => [tier, days.map(() => Object.fromEntries(PAIR_KINDS.map((kind) => [kind, { pairs: 0, both: 0, expected: 0 }])))]));
+for (const [index, players] of groupBy(playerDays, (row) => row.dayIndex)) {
+	for (let a = 0; a < players.length; a += 1) {
+		for (let b = a + 1; b < players.length; b += 1) {
+			const x = players[a];
+			const y = players[b];
+			const kind = x.team === y.team ? 'same' : x.team === y.opponent ? 'opp' : 'diff';
+			const cell = tierDays[nearTop(x) && nearTop(y) ? 'near' : 'rest'][index][kind];
+			cell.pairs += 1;
+			if (x.scored && y.scored) cell.both += 1;
+			cell.expected += x.betAvg * y.betAvg;
 		}
 	}
 }
-holm(factorTests.map((test) => test.p)).forEach((adjusted, index) => { factorTests[index].adjusted = adjusted; });
-results.factorTests = factorTests;
+const nearTopTests = {};
+for (const kind of ['same', 'opp']) {
+	const near = tierDays.near;
+	const rest = tierDays.rest;
+	const nearDraws = bootstrap(`near-top-${kind}`, days.length, (pick) => pooledLift(pick, kind, near));
+	const ratioDraws = bootstrap(`near-top-ratio-${kind}`, days.length, (pick) => pooledLift(pick, kind, near) / pooledLift(pick, kind, rest));
+	nearTopTests[kind] = {
+		pairs: total(near, (day) => day[kind].pairs), both: total(near, (day) => day[kind].both),
+		near: pooledLift(everyDay, kind, near), nearInterval: interval(nearDraws), rest: pooledLift(everyDay, kind, rest),
+		ratio: pooledLift(everyDay, kind, near) / pooledLift(everyDay, kind, rest), interval: interval(ratioDraws), p: bootstrapP(ratioDraws, 1),
+	};
+}
+holm([nearTopTests.same.p, nearTopTests.opp.p]).forEach((adjusted, index) => { nearTopTests[index ? 'opp' : 'same'].adjusted = adjusted; });
+results.nearTop = nearTopTests;
 
-// 1c. Backtest: the app's highlighted pick for each book and strategy, with correlation off and on. "Held
-// out" fits the table without the day being tested, so a day never votes for its own picks
-const choose = (book, strategy, factors) => {
-	let max = 0;
-	const values = [];
-	for (const shape of SHAPES) {
-		const entry = book.shapes[shape];
-		if (!entry) continue;
-		const value = applyCorrelation(strategy, entry.pred[strategy], factors ? (factors[shape] ?? null) : null);
-		values.push([shape, value]);
-		if (value > max) max = value;
-	}
-	const winners = values.filter(([, value]) => value === max).map(([shape]) => shape);
-	if (!winners.length) return null;
-	const real = { least1: 0, points: 0, hits: 0 };
-	for (const shape of winners) for (const measure of STRATEGIES) real[measure] += book.shapes[shape].real[measure] / winners.length;
-	return { winners: winners.join(','), real };
+// 1b. Backtest: the app's highlighted pick for each book and strategy, with correlation off and on. On, every
+// ticket is valued with the lifts by the app's own code, as its Stats view picks. "Held out" refits the lifts
+// without the day being tested, so a day never votes for its own picks
+const NO_LIFTS = { teammates: 1, opponents: 1 };
+const choose = (book, key, strategy, lifts) => {
+	const [list1, list2, list3] = book.lists;
+	// Each pair's lift once, then every ticket, kept with its ties as the app keeps them
+	const links = (a, b) => a.map((x) => b.map((y) => app.pairLift(x, y, 1, lifts)));
+	const links12 = links(list1, list2);
+	const links13 = links(list1, list3);
+	const links23 = links(list2, list3);
+	const group = new ComboGroup((candidate) => app.correlatedValue(
+		strategy, candidate.prob1, candidate.prob2, candidate.prob3,
+		links12[candidate.i][candidate.j], links13[candidate.i][candidate.k], links23[candidate.j][candidate.k],
+	));
+	list1.forEach((pick1, i) => list2.forEach((pick2, j) => list3.forEach((pick3, k) => {
+		group.add({ pick1, pick2, pick3, prob1: pick1[key], prob2: pick2[key], prob3: pick3[key], i, j, k });
+	})));
+	return { ticket: ticketOf(group.combos), real: outcome(group.combos) };
 };
-const heldOutTables = new Map(days.map((day) => [day, tableFrom(windows.filter((window) => window.day !== day))]));
+const heldOutLifts = new Map(days.map((day, index) => {
+	const others = everyDay.filter((other) => other !== index);
+	return [day, { teammates: pooledLift(others, 'same'), opponents: pooledLift(others, 'opp') }];
+}));
 const backtest = {};
 // Each backtest's per-day differences, held out minus off, for the format comparison
 const backtestDays = new Map();
 for (const key of KEYS) {
 	backtest[key] = {};
-	for (const strategy of STRATEGIES) {
+	for (const strategy of CORRELATED) {
 		const perDay = new Map();
 		const sums = { off: 0, inSample: 0, heldOut: 0, windows: 0, changed: 0 };
 		for (const window of windows) {
 			const book = window.books[key];
 			if (!book) continue;
-			const off = choose(book, strategy, null);
-			const inSample = choose(book, strategy, fullTable[window.bucket][key][strategy]);
-			const heldOut = choose(book, strategy, heldOutTables.get(window.day)[window.bucket][key][strategy]);
-			if (!off || !inSample || !heldOut) continue;
+			const off = choose(book, key, strategy, NO_LIFTS);
+			const inSample = choose(book, key, strategy, fitted);
+			const heldOut = choose(book, key, strategy, heldOutLifts.get(window.day));
 			sums.windows += 1;
 			sums.off += off.real[strategy];
 			sums.inSample += inSample.real[strategy];
 			sums.heldOut += heldOut.real[strategy];
-			if (heldOut.winners !== off.winners) sums.changed += 1;
+			if (heldOut.ticket !== off.ticket) sums.changed += 1;
 			const day = perDay.get(window.day) ?? { sum: 0, count: 0 };
 			day.sum += heldOut.real[strategy] - off.real[strategy];
 			day.count += 1;
@@ -936,175 +838,6 @@ for (const key of KEYS) {
 	}
 }
 results.backtest = backtest;
-
-// 1d. Settling: the table regenerated after each archive day, with today's code. Every factor is an average,
-// and averages steady as their samples grow whether there's an effect or not, so steadying alone proves
-// nothing. The question is whether more factors settle above 1 than chance leaves there. Chance keeps the
-// same windows and picks, and each day's real results, shuffled among players of about the same price:
-// that keeps how much was scored each day and at each price, and breaks any link between players of one game
-const SIMULATIONS = 200;
-const STRATUM = 4; // players per price band in a shuffle
-const CELLS = [];
-for (const bucket of BUCKETS) for (const key of KEYS) for (const strategy of STRATEGIES) for (const shape of SHAPES) CELLS.push({ bucket, key, strategy, shape });
-const GROUPS = BUCKETS.length * KEYS.length;
-const PER_GROUP = STRATEGIES.length * SHAPES.length;
-const groupOf = (bucket, key) => BUCKETS.indexOf(bucket) * KEYS.length + KEYS.indexOf(key);
-const windowsOfDay = days.map(() => []);
-for (const window of windows) windowsOfDay[dayIndex.get(window.day)].push(window);
-// Each factor after each day (NaN while empty), with the windows each slot and book had counted by then
-const trajectory = (resultOf) => {
-	const values = new Float64Array(days.length * CELLS.length).fill(NaN);
-	const counts = new Float64Array(days.length * GROUPS);
-	const sums = Array.from({ length: GROUPS }, () => ({ shape: new Float64Array(PER_GROUP), count: new Float64Array(SHAPES.length), base: new Float64Array(STRATEGIES.length), baseCount: 0 }));
-	for (let day = 0; day < days.length; day += 1) {
-		for (const window of windowsOfDay[day]) {
-			for (const key of KEYS) {
-				const book = window.books[key];
-				if (!book) continue;
-				const group = sums[groupOf(window.bucket, key)];
-				const base = resultOf(window, key, null);
-				STRATEGIES.forEach((strategy, s) => { group.base[s] += base[strategy]; });
-				group.baseCount += base.count;
-				SHAPES.forEach((shape, h) => {
-					if (!book.shapes[shape]?.included) return;
-					const result = resultOf(window, key, shape);
-					STRATEGIES.forEach((strategy, s) => { group.shape[s * SHAPES.length + h] += result[strategy]; });
-					group.count[h] += result.count;
-				});
-			}
-		}
-		for (let g = 0; g < GROUPS; g += 1) {
-			const group = sums[g];
-			counts[day * GROUPS + g] = group.baseCount;
-			if (!group.baseCount) continue;
-			for (let s = 0; s < STRATEGIES.length; s += 1) {
-				const baseline = group.base[s] / group.baseCount;
-				for (let h = 0; h < SHAPES.length; h += 1) {
-					const count = group.count[h];
-					const value = count ? group.shape[s * SHAPES.length + h] / (count * baseline) : NaN;
-					values[day * CELLS.length + g * PER_GROUP + s * SHAPES.length + h] = Number.isFinite(value) ? value : NaN;
-				}
-			}
-		}
-	}
-	return { values, counts };
-};
-// Above 1 at the end, and settled there: above 1 at every step that added to its slot's last quarter of windows
-const settledCounts = ({ values, counts }) => {
-	const last = days.length - 1;
-	let above = 0;
-	let settled = 0;
-	for (let cell = 0; cell < CELLS.length; cell += 1) {
-		if (!(values[last * CELLS.length + cell] > 1)) continue;
-		above += 1;
-		const group = Math.floor(cell / PER_GROUP);
-		const final = counts[last * GROUPS + group];
-		let steady = true;
-		for (let day = 0; day <= last && steady; day += 1) {
-			const count = counts[day * GROUPS + group];
-			const before = day ? counts[(day - 1) * GROUPS + group] : 0;
-			if (count === before || count < 0.75 * final) continue;
-			if (!(values[day * CELLS.length + cell] > 1)) steady = false;
-		}
-		if (steady) settled += 1;
-	}
-	return { above, settled };
-};
-const observedPath = trajectory((window, key, shape) => (shape ? window.books[key].totals[shape] : window.books[key].totals.baseline));
-const lastRow = (days.length - 1) * CELLS.length;
-const pathMatches = CELLS.every((cell, index) => {
-	const value = fullTable[cell.bucket][cell.key][cell.strategy][cell.shape];
-	const traced = observedPath.values[lastRow + index];
-	return value === null ? Number.isNaN(traced) : traced === value;
-});
-if (!pathMatches) notes.push("The day-by-day tables don't end at this archive's table, so the settling numbers are suspect");
-// Checkpoints: the last archive day of each month
-const checkpoints = days.map((day, index) => ({ day, index })).filter(({ day, index }) => index === days.length - 1 || days[index + 1].slice(0, 7) !== day.slice(0, 7));
-const settlingRows = checkpoints.map(({ day, index }, position) => {
-	const at = (cell, row) => observedPath.values[row * CELLS.length + cell];
-	const previous = position ? checkpoints[position - 1].index : null;
-	let above = 0;
-	let kept = 0;
-	let crossed = 0;
-	const moves = [];
-	for (let cell = 0; cell < CELLS.length; cell += 1) {
-		const value = at(cell, index);
-		if (value > 1) {
-			above += 1;
-			if (at(cell, days.length - 1) > 1) kept += 1;
-		}
-		if (previous === null) continue;
-		const before = at(cell, previous);
-		if (Number.isNaN(value) || Number.isNaN(before)) continue;
-		if ((value > 1) !== (before > 1)) crossed += 1;
-		if (value !== before) moves.push(Math.abs(value - before));
-	}
-	return {
-		day, windows: total(windowsOfDay.slice(0, index + 1), (list) => list.length), above, kept,
-		crossed: previous === null ? null : crossed, moved: previous === null ? null : moves.length, move: moves.length ? quantile(moves.sort((a, b) => a - b), 0.5) : NaN,
-	};
-});
-// Chance: within each day, players in order of their Avg price, in bands of STRATUM; each run shuffles the results within every band
-const playerSlot = new Map(playerDays.map((row, index) => [`${row.day}|${row.id}`, index]));
-const bands = [];
-for (const list of groupBy(playerDays.map((row, index) => ({ row, index })), ({ row }) => row.dayIndex).values()) {
-	list.sort((a, b) => b.row.betAvg - a.row.betAvg);
-	for (let start = 0; start < list.length; start += STRATUM) bands.push(list.slice(start, start + STRATUM).map(({ index }) => index));
-}
-const actual = Uint8Array.from(playerDays, (row) => (row.scored ? 1 : 0));
-const indexed = new Map();
-for (const window of windows) {
-	for (const key of KEYS) {
-		const book = window.books[key];
-		if (!book) continue;
-		const toIndex = (combos) => combos.map((combo) => combo.map((id) => playerSlot.get(`${window.day}|${id}`)));
-		indexed.set(book, { top: toIndex(book.top.combos), shapes: Object.fromEntries(SHAPES.filter((shape) => book.shapes[shape]?.included).map((shape) => [shape, toIndex(book.shapes[shape].combos)])) });
-	}
-}
-const simulated = new Uint8Array(playerDays.length);
-const simulatedResult = (combos) => {
-	let least1 = 0;
-	let points = 0;
-	let hits = 0;
-	for (const [a, b, c] of combos) {
-		const hitCount = simulated[a] + simulated[b] + simulated[c];
-		if (hitCount > 0) least1 += 1;
-		points += POINTS[hitCount];
-		hits += hitCount;
-	}
-	const count = combos.length;
-	return count > 1 ? { least1: least1 / count, points: points / count, hits: hits / count, count: 1 } : { least1, points, hits, count };
-};
-const observedSettling = settledCounts(observedPath);
-const chanceSettling = { above: [], settled: [] };
-{
-	const random = rngFor('settling');
-	for (let run = 0; run < SIMULATIONS; run += 1) {
-		for (const band of bands) {
-			const results = band.map((index) => actual[index]);
-			for (let index = results.length - 1; index > 0; index -= 1) {
-				const swap = Math.floor(random() * (index + 1));
-				[results[index], results[swap]] = [results[swap], results[index]];
-			}
-			band.forEach((index, position) => { simulated[index] = results[position]; });
-		}
-		const counts = settledCounts(trajectory((window, key, shape) => {
-			const combos = indexed.get(window.books[key]);
-			return simulatedResult(shape ? combos.shapes[shape] : combos.top);
-		}));
-		chanceSettling.above.push(counts.above);
-		chanceSettling.settled.push(counts.settled);
-	}
-}
-const settling = {};
-for (const measure of ['above', 'settled']) {
-	const draws = [...chanceSettling[measure]].sort((a, b) => a - b);
-	settling[measure] = {
-		observed: observedSettling[measure], median: Math.round(quantile(draws, 0.5)), range: [quantile(draws, 0.05), quantile(draws, 0.95)].map(Math.round),
-		p: (1 + draws.filter((value) => value >= observedSettling[measure]).length) / (1 + draws.length),
-	};
-}
-results.settling = { checkpoints: settlingRows, settling, simulations: SIMULATIONS };
 
 // --- 2. Time slot: the Avg top ticket in each window, by games left in the lists ----------------
 
@@ -1401,8 +1134,8 @@ const formatPaired = (label, units) => {
 };
 // A pair lift within each format; the contrast is the ratio of the two lifts
 const formatLift = (kind) => {
-	const estimates = formatDays.map((list) => pairLift(list, kind));
-	const { each, contrasts } = bootstrapFormats(`format-pairs-${kind}`, formatDays.map((list) => list.length), (f, pick) => pairLift(pick.map((index) => formatDays[f][index]), kind), (a, b) => a / b);
+	const estimates = formatDays.map((list) => pooledLift(list, kind));
+	const { each, contrasts } = bootstrapFormats(`format-pairs-${kind}`, formatDays.map((list) => list.length), (f, pick) => pooledLift(pick.map((index) => formatDays[f][index]), kind), (a, b) => a / b);
 	return {
 		days: formatDays.map((list) => list.length),
 		formats: estimates.map((estimate, f) => ({ estimate, ...bounds(each[f]), p: bootstrapP(each[f], 1) })),
@@ -1477,7 +1210,7 @@ results.formats = { days: formatDays.map((list) => list.length), playerDays: for
 
 // --- Verdicts -----------------------------------------------------------------------------------
 
-const backtestFormat = (strategy) => (strategy === 'points' ? (v) => signed(v, 2, 1, '') : strategy === 'hits' ? (v) => signed(v / 3) : (v) => signed(v));
+const backtestFormat = (strategy) => (strategy === 'points' ? (v) => signed(v, 2, 1, '') : (v) => signed(v));
 const backtestText = (key, strategy, result) => {
 	const format = backtestFormat(strategy);
 	return `${keyName(key)} ${strategyName(strategy)} pick with correlation on (held out): ${format(result.test.estimate)} ${span([result.test.low, result.test.high], format)} per window`;
@@ -1495,10 +1228,9 @@ holm(correlationPrimary.map((test) => test.p)).forEach((adjusted, index) => {
 	correlationPrimary[index].adjusted = adjusted;
 	correlationPrimary[index].target.adjusted = adjusted;
 });
-// Secondary: every other book and strategy's backtest, corrected together; and the two settling counts
-const otherBacktests = KEYS.flatMap((key) => STRATEGIES.map((strategy) => backtest[key][strategy] && !(key === 'betAvg' && strategy !== 'hits') ? backtest[key][strategy] : null)).filter(Boolean);
+// Secondary: the other books' backtests, corrected together. The near-top tests are a family of their own
+const otherBacktests = KEYS.filter((key) => key !== 'betAvg').flatMap((key) => CORRELATED.map((strategy) => backtest[key][strategy])).filter(Boolean);
 holm(otherBacktests.map((result) => result.test.p)).forEach((adjusted, index) => { otherBacktests[index].test.adjusted = adjusted; });
-holm([settling.above.p, settling.settled.p]).forEach((adjusted, index) => { settling[index ? 'settled' : 'above'].adjusted = adjusted; });
 const slotPrimary = slotPairs.map((pair) => ({
 	text: `${pair.label}: Streak ${signed(pair.streak.estimate)} ${span([pair.streak.low, pair.streak.high], (v) => signed(v))} over ${plural(pair.days, 'day')} (better on ${pair.aBetter} vs ${pair.bBetter})`,
 	p: pair.streak.p, adjusted: pair.streak.adjusted,
@@ -1512,8 +1244,7 @@ const verdictLine = (tests) => {
 	const best = closest(tests);
 	return best ? `nothing significant. Closest: ${best.text} (p ${pText(best.p)}, Holm ${pText(best.adjusted)})` : 'nothing to test';
 };
-const factorSignificant = factorTests.filter((test) => test.adjusted < ALPHA);
-const factorSmallest = [...factorTests].sort((a, b) => a.p - b.p);
+const nearTopText = (label, test) => `near the top of the lists, ${label} both scored ${times(test.near)} as often as their odds say, against ${times(test.rest)} for the other pairs (${times(test.ratio)} ${span(test.interval, (v) => v.toFixed(2))})`;
 const bookHits = [];
 for (const measure of ['streak', 'picks']) {
 	if (anyBook[`${measure}Adjusted`] >= ALPHA) continue;
@@ -1547,27 +1278,22 @@ for (const [kind, label] of [['same', 'teammates'], ['opp', 'opponents']]) {
 	});
 }
 for (const key of KEYS) {
-	for (const strategy of STRATEGIES) {
+	for (const strategy of CORRELATED) {
 		const result = backtest[key][strategy];
 		if (!result) continue;
 		const avg = key === 'betAvg';
 		consider({
-			primary: avg && strategy !== 'hits', question: 'correlation', p: result.test.p, adjusted: result.test.adjusted, text: backtestText(key, strategy, result),
+			primary: avg, question: 'correlation', p: result.test.p, adjusted: result.test.adjusted, text: backtestText(key, strategy, result),
 			favors: !avg ? 'none' : result.test.estimate > 0 ? 'other' : 'avg',
 			short: backtestShort(strategy, result.test.estimate),
 		});
 	}
 }
-for (const test of factorTests) {
+for (const [kind, label] of [['same', 'teammates'], ['opp', 'opponents']]) {
+	const test = nearTopTests[kind];
 	consider({
-		primary: false, question: 'correlation', p: test.p, adjusted: test.adjusted, favors: 'none',
-		text: `factor ${test.factor.toFixed(2)} for ${bucketName(test.bucket)}, ${keyName(test.key)}, ${strategyName(test.strategy)}, ${shapeName(test.shape)} (${test.windows} windows)`,
-	});
-}
-for (const [measure, label] of [['above', 'above 1 at the end'], ['settled', 'settled above 1']]) {
-	consider({
-		primary: false, question: 'correlation', p: settling[measure].p, adjusted: settling[measure].adjusted, favors: 'none',
-		text: `${settling[measure].observed} factors ${label}, where chance leaves ${settling[measure].median}`,
+		primary: false, question: 'correlation', p: test.p, adjusted: test.adjusted, favors: 'none', fit: true, text: nearTopText(label, test),
+		short: `${label} near the top of the lists score together ${times(test.near)} as often as their odds say, against ${times(test.rest)} for the other pairs`,
 	});
 }
 for (const pair of slotPairs) {
@@ -1661,6 +1387,7 @@ const primaryWhen = findings.filter((finding) => finding.primary && finding.favo
 const secondaryBeats = findings.filter((finding) => !finding.primary && (finding.favors === 'other' || finding.favors === 'when'));
 const worse = findings.filter((finding) => finding.favors === 'avg');
 const formatDiffers = findings.filter((finding) => finding.question === FORMAT_QUESTION);
+const fitNearTop = findings.filter((finding) => finding.fit);
 const AVG_PICK = 'selecting the top Avg player in each pick pool (the app\'s Avg pick, with correlation off)';
 const formatsBeaten = FORMATS.filter((format) => formatOther.some((finding) => finding.format === format));
 const holdsIn = FORMATS.filter((format) => !formatsBeaten.includes(format));
@@ -1674,6 +1401,7 @@ const conclusion = [
 	primaryWhen.length && `significant on when to pick: ${shorts(primaryWhen)}`,
 	worse.length && `significantly worse than the Avg pick: ${shorts(worse)}`,
 	secondaryBeats.length && `secondary results to recheck as the archive grows: ${shorts(secondaryBeats)}`,
+	fitNearTop.length && `the lifts the app fits on every pair may not hold for the players the picks come from, so fitting them near the top of the lists is worth considering: ${shorts(fitNearTop)}`,
 	formatDiffers.length && `results that differ between the regular season and the playoffs: ${shorts(formatDiffers)}`,
 ].filter(Boolean).map((part) => `${part[0].toUpperCase()}${part.slice(1)}`).join('. ');
 results.findings = findings;
@@ -1701,19 +1429,21 @@ if (coverage.noWindows.length) say(`  history days with no usable window: ${cove
 if (coverage.notInHistory) say(`  ${plural(coverage.notInHistory, 'list entry', 'list entries')} missing from that day's history, skipped as the app skips them`);
 if (coverage.borrowed.length) say(`  snapshot folders taken from a later folder: ${coverage.borrowed.join(', ')}`);
 say(`Books: ${BOOKS.map((book) => `${book} (${app.Sportsbooks?.[book]?.title ?? '?'})`).join(', ')}; Avg is their average for players priced by ${minSportsbooks}+`);
-if (rebuildOk) say(`Rebuild check: the rebuilt windows give runSimulation's table exactly (${rebuild.same} of ${rebuild.cells} values), so this analysis sees what the app sees`);
-else if (rebuild) say(`Rebuild check: FAILED, ${rebuild.cells - rebuild.same} of ${rebuild.cells} values differ from runSimulation's table (${rebuild.differ.slice(0, 3).join('; ')}). Don't trust the numbers below until this is fixed`);
-else say(`Rebuild check: FAILED, runSimulation didn't run (${appTableError}). Don't trust the numbers below until this is fixed`);
-say(`src/correlationData.ts: ${shippedMatch.same === shippedMatch.cells ? `matches this archive's table (all ${shippedMatch.cells} values)` : `differs from this archive's table in ${shippedMatch.cells - shippedMatch.same} of ${shippedMatch.cells} values`}`);
-say(`Settings: ${minSportsbooks}+ books per player, near-tie band ${correlationPercent}, ${app.normalizeSportsbooks ? 'de-vigged' : 'no de-vig'}, archive from ${oldestDay ?? 'the start'}${options.since || options.until || options.format ? `; options: ${[options.since && `since ${options.since}`, options.until && `until ${options.until}`, options.format].filter(Boolean).join(', ')}` : ''}`);
+if (rebuildOk) say(`Rebuild check: the rebuilt windows give runSimulation's lifts exactly (all ${LIFT_FIELDS.length} values), so this analysis sees what the app sees`);
+else if (rebuildDiffer) say(`Rebuild check: FAILED, runSimulation's lifts differ from the rebuilt windows' (runSimulation vs rebuild: ${differText(appLifts, rebuildDiffer)}). Don't trust the numbers below until this is fixed`);
+else say(`Rebuild check: FAILED, runSimulation didn't run (${appLiftsError}). Don't trust the numbers below until this is fixed`);
+say(`src/correlationData.ts: ${shippedDiffer.length ? `differs from this archive's lifts (shipped vs this archive: ${differText(app.shippedLifts, shippedDiffer)})` : `matches this archive's lifts (all ${LIFT_FIELDS.length} values)`}`);
+say(`Settings: ${minSportsbooks}+ books per player, ${app.normalizeSportsbooks ? 'de-vigged' : 'no de-vig'}, archive from ${oldestDay ?? 'the start'}${options.since || options.until || options.format ? `; options: ${[options.since && `since ${options.since}`, options.until && `until ${options.until}`, options.format].filter(Boolean).join(', ')}` : ''}`);
 say(`Tests: two-sided at ${ALPHA} after Holm correction within each question; resampling draws whole days (${options.boot.toLocaleString('en-US')} draws, seed ${options.seed})`);
 for (const note of notes) say(`Note: ${note}`);
 if (ignored.length) say(`Note: ignored ${ignored.join(' ')}`);
 
 section('Verdicts');
 say(`Correlation: ${verdictLine(correlationPrimary)}`);
-say(`  Table factors: ${factorTests.length} the app would apply; ${factorSignificant.length ? `SIGNIFICANT after Holm: ${factorSignificant.map((test) => `${test.bucket}/${keyName(test.key)}/${strategyName(test.strategy)}/${test.shape}`).join(', ')}` : `none significant after Holm`}${factorSmallest.length ? ` (smallest p ${pText(factorSmallest[0].p)})` : ''}`);
-say(`  Settling: ${settling.settled.observed} factors settled above 1, where chance leaves ${settling.settled.median} (90% of chance runs ${settling.settled.range.join('–')}; p ${pText(settling.settled.p)}, Holm ${pText(settling.settled.adjusted)})${settling.settled.adjusted < ALPHA ? ', MORE THAN CHANCE' : ''}`);
+say(`  Near the top of the lists: ${['same', 'opp'].map((kind) => {
+	const test = nearTopTests[kind];
+	return `${kind === 'same' ? 'teammates' : 'opponents'} ${times(test.near)} against ${times(test.rest)} for the other pairs (p ${pText(test.p)}, Holm ${pText(test.adjusted)})${test.adjusted < ALPHA ? ', SIGNIFICANT' : ''}`;
+}).join('; ')}`);
 say(`Time slot: ${verdictLine(slotPrimary)}`);
 const anyBookText = `any-book test p ${pText(anyBook.streak)} on Streak, ${pText(anyBook.picks)} on picks (Holm ${pText(anyBook.streakAdjusted)}, ${pText(anyBook.picksAdjusted)})`;
 say(`Sportsbooks: ${anyBook.streakAdjusted < ALPHA || anyBook.picksAdjusted < ALPHA ? `SIGNIFICANT: ${anyBookText}${bookHits.length ? `; ${bookHits.join('; ')}` : '; no single book differs from Avg after Holm'}` : `no book picks differently from the others: ${anyBookText}`}`);
@@ -1753,25 +1483,24 @@ table(['pairs on one day', 'pairs', 'both scored', 'at their odds', 'ratio', 'vs
 say('"At their odds" assumes independence at the Avg prices, which carry the books\' margin, so every ratio sits below 1.');
 say('"vs different games" compares each day\'s pairs with that day\'s different-game pairs, which cancels the margin; 1 means no correlation.');
 
-sub('The table\'s factors');
-const factorWindows = factorTests.map((test) => test.windows).sort((a, b) => a - b);
-say(`${factorTests.length} factors above 1 (the ones the app applies) across slots 1–4+, five books and three strategies;`);
-say(`median ${quantile(factorWindows, 0.5) || 0} windows each, ${factorWindows.filter((count) => count <= 5).length} on 5 or fewer. Each is tested against its shape's own odds, calibrated to the slot's top tickets.`);
-if (factorSmallest.length) {
-	table(['smallest p', 'factor', 'windows', 'actual', 'expected', 'p', 'Holm'], factorSmallest.slice(0, SHOW).map((test) => [
-		`${bucketName(test.bucket)}, ${keyName(test.key)}, ${strategyName(test.strategy)}, ${shapeName(test.shape)}`, test.factor.toFixed(3), test.windows,
-		test.strategy === 'least1' ? `${test.observed.toFixed(1)} hit` : test.strategy === 'hits' ? `${test.observed.toFixed(1)} picks` : `${test.observed.toFixed(0)} pts`,
-		test.strategy === 'points' ? `${test.expected.toFixed(0)} pts` : test.expected.toFixed(1), pText(test.p), pText(test.adjusted),
-	]));
-}
+sub('Near the top of the lists (secondary)');
+say(`Pairs where both players' Avg prices were within ${Math.round((1 - NEAR_TOP) * 100)}% of the top of their lists, the players the picks come from,`);
+say('against all other pairs, each measured as above. The app fits its lifts on every pair; a significant difference would mean');
+say('fitting them on these pairs instead. The cutoff was chosen, not calibrated.');
+table(['pairs on one day', 'near-top pairs', 'both scored', 'near the top', '95% CI', 'other pairs', 'near vs other', '95% CI', 'p', 'Holm'], ['same', 'opp'].map((kind) => {
+	const test = nearTopTests[kind];
+	return [kind === 'same' ? 'teammates' : 'opponents', test.pairs.toLocaleString('en-US'), test.both, times(test.near), span(test.nearInterval, (v) => v.toFixed(2)),
+		times(test.rest), times(test.ratio), span(test.interval, (v) => v.toFixed(2)), pText(test.p), pText(test.adjusted)];
+}));
 
 sub('Backtest: the app\'s pick with correlation on vs off');
-say('Per book and strategy, every window; "held out" refits the table without the window\'s own day. Difference and test are held out minus off.');
-for (const strategy of STRATEGIES) {
-	const format = strategy === 'points' ? pts : strategy === 'hits' ? (v) => pct(v / 3) : (v) => pct(v);
-	const diffFormat = strategy === 'points' ? (v) => signed(v, 2, 1, '') : strategy === 'hits' ? (v) => signed(v / 3) : (v) => signed(v);
+say('Per book and strategy, every window, the best of every ticket valued with the lifts; "held out" refits the lifts without the window\'s own day.');
+say('Difference and test are held out minus off. Pick% isn\'t backtested: correlation can\'t change the expected number of correct picks.');
+for (const strategy of CORRELATED) {
+	const format = strategy === 'points' ? pts : (v) => pct(v);
+	const diffFormat = backtestFormat(strategy);
 	say('');
-	say(`${strategyName(strategy)}${strategy === 'hits' ? ' (share of picks correct; correlation can\'t change the expected number of correct picks, so its factors measure noise)' : strategy === 'points' ? ' (points per window)' : ' (at least one correct)'}`);
+	say(`${strategyName(strategy)}${strategy === 'points' ? ' (points per window)' : ' (at least one correct)'}`);
 	table(['book', 'windows', 'changed', 'off', 'on, in sample', 'on, held out', 'difference', '95% CI', 'p', 'Holm'], KEYS.filter((key) => backtest[key][strategy]).map((key) => {
 		const result = backtest[key][strategy];
 		return [keyName(key), result.windows, result.changed, format(result.off), format(result.inSample), format(result.heldOut),
@@ -1780,20 +1509,6 @@ for (const strategy of STRATEGIES) {
 }
 say('');
 say('Holm: the Avg\'s Streak and Points rows with the pair tests (primary); every other row together (secondary).');
-
-sub('Do the factors settle? (the table regenerated after each archive day, with today\'s code)');
-say('Slots 1–4+, five books, three strategies. Last archive day of each month:');
-table(['checkpoint', 'windows', 'above 1', 'still above 1 at the end', 'moved since previous', 'median move', 'crossed 1'], settlingRows.map((row) => [
-	row.day, row.windows, row.above, row.kept, row.moved ?? '', Number.isFinite(row.move) ? row.move.toFixed(3) : '', row.crossed ?? '',
-]));
-say('Factors steady as the archive grows whether or not an effect is real: each is an average, and averages settle.');
-say(`What would show an effect is more factors staying above 1 than chance leaves there. Chance: ${SIMULATIONS} runs with the same`);
-say(`windows and picks and each day's real results, shuffled among players of about the same price (bands of ${STRATUM}), so no link within a game.`);
-table(['', 'actual', 'chance median', 'chance 90% range', 'p'], [
-	['above 1 at the end', settling.above.observed, settling.above.median, settling.above.range.join('–'), pText(settling.above.p)],
-	['settled above 1*', settling.settled.observed, settling.settled.median, settling.settled.range.join('–'), pText(settling.settled.p)],
-]);
-say('* above 1 at every step through the last quarter of its slot\'s windows. p: the share of chance runs with at least as many.');
 
 section('2. Time slot (slot = games left in the lists, the app\'s Pool Slots)');
 say('The Avg top ticket, which is also every strategy\'s pick with correlation off. First window of each slot per day.');
@@ -1894,7 +1609,7 @@ if (formatTests.length) {
 	say('');
 	say(`A difference needs ${CONTRAST_DAYS}+ days in each format ("-" otherwise; with fewer, its test finds differences that aren't there too often).`);
 	say('Differences of paired results are tested by shuffling the formats among the days, since most days differ by a whole result or not at all.');
-	say('Not split: the table\'s factors and settling, since the app keeps one table for both formats and a format difference in');
+	say('Not split: the near-top lifts, since the app fits one pair of lifts for both formats and a format difference in');
 	say('correlation shows in the lifts and backtests here; the other backtests; the secondary slot and book tests.');
 }
 
@@ -1904,13 +1619,13 @@ if (options.out) {
 	const plainWindows = windows.map((window) => ({
 		...window,
 		rows: window.rows.map((row) => ({ ...row })),
-		books: Object.fromEntries(Object.entries(window.books).map(([key, book]) => [key, { top: book.top, shapes: book.shapes }])),
+		books: Object.fromEntries(Object.entries(window.books).map(([key, book]) => [key, { top: book.top }])),
 	}));
 	writeFileSync(join(outDir, 'windows.json'), `${JSON.stringify(plainWindows)}\n`);
-	writeFileSync(join(outDir, 'results.json'), `${JSON.stringify({ manifest, coverage, rebuild, results, correlationPrimary, slotPrimary }, null, '\t')}\n`);
-	writeFileSync(join(outDir, 'table.json'), `${JSON.stringify(fullTable, null, 4)}\n`);
+	writeFileSync(join(outDir, 'results.json'), `${JSON.stringify({ manifest, coverage, rebuild: { ok: rebuildOk, differ: rebuildDiffer, error: appLiftsError }, results, correlationPrimary, slotPrimary }, null, '\t')}\n`);
+	writeFileSync(join(outDir, 'lifts.json'), `${JSON.stringify(fitted, null, 4)}\n`);
 	say('');
-	say(`Saved the rebuilt windows, the results and this archive's table to ${shortPath(outDir)}`);
+	say(`Saved the rebuilt windows, the results and this archive's lifts to ${shortPath(outDir)}`);
 }
 
 console.log(out.join('\n'));
