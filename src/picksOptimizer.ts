@@ -1,14 +1,14 @@
 import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
-import { correlations } from "./correlationData";
-import type { CorrelationData, CorrelationResult, CorrelationStrategy } from "./correlationData";
+import { pairLifts } from "./correlationData";
+import type { PairLifts } from "./correlationData";
 import { deVig, oddsNameCandidates, removeAccentsNormalize } from "./dataProcessor";
-import type { ComboPattern, LogStatsKey, Strategy, PoolSlots } from "./dataTypes";
+import type { LogStatsKey, Strategy, PoolSlots } from "./dataTypes";
 import {
-	AllCombos, SportsbookKeys, LogStatsKeys, StrategyLabels,
-	AllStrategies, Sportsbooks, AllPoolSlots, strategyTitle
+	SportsbookKeys, LogStatsKeys, StrategyLabels,
+	AllStrategies, Sportsbooks, AllPoolSlots
 } from "./dataTypes";
-import type { MergedSelection, SelectionCandidate } from "./strategySelection";
+import type { MergedSelection, PlayerType, SelectionCandidate } from "./strategySelection";
 import { ComboGroup, getStrategy } from "./strategySelection";
 import * as Feature from './features';
 import { roundToPercent } from "./utility";
@@ -17,8 +17,7 @@ export const calcAny = (prob1: number, prob2: number, prob3: number): number => 
 	return 1 - (1 - prob1) * (1 - prob2) * (1 - prob3);
 };
 
-// Challenge points for a game day, indexed by the number of correct picks. The
-// correlation table is derived with these, so a change means regenerating it.
+// Challenge points for a game day, indexed by the number of correct picks.
 const PointsByHits = [0, 10, 25, 100] as const;
 
 export const calcPnt = (prob1: number, prob2: number, prob3: number): number => {
@@ -35,33 +34,56 @@ export const calcHit = (prob1: number, prob2: number, prob3: number): number => 
 	return prob1 + prob2 + prob3;
 };
 
-// Natural maximum of each strategy's value: least1 is a probability, points is the
-// challenge's top score, hits is the three picks.
-export const StrategyMax: Record<Strategy, number> = {
-	least1: 1,
-	points: PointsByHits[3],
-	hits: 3,
+// How many times as often two picks both score as their odds say: the archive's lift for
+// teammates or for opponents, and 1 for picks from different games. factor scales the effect:
+// 0 => no effect, 1 => full effect, >1 => amplified effect.
+export const pairLift = <T>(
+	pick1: PlayerType<T>,
+	pick2: PlayerType<T>,
+	factor: number = 1,
+	lifts: Pick<PairLifts, 'teammates' | 'opponents'> = pairLifts
+): number => {
+	const lift = pick1.sameTeam(pick2) ? lifts.teammates : pick1.opponentTeam(pick2) ? lifts.opponents : 1;
+	if (!Number.isFinite(lift)) return 1;
+	return (lift - 1) * factor + 1;
 };
 
-// Apply a correlation factor as an odds ratio rather than a raw multiply, so the result
-// cannot pass the strategy's natural maximum. factor scales the effect:
-// 0 => no effect, 1 => full effect, >1 => amplified effect.
-export const applyCorrelation = (
+// A ticket's value for a strategy when each pair of its picks scores together lift times as
+// often as their odds say, and all three as often as their pairs compounded. Correlation can't
+// change the expected number of correct picks, so hits is the same either way.
+export const correlatedValue = (
 	strategy: Strategy,
-	value: number,
-	correlation: number | null,
-	factor: number = 1
+	prob1: number,
+	prob2: number,
+	prob3: number,
+	lift12: number,
+	lift13: number,
+	lift23: number
 ): number => {
-	if (correlation === null || correlation < 1) return value;
-	const effective = (correlation - 1) * factor + 1;
-	if (effective === 1) return value;
+	if (strategy === 'hits') return calcHit(prob1, prob2, prob3);
+	if (lift12 === 1 && lift13 === 1 && lift23 === 1) {
+		return strategy === 'least1' ? calcAny(prob1, prob2, prob3) : calcPnt(prob1, prob2, prob3);
+	}
 
-	const max = StrategyMax[strategy];
-	const p = value / max;
-	if (p <= 0 || p >= 1) return value;
+	// Each joint chance stays where none of the eight outcomes' chances goes negative
+	const clamp = (value: number, low: number, high: number) => Math.min(Math.max(value, low), high);
+	const both = (lift: number, a: number, b: number) => clamp(lift * a * b, Math.max(0, a + b - 1), Math.min(a, b));
+	const p12 = both(lift12, prob1, prob2);
+	const p13 = both(lift13, prob1, prob3);
+	const p23 = both(lift23, prob2, prob3);
+	const p123 = clamp(
+		lift12 * lift13 * lift23 * prob1 * prob2 * prob3,
+		Math.max(0, p12 + p13 - prob1, p12 + p23 - prob2, p13 + p23 - prob3),
+		Math.min(p12, p13, p23, 1 - prob1 - prob2 - prob3 + p12 + p13 + p23)
+	);
 
-	const odds = (p / (1 - p)) * effective;
-	return max * odds / (1 + odds);
+	const singles = prob1 + prob2 + prob3;
+	const pairs = p12 + p13 + p23;
+	if (strategy === 'least1') return singles - pairs + p123;
+
+	const exactly1 = singles - 2 * pairs + 3 * p123;
+	const exactly2 = pairs - 3 * p123;
+	return exactly1 * PointsByHits[1] + exactly2 * PointsByHits[2] + p123 * PointsByHits[3];
 };
 
 interface HistoryPlayer {
@@ -72,131 +94,6 @@ interface HistoryPlayer {
 	"scored": boolean;
 	"note": string;
 	"availableTimes": string[];
-}
-
-type CorrelationCount = Record<typeof AllCombos[number], number>;
-
-export interface Total {
-	least1: number;
-	points: number;
-	hits: number;
-	count: number;
-}
-
-class Correlation {
-	strategy = {
-		least1: {} as CorrelationData,
-		points: {} as CorrelationData,
-		hits: {} as CorrelationData,
-		count: {} as CorrelationCount
-	}
-	baseline: Total = {
-		least1: 0,
-		points: 0,
-		hits: 0,
-		count: 0
-	};
-
-	constructor() {
-		for (const combo of AllCombos) {
-			this.strategy.least1[combo] = null;
-			this.strategy.points[combo] = null;
-			this.strategy.hits[combo] = null;
-			this.strategy.count[combo] = 0;
-		}
-	}
-	add(result: SimTotal) {
-		for (const combo of AllCombos) {
-			if (result[combo].count === 0) continue;
-			if (this.strategy.least1[combo] === null) this.strategy.least1[combo] = 0;
-			if (this.strategy.points[combo] === null) this.strategy.points[combo] = 0;
-			if (this.strategy.hits[combo] === null) this.strategy.hits[combo] = 0;
-			this.strategy.least1[combo] += result[combo].least1;
-			this.strategy.points[combo] += result[combo].points;
-			this.strategy.hits[combo] += result[combo].hits;
-			this.strategy.count[combo] += result[combo].count;
-		}
-
-		this.baseline.least1 += result.baseline.least1;
-		this.baseline.points += result.baseline.points;
-		this.baseline.hits += result.baseline.hits;
-		this.baseline.count += result.baseline.count;
-	}
-	calculate() {
-		if (this.baseline.count === 0) return;
-
-		this.baseline.least1 /= this.baseline.count;
-		this.baseline.points /= this.baseline.count;
-		this.baseline.hits /= this.baseline.count;
-
-		for (const combo of AllCombos) {
-			const count = this.strategy.count[combo];
-			if (count === 0) continue;
-
-			let least1: number | null = this.strategy.least1[combo];
-			let points: number | null = this.strategy.points[combo];
-			let hits: number | null = this.strategy.hits[combo];
-
-			if (least1 === null) least1 = 0;
-			if (points === null) points = 0;
-			if (hits === null) hits = 0;
-
-			least1 /= count * this.baseline.least1;
-			points /= count * this.baseline.points;
-			hits /= count * this.baseline.hits;
-
-			this.strategy.least1[combo] = least1;
-			this.strategy.points[combo] = points;
-			this.strategy.hits[combo] = hits;
-
-			// this.strategy.least1[combo] = Math.log(this.strategy.least1[combo]) + 1;
-			// this.strategy.points[combo] = Math.log(this.strategy.points[combo]) + 1;
-			// this.strategy.hits[combo] = Math.log(this.strategy.hits[combo]) + 1;
-		}
-	}
-	results(): CorrelationStrategy {
-		return {
-			least1: this.strategy.least1,
-			points: this.strategy.points,
-			hits: this.strategy.hits,
-		};
-	}
-};
-
-class ResultTotal implements Total {
-	least1: number
-	points: number
-	hits: number
-	count: number
-	constructor() {
-		this.least1 = 0;
-		this.points = 0;
-		this.hits = 0;
-		this.count = 0;
-	}
-	add(hit1: boolean, hit2: boolean, hit3: boolean) {
-		const hitCount = (hit1 ? 1 : 0) + (hit2 ? 1 : 0) + (hit3 ? 1 : 0);
-
-		if (hitCount > 0) this.least1++;
-		this.points += PointsByHits[hitCount];
-		this.hits += hitCount;
-		this.count++;
-	}
-	normalize() {
-		if (this.count <= 1) return;
-		this.least1 /= this.count;
-		this.points /= this.count;
-		this.hits /= this.count;
-		this.count = 1;
-	}
-}
-
-export type SimTotal = Record<ComboPattern | 'baseline', Total>;
-interface SimItem {
-	slotTotal: number;
-	slotIndex: number;
-	gameCount: number;
-	totals: SimTotal;
 }
 
 interface HistoryManifestItem {
@@ -211,6 +108,7 @@ type PickGroup = '1' | '2' | '3';
 const AllPickGroup: PickGroup[] = ['1', '2', '3'];
 interface SnapshotOddsRowType {
 	sid: PickGroup;
+	id: number;
 	team: string;
 	opponent: string;
 	scored: boolean;
@@ -224,6 +122,7 @@ interface SnapshotOddsRowType {
 
 class SnapshotOddsRow {
 	sid: PickGroup;
+	id: number;
 	team: string;
 	opponent: string;
 	scored: boolean;
@@ -235,6 +134,7 @@ class SnapshotOddsRow {
 	betCount: number;
 	constructor(row: SnapshotOddsRowType) {
 		this.sid = row.sid;
+		this.id = row.id;
 		this.team = row.team;
 		this.opponent = row.opponent;
 		this.scored = row.scored;
@@ -631,6 +531,7 @@ export const runHistoricalStrategyAudit = async (
 
 							rows.push(new SnapshotOddsRow({
 								sid,
+								id: item.playerId,
 								team: player.team,
 								opponent: player.opponent,
 								scored: player.scored,
@@ -883,35 +784,13 @@ export const resolvePoolKey = (gameCount: number): PoolSlots => {
 type PickGroupType = Pick<BestPicksResult, PickGroup>;
 const comboCode = (combo: PickGroupType): string => `${combo["1"].player.playerId}:${combo["2"].player.playerId}:${combo["3"].player.playerId}`;
 
-const correlate = (
-	poolKey: PoolSlots,
-	book: LogStatsKey,
-	strategy: Strategy,
-	player1: Picks.Player,
-	player2: Picks.Player,
-	player3: Picks.Player
-): number => {
-	if (!Feature.correlation) return 1;
-	const combo = getStrategy(player1, player2, player3);
-	if (combo === null) return 1;
-	const correlation = correlations[poolKey][book][strategy][combo];
-	if (correlation === null || correlation < 1) return 1;
-	return correlation;
-}
-
 const isCorrelationApplied = (
-	poolKey: PoolSlots,
-	book: LogStatsKey,
-	strategy: Strategy,
 	player1: Picks.Player,
 	player2: Picks.Player,
 	player3: Picks.Player
 ): boolean => {
 	if (!Feature.correlation) return false;
-	const combo = getStrategy(player1, player2, player3);
-	if (combo === null) return false;
-	const correlation = correlations[poolKey][book][strategy][combo];
-	return correlation !== null && correlation >= 1;
+	return pairLift(player1, player2) !== 1 || pairLift(player1, player3) !== 1 || pairLift(player2, player3) !== 1;
 }
 
 // calculate available games from players, rather than use the gamesList.
@@ -953,15 +832,8 @@ export const bestPicks = async (
 		hits: [],
 	};
 
-	const strategyScore = (strategy: Strategy, prob1: number, prob2: number, prob3: number): number => {
-		if (strategy === 'least1') return calcAny(prob1, prob2, prob3);
-		if (strategy === 'points') return calcPnt(prob1, prob2, prob3);
-		return calcHit(prob1, prob2, prob3);
-	};
-
 	const adjustedStrategyScore = (
 		strategy: Strategy,
-		book: LogStatsKey,
 		prob1: number,
 		prob2: number,
 		prob3: number,
@@ -969,8 +841,11 @@ export const bestPicks = async (
 		pick2: Picks.Player,
 		pick3: Picks.Player
 	): number => {
-		const correlation = correlate(poolKey, book, strategy, pick1, pick2, pick3);
-		return applyCorrelation(strategy, strategyScore(strategy, prob1, prob2, prob3), correlation);
+		const factor = Feature.correlation ? 1 : 0;
+		return correlatedValue(
+			strategy, prob1, prob2, prob3,
+			pairLift(pick1, pick2, factor), pairLift(pick1, pick3, factor), pairLift(pick2, pick3, factor)
+		);
 	};
 
 	const strategyBookWeights: Record<Strategy, Map<LogStatsKey, number>> = {
@@ -1043,7 +918,6 @@ export const bestPicks = async (
 
 			const score = adjustedStrategyScore(
 				strategy,
-				book,
 				prob1,
 				prob2,
 				prob3,
@@ -1056,7 +930,7 @@ export const bestPicks = async (
 			totalWeight += weight;
 			if (
 				strategy === 'least1'
-				&& isCorrelationApplied(poolKey, book, strategy, pick1.player, pick2.player, pick3.player)
+				&& isCorrelationApplied(pick1.player, pick2.player, pick3.player)
 			) {
 				adjusted = true;
 			}
@@ -1735,64 +1609,68 @@ export const bestPicks = async (
 }
 
 export const logCorrelations = () => {
-	const strategyKey = 'least1';
-	for (const poolKey of AllPoolSlots) {
-		console.log(`\n*** ${StrategyLabels[strategyKey]} Correlations >= 1, ${titleForPoolKey(poolKey)} ***`);
-		for (const logStatsKey of LogStatsKeys) {
-			const table: Record<string, number> = {};
-			let rowCount = 0;
-			for (const combo of AllCombos) {
-				const value = correlations[poolKey][logStatsKey][strategyKey][combo];
-				if (value !== null && value >= 1) {
-					table[strategyTitle(combo)] = round(value, 3);
-					rowCount++;
-				}
+	const { teammates, opponents, from, through, days, playerDays } = pairLifts;
+	console.log(`\n*** Pair lifts: teammates ×${round(teammates, 3)}, opponents ×${round(opponents, 3)} ***`);
+	console.log(`Fitted on ${days} days, ${from} to ${through}, ${playerDays} player-days`);
+}
+
+// A listed player on one archived day, at the Avg price of the first window listing them
+interface PlayerDay {
+	team: string;
+	opponent: string;
+	scored: boolean;
+	price: number;
+}
+type PairCounts = Record<'same' | 'opp' | 'diff', { both: number; expected: number }>;
+
+// How many times as often teammates (or opponents) both scored as their odds say. Each day's pairs
+// are compared with that day's pairs from different games, which can't be correlated, so the books'
+// margin, which drifts from day to day, cancels. The days are pooled by Mantel-Haenszel.
+const fitPairLifts = (days: string[], playersByDay: PlayerDay[][]): PairLifts => {
+	const counts = playersByDay.map((players) => {
+		const cells: PairCounts = {
+			same: { both: 0, expected: 0 },
+			opp: { both: 0, expected: 0 },
+			diff: { both: 0, expected: 0 },
+		};
+		for (let a = 0; a < players.length; a++) {
+			for (let b = a + 1; b < players.length; b++) {
+				const x = players[a];
+				const y = players[b];
+				const cell = cells[x.team === y.team ? 'same' : x.team === y.opponent ? 'opp' : 'diff'];
+				if (x.scored && y.scored) cell.both++;
+				cell.expected += x.price * y.price;
 			}
-			if (rowCount === 0) continue;
-			console.log(`${bookTitle(logStatsKey)} (${logStatsKey})`);
-			console.table(table);
 		}
-	}
+		return cells;
+	});
+
+	const lift = (kind: 'same' | 'opp'): number => {
+		let upper = 0;
+		let lower = 0;
+		for (const cells of counts) {
+			const cell = cells[kind];
+			const control = cells.diff;
+			const weight = cell.expected + control.expected;
+			if (!(weight > 0)) continue;
+			upper += (cell.both * control.expected) / weight;
+			lower += (control.both * cell.expected) / weight;
+		}
+		return upper / lower;
+	};
+
+	const sorted = [...days].sort();
+	return {
+		teammates: lift('same'),
+		opponents: lift('opp'),
+		from: sorted.length ? sorted[0] : '',
+		through: sorted.length ? sorted[sorted.length - 1] : '',
+		days: days.length,
+		playerDays: playersByDay.reduce((sum, players) => sum + players.length, 0),
+	};
 }
 
-const compileSimItems = (simItems: Record<LogStatsKey, SimItem[]>): CorrelationResult => {
-	const results = {} as CorrelationResult;
-	results['1'] = {} as Record<LogStatsKey, CorrelationStrategy>;
-	results['2'] = {} as Record<LogStatsKey, CorrelationStrategy>;
-	results['3'] = {} as Record<LogStatsKey, CorrelationStrategy>;
-	results['4+'] = {} as Record<LogStatsKey, CorrelationStrategy>;
-	results['all'] = {} as Record<LogStatsKey, CorrelationStrategy>;
-
-	for (const key of LogStatsKeys) {
-		const game1 = new Correlation();
-		const game2 = new Correlation();
-		const game3 = new Correlation();
-		const game4 = new Correlation();
-		const games = new Correlation();
-		const simItem = simItems[key];
-		for (const item of simItem) {
-			if (item.gameCount === 1) game1.add(item.totals);
-			else if (item.gameCount === 2) game2.add(item.totals);
-			else if (item.gameCount === 3) game3.add(item.totals);
-			else game4.add(item.totals);
-			games.add(item.totals);
-		}
-		game1.calculate();
-		game2.calculate();
-		game3.calculate();
-		game4.calculate();
-		games.calculate();
-
-		results['1'][key] = game1.results();
-		results['2'][key] = game2.results();
-		results['3'][key] = game3.results();
-		results['4+'][key] = game4.results();
-		results['all'][key] = games.results();
-	}
-	return results;
-}
-
-export const runSimulation = async (minSportsbooks: number, correlationPercent: number) => {
+export const runSimulation = async (minSportsbooks: number): Promise<PairLifts> => {
 	const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
 	const oldestDate = new Date("2026-04-09");
 	const historyByDate = new Map<string, string>();
@@ -1809,27 +1687,8 @@ export const runSimulation = async (minSportsbooks: number, correlationPercent: 
 		}
 	}
 
-	const strategyScoreFromGroup = (
-		group: ComboGroup<SnapshotOddsRow>,
-		strategy: Strategy,
-	): number => {
-		if (strategy === 'least1') return calcAny(group.prob1, group.prob2, group.prob3);
-		if (strategy === 'points') return calcPnt(group.prob1, group.prob2, group.prob3);
-		return calcHit(group.prob1, group.prob2, group.prob3);
-	};
-	const includeGroupByBaselineProbability = (
-		baselineScores: Record<Strategy, number>,
-		group: ComboGroup<SnapshotOddsRow>,
-	): boolean => {
-		for (const strategy of AllStrategies) {
-			const baselineScore = baselineScores[strategy];
-			if (baselineScore <= 0) continue;
-			const groupScore = strategyScoreFromGroup(group, strategy);
-			if (groupScore >= baselineScore * correlationPercent) return true;
-		}
-		return false;
-	}
-	const simItems: Record<LogStatsKey, SimItem[]> = { bet1: [], bet2: [], bet3: [], bet4: [], betAvg: [] };
+	const days: string[] = [];
+	const playersByDay: PlayerDay[][] = [];
 
 	for (const [date, historyFile] of historyByDate) {
 		try {
@@ -1844,6 +1703,7 @@ export const runSimulation = async (minSportsbooks: number, correlationPercent: 
 
 			const gameStartTimes = await getGameStartTimeGroups(date);
 
+			const players = new Map<number, PlayerDay>();
 			for (let slotIndex = 0; slotIndex < gameStartTimes.length; slotIndex++) {
 				try {
 					const folderTime = gameStartTimes[slotIndex];
@@ -1892,6 +1752,7 @@ export const runSimulation = async (minSportsbooks: number, correlationPercent: 
 
 							rows.push(new SnapshotOddsRow({
 								sid,
+								id: item.playerId,
 								team: player.team,
 								opponent: player.opponent,
 								scored: player.scored,
@@ -1927,91 +1788,23 @@ export const runSimulation = async (minSportsbooks: number, correlationPercent: 
 					const set3 = rows.filter((row) => row.sid === '3' && row.betAvg !== null && row.betCount >= minSportsbooks);
 					if (set1.length === 0 || set2.length === 0 || set3.length === 0) continue;
 
-					const bookCandidates: Record<LogStatsKey, SelectionCandidate<SnapshotOddsRow>[]> = {
-						bet1: [], bet2: [], bet3: [], bet4: [], betAvg: [],
-					};
-
-					for (const key of LogStatsKeys) {
-						const candidates = bookCandidates[key];
-						for (const pick1 of set1) {
-							for (const pick2 of set2) {
-								for (const pick3 of set3) {
-									const prob1 = pick1[key];
-									const prob2 = pick2[key];
-									const prob3 = pick3[key];
-									if (prob1 === null || prob2 === null || prob3 === null) continue;
-
-									const strategy = getStrategy(pick1, pick2, pick3);
-
-									candidates.push({
-										pick1,
-										pick2,
-										pick3,
-										prob1,
-										prob2,
-										prob3,
-										strategy,
-									});
-								}
-							}
-						}
-
-						if (candidates.length === 0) continue;
-
-						const totals = {} as SimTotal;
-
-						const topOverall = new ComboGroup<SnapshotOddsRow>();
-						for (const candidate of candidates) topOverall.add(candidate);
-						if (topOverall.combos.length === 0) continue;
-						const baselineScores: Record<Strategy, number> = {
-							least1: strategyScoreFromGroup(topOverall, 'least1'),
-							points: strategyScoreFromGroup(topOverall, 'points'),
-							hits: strategyScoreFromGroup(topOverall, 'hits'),
-						};
-
-						const baseline = new ResultTotal();
-						for (const combo of topOverall.combos) {
-							baseline.add(combo.pick1.scored, combo.pick2.scored, combo.pick3.scored);
-						}
-						baseline.normalize();
-						totals.baseline = { ...baseline };
-
-						for (const comboPattern of AllCombos) {
-							const groupTop = new ComboGroup<SnapshotOddsRow>();
-							for (const candidate of candidates) {
-								if (candidate.strategy === comboPattern) groupTop.add(candidate);
-							}
-
-							const groupResult = new ResultTotal();
-							if (groupTop.combos.length > 0) {
-								if (!includeGroupByBaselineProbability(baselineScores, groupTop)) {
-									totals[comboPattern] = { ...groupResult };
-									continue;
-								}
-								for (const combo of groupTop.combos) {
-									groupResult.add(combo.pick1.scored, combo.pick2.scored, combo.pick3.scored);
-								}
-								groupResult.normalize();
-							}
-
-							totals[comboPattern] = { ...groupResult };
-						}
-
-						simItems[key].push({
-							slotTotal: gameStartTimes.length,
-							slotIndex,
-							gameCount,
-							totals,
-						});
+					// Each player once a day, from the first window listing them with enough books for an Avg
+					for (const row of rows) {
+						if (row.betAvg === null || row.betCount < minSportsbooks || players.has(row.id)) continue;
+						players.set(row.id, { team: row.team, opponent: row.opponent, scored: row.scored, price: row.betAvg });
 					}
 				} catch (error) {
 					console.warn(`Skipping simulation snapshot ${date} ${gameStartTimes[slotIndex]}:`, error);
 				}
 			}
+
+			if (players.size === 0) continue;
+			days.push(date);
+			playersByDay.push([...players.values()]);
 		} catch (error) {
 			console.warn(`Skipping simulation date ${date}:`, error);
 		}
 	}
 
-	return compileSimItems(simItems);
+	return fitPairLifts(days, playersByDay);
 }

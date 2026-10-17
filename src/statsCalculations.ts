@@ -1,15 +1,13 @@
 import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
-import { calcAny, calcPnt, calcHit, resolvePoolKey, gamesCount, applyCorrelation } from './picksOptimizer';
-import { correlations, } from './correlationData';
-import type { CorrelationStrategy } from './correlationData';
+import { calcAny, calcPnt, calcHit, gamesCount, correlatedValue, pairLift } from './picksOptimizer';
 import type {
 	LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog,
 	Strategy, StrategyMode, ComboPattern
 } from './dataTypes';
-import { LogStatsKeys, Sportsbooks, StrategyLabels, strategyTitle } from './dataTypes';
+import { AllCombos, LogStatsKeys, Sportsbooks, StrategyLabels, strategyTitle } from './dataTypes';
 import type { MergedSelection, SelectionCandidate } from './strategySelection';
-import { getStrategy, selectStrategyCombos } from './strategySelection';
+import { ComboGroup, getStrategy } from './strategySelection';
 import * as Feature from './features';
 
 const precision = Picks.precision;
@@ -113,7 +111,8 @@ const calculateStats = (
 		points: number;
 		hits: number;
 
-		constructor(selection: MergedSelection<Picks.PickOdds>) {
+		// Valued with its pairs' lifts scaled by correlation; 0 gives the plain odds
+		constructor(selection: MergedSelection<Picks.PickOdds>, correlation: number) {
 			this.players1 = selection.picks1;
 			this.players2 = selection.picks2;
 			this.players3 = selection.picks3;
@@ -121,22 +120,21 @@ const calculateStats = (
 			this.prob2 = selection.prob2;
 			this.prob3 = selection.prob3;
 
-			this.least1 = calcAny(this.prob1, this.prob2, this.prob3);
-			this.points = calcPnt(this.prob1, this.prob2, this.prob3);
-			this.hits = calcHit(this.prob1, this.prob2, this.prob3);
-		}
-
-		correlate(strategy: ComboPattern, ref: CorrelationStrategy): void {
-			this.least1 = applyCorrelation('least1', this.least1, ref.least1[strategy], factor);
-			this.points = applyCorrelation('points', this.points, ref.points[strategy], factor);
-			this.hits = applyCorrelation('hits', this.hits, ref.hits[strategy], factor);
+			const lifts = ticketLifts(selection.representative, correlation);
+			this.least1 = correlatedValue('least1', this.prob1, this.prob2, this.prob3, ...lifts);
+			this.points = correlatedValue('points', this.prob1, this.prob2, this.prob3, ...lifts);
+			this.hits = correlatedValue('hits', this.prob1, this.prob2, this.prob3, ...lifts);
 		}
 	}
 
-	const calcCombos = (): {
-		top: ReturnType<typeof selectStrategyCombos<Picks.PickOdds>>['top'],
-		strategies: ReturnType<typeof selectStrategyCombos<Picks.PickOdds>>['strategies']
-	} => {
+	// The lifts of a ticket's three pairs: picks 1 and 2, 1 and 3, 2 and 3
+	const ticketLifts = (candidate: SelectionCandidate<Picks.PickOdds>, correlation: number): [number, number, number] => [
+		pairLift(candidate.pick1.player, candidate.pick2.player, correlation),
+		pairLift(candidate.pick1.player, candidate.pick3.player, correlation),
+		pairLift(candidate.pick2.player, candidate.pick3.player, correlation),
+	];
+
+	const calcCandidates = (): SelectionCandidate<Picks.PickOdds>[] => {
 		const candidates: SelectionCandidate<Picks.PickOdds>[] = [];
 
 		for (const pick1 of choices1) {
@@ -154,7 +152,7 @@ const calculateStats = (
 				}
 			}
 		}
-		return selectStrategyCombos(candidates);
+		return candidates;
 	}
 
 	const printStrategy = (strategy: Strategy, value: number): string => {
@@ -250,22 +248,35 @@ const calculateStats = (
 	const gameCount = gamesCount(table1Rows, table2Rows, table3Rows);
 	if (gameCount === 0) return;
 
-	const { top, strategies } = calcCombos();
+	const candidates = calcCandidates();
+	const top = new ComboGroup<Picks.PickOdds>();
+	for (const candidate of candidates) top.add(candidate);
 	const topSelection = top.merge();
 	if (topSelection === null) return;
-	const topResult = new Result(topSelection);
-
-	const strategyResults: Map<ComboPattern, Result> = new Map();
-	for (const [strategy, combos] of strategies) {
-		const selection = combos.merge();
-		if (selection !== null) strategyResults.set(strategy, new Result(selection));
-	}
+	const topResult = new Result(topSelection, 0);
 
 	type strategyGroup = {
 		strategy: ComboPattern;
 		result: Result;
 	}
+	// The best ticket of each shape by the strategy's value, then the shapes whose best ties for the top
 	const findMax = (key: Strategy): strategyGroup[] => {
+		const groups = new Map<ComboPattern, ComboGroup<Picks.PickOdds>>();
+		for (const shape of AllCombos) {
+			groups.set(shape, new ComboGroup<Picks.PickOdds>((candidate) => (
+				correlatedValue(key, candidate.prob1, candidate.prob2, candidate.prob3, ...ticketLifts(candidate, factor))
+			)));
+		}
+		for (const candidate of candidates) {
+			if (candidate.strategy) groups.get(candidate.strategy)?.add(candidate);
+		}
+
+		const strategyResults: Map<ComboPattern, Result> = new Map();
+		for (const [strategy, combos] of groups) {
+			const selection = combos.merge();
+			if (selection !== null) strategyResults.set(strategy, new Result(selection, factor));
+		}
+
 		let max = 0;
 		for (const result of strategyResults.values()) {
 			const value = result[key];
@@ -278,11 +289,6 @@ const calculateStats = (
 			if (value === max) maxResults.push({ strategy, result });
 		}
 		return maxResults;
-	}
-
-	const ref = correlations[resolvePoolKey(gameCount)][betKey];
-	for (const [strategy, result] of strategyResults) {
-		result.correlate(strategy, ref);
 	}
 
 	const isSameSet = (set1: Set<Picks.PickOdds>, set2: Set<Picks.PickOdds>): boolean => {

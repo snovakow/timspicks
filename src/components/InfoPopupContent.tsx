@@ -81,20 +81,16 @@ export default function InfoPopupContent() {
 				<section className="info-popup-section">
 					<h3>Correlation</h3>
 					<p>
-						Picks from the same game, whether on opposing teams or the same team,
-						do not hit independently. Each set of picks is classified by its shape,
-						and archived results give that shape a factor for how often it landed
-						relative to a baseline of independent picks from different games.
+						Picks from the same game, whether on the same team or on opposing teams,
+						may not hit independently. Archived results measure how often two teammates,
+						and two opponents, both scored compared with their odds, against players
+						from different games on the same days.
 					</p>
 					<p>
-						The factor is applied to the odds rather than multiplied into the
-						percentage, so a boosted result rises toward its maximum without ever
-						passing it. Only factors above the baseline are applied, so correlation
-						can raise a set of picks but never penalize one.
-					</p>
-					<p>
-						With 2 or less games where all three picks cannot be independent from different games,
-						correlation is based on random results.
+						Each set of picks is valued from its own players' odds with those measures.
+						Players who tend to score together make at least one correct pick less likely
+						and several correct picks more likely, so correlation can raise or lower a set
+						of picks, and it matters most for the strongest picks.
 					</p>
 				</section>
 			)}

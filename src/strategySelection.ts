@@ -1,7 +1,6 @@
 import type { ComboPattern } from './dataTypes';
-import { AllCombos } from './dataTypes';
 
-interface PlayerType<T> {
+export interface PlayerType<T> {
     sameTeam(other: PlayerType<T>): boolean;
     opponentTeam(other: PlayerType<T>): boolean;
     sameGame(other: PlayerType<T>): boolean;
@@ -46,25 +45,33 @@ export type MergedSelection<T> = {
     combos: SelectionCandidate<T>[];
 };
 
+// The default score: the sum of probabilities, order-independent since addition is commutative
+const probabilitySum = <T>(candidate: SelectionCandidate<T>): number => candidate.prob1 + candidate.prob2 + candidate.prob3;
+
 export class ComboGroup<T> {
     combos: SelectionCandidate<T>[] = [];
     prob1 = 0;
     prob2 = 0;
     prob3 = 0;
+    best = 0;
+    score: (candidate: SelectionCandidate<T>) => number;
+
+    constructor(score: (candidate: SelectionCandidate<T>) => number = probabilitySum) {
+        this.score = score;
+    }
 
     add(candidate: SelectionCandidate<T>) {
-        // Compare by sum of probabilities — order-independent since addition is commutative.
-        // All candidates with the maximum sum are kept as ties.
-        const candidateSum = candidate.prob1 + candidate.prob2 + candidate.prob3;
-        const currentSum = this.prob1 + this.prob2 + this.prob3;
+        // All candidates with the highest score are kept as ties.
+        const candidateScore = this.score(candidate);
 
-        if (candidateSum < currentSum) return;
+        if (candidateScore < this.best) return;
 
-        if (candidateSum > currentSum) {
+        if (candidateScore > this.best) {
             this.combos.splice(0, this.combos.length, candidate);
             this.prob1 = candidate.prob1;
             this.prob2 = candidate.prob2;
             this.prob3 = candidate.prob3;
+            this.best = candidateScore;
             return;
         }
         this.combos.push(candidate);
@@ -95,21 +102,3 @@ export class ComboGroup<T> {
         };
     }
 }
-
-export const selectStrategyCombos = <T>(candidates: Iterable<SelectionCandidate<T>>): {
-    top: ComboGroup<T>;
-    strategies: Map<ComboPattern, ComboGroup<T>>;
-} => {
-    const top = new ComboGroup<T>();
-    const strategies = new Map<ComboPattern, ComboGroup<T>>();
-    for (const strategy of AllCombos) strategies.set(strategy, new ComboGroup<T>());
-
-    for (const candidate of candidates) {
-        top.add(candidate);
-        if (!candidate.strategy) continue;
-        const combo = strategies.get(candidate.strategy);
-        if (combo) combo.add(candidate);
-    }
-
-    return { top, strategies };
-};

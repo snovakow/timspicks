@@ -421,8 +421,7 @@ function App() {
 		// Run SIMULATE or ANALYZE only once after data has initialized
 		if (SIMULATE) {
 			SIMULATE = false;
-			const correlationPercent = 0.999;
-			runSimulation(minSportsbooks, correlationPercent).then((results) => {
+			runSimulation(minSportsbooks).then((results) => {
 				console.log(results);
 			});
 		}
