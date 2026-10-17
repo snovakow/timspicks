@@ -371,6 +371,7 @@ oddsNameMap.set("J.J. Moser", "Janis Jérôme Moser"); // BetRivers
 oddsNameMap.set("J.T. Compher", "JT Compher"); // BetRivers
 oddsNameMap.set("Jake Middleton", "Jacob Middleton"); // BetRivers (lang)
 oddsNameMap.set("James van Riemsdyk", "James Van Riemsdyk"); // BetMGM
+oddsNameMap.set("Jeffrey Viel", "Jeff Viel"); // bet1 bet2 bet3 bet4
 oddsNameMap.set("JJ Peterka", "John-Jason Peterka"); // BetRivers
 oddsNameMap.set("Josh Morrissey", "Joshua Morrissey"); // BetRivers
 oddsNameMap.set("Josh Norris", "Joshua Norris"); // bet1 bet2 bet3 bet4
