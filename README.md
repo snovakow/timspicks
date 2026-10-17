@@ -11,9 +11,9 @@ App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hor
   live site
 - [Deploying](docs/deployment.md) — the daily merge, build and copy routine,
   the checks before a merge, and what changes at each end of a season
-- [History and the correlation table](docs/history-and-correlation.md) — how the
-  archive and the generated correlation factors are regenerated, in what order,
-  and why a run can come out byte-identical
+- [History and the correlation lifts](docs/history-and-correlation.md) — how the
+  archive and the fitted correlation lifts are regenerated, in what order, and
+  why a run can come out byte-identical
 
 ## About
 During the 2025-2026 season, the Tim Hortons Hockey Challenge presented 6 Challenges in addition to the Playoffs.
