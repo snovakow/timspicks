@@ -85,9 +85,7 @@ week. Nothing in the app tracks a streak; the Streak strategy is a single-day
 proxy for it.
 
 These are the 2026-27 values. The 2025-26 season paid 25 and 50 points for one
-and two correct, and a week of free coffee for the streak. The correlation
-factors are derived using the points table, so changing it means regenerating
-them ([History and the correlation table](history-and-correlation.md)).
+and two correct, and a week of free coffee for the streak.
 
 ## The three strategies
 
@@ -105,38 +103,45 @@ points total, or leaderboard pick percentage.
 
 ## Correlation between picks
 
-Three picks can share a game, which makes their outcomes dependent. Every ticket
-is classified by shape: how many of its picks fall in the same game, and whether
-same-game picks are on one team or on opposing teams. The shapes run from all
-three in different games, through the mixed stacked and opposing cases, to all
-three on one team, and each gets an English name in the interface.
+Three picks can share a game, which can make their outcomes dependent. Every
+ticket is classified by shape: how many of its picks fall in the same game, and
+whether same-game picks are on one team or on opposing teams. The shapes run from
+all three in different games, through the mixed stacked and opposing cases, to
+all three on one team, and each gets an English name in the interface.
 
-A generated lookup holds a correlation factor per shape, split by how many games
-are on the slate, by book and by strategy, derived from the archived history.
-Two things to know about it: a factor below the independent baseline is ignored,
-so correlation can only boost a ticket and never penalize one, and a shape can
-have no observations at all — all three picks in different games is structurally
-impossible on a one-game slate.
+The correlation itself comes down to two numbers measured on the archived
+history: how many times as often two teammates both scored as their odds say,
+and the same for two opponents. Each is measured against the same day's pairs
+from different games, which can't be correlated and so cancel the books' margin.
+Picks from different games are taken as independent.
 
-The factor is applied to the *odds* rather than multiplied into the value. Note
-the asymmetry: a factor is *derived* as a ratio of rates but *applied* as a ratio
-of odds, which is an approximation — deliberate, because it is what keeps a
-boosted value bounded. Each strategy has a natural ceiling: a probability cannot
-pass certainty, the points strategy cannot pass a perfect day's score, and the
-hit count cannot pass three picks. Scaling in odds space keeps a boosted result
-below that ceiling, where a raw multiply would push the streak probability past
-100%. The transform is strictly monotone, so it never saturates and the ranking
-between tickets stays meaningful.
+A ticket is valued from its own players' odds with those two numbers. Each
+same-game pair's chance of both scoring is scaled by its number, and the chance
+that all three score by the product of its three pairs'. Every joint chance is
+kept within what the players' own chances allow, so a value never leaves its
+natural range: a probability stays a probability, and points stay within a
+perfect day's score. The correlation slider scales the effect, from none up to
+the measured numbers and beyond.
 
-The factors rest on one uncalibrated choice worth knowing about. A ticket counts
-toward a shape's observations when it scores within a hair of the best ticket for
-*any* of the three strategies. That near-tie band is wide enough to admit
-genuinely worse tickets, not just absorb floating-point noise, and it was never
-swept against the alternatives — yet every factor in the table depends on it.
-Widening the band widens every shape's sample.
+Correlation cuts both ways. Players who tend to score together make at least one
+correct pick less likely, because their goals overlap, and two or three correct
+more likely. So a pair that scores together more than its odds say lowers a
+ticket's Streak value and raises its Points value, and the effect grows with the
+players' chances, so it matters most for the strongest picks. It cannot move
+Pick% at all: the expected number of correct picks is the same whether or not
+picks score together.
+
+An earlier version kept a separate factor per shape, slate size, book and
+strategy. Those are all one mechanism — whether players from one game score
+together — so that table estimated the same two numbers many times over, most of
+its factors from a handful of archived draws. And since only factors above the
+baseline were applied, their noise could only ever boost a ticket. Measured on
+2026-10-17 over the archive through 2026-10-15, teammates scored together about
+1% more often than their odds say and opponents about as often, neither
+distinguishable from no correlation.
 
 ## A naming trap
 
 "Pick #1 / #2 / #3" are the three pools. "Pool Slots" are the **number of games
-on the slate**, used to bucket the correlation data. Two unrelated axes that both
-count 1, 2, 3.
+on the slate**, by which the historical audit buckets its results. Two unrelated
+axes that both count 1, 2, 3.

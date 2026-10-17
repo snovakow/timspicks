@@ -251,8 +251,9 @@ and copying the build output wholesale overwrites the live history index.
 The app has a handful of build-time feature flags; read their file for which are
 on. A flag gates its feature end to end, so turning correlation off also hides
 the strategy dots, the strategy settings, the correlation slider and the Legend
-button. One flag is not a simple on and off: it selects between generating the
-correlation table, logging correlations, and doing neither.
+button. One flag is not a simple on and off: it selects between fitting the
+correlation lifts, logging them alongside an analysis of the picks, and doing
+neither.
 
 A few settings have to hold a particular value before a build is safe to ship,
 and `/commit` checks each of them. [Deploying](deployment.md) lists them, since
