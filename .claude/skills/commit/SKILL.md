@@ -116,9 +116,10 @@ No other commit's subject may start with `Version` and a number, because the bas
 Update README.md if the range adds or changes something it describes, or something a reader would want to know: a feature, a setting, how picks are ranked, setup or deploy steps, or season details the user has provided. Skip it for fixes, refactors, data ranges and styling.
 
 Keep its voice, follow step 3 for anything you add, and leave the external link list and the
-template section as they are. The Documentation list is part of what you maintain: keep it pointing
-at whatever `docs/` holds. Never invent results. The README change is its own commit, after the
-code and before the version commit.
+template section as they are. The Documentation and Skills lists are part of what you maintain: keep
+the first pointing at whatever `docs/` holds, and the second naming every skill under
+`.claude/skills/`, each with when to use it. Never invent results. The README change is its own
+commit, after the code and before the version commit.
 
 ## 5a. The pages under `docs/`
 
