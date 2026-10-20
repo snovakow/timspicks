@@ -2,6 +2,8 @@
 name: health-server
 description: Check the live server's health from the machine it runs on. Reads the cron log and the two places cron failures hide (the PHP error log and cron mail), the live data folder (run state, today's feeds, the site banner, snapshot folders), and whether the files deployed to the live and update folders match main. Read-only. Use when asked whether the live site or the cron is healthy, why the live data looks stale, or whether a deploy is complete.
 argument-hint: "[ref] [--days N] [--no-build]"
+model: opus
+effort: max
 allowed-tools: Read, Grep, Glob, Bash(node .claude/skills/health-server/scripts/health.mjs:*), Bash(git fetch:*), Bash(git show:*), Bash(git diff:*), Bash(git log:*), Bash(git rev-parse:*), Bash(crontab -l), Bash(tail:*), Bash(ls:*), Bash(cmp:*), Bash(diff:*)
 ---
 
