@@ -75,6 +75,11 @@ three — this is the list it's checking against:
   cron is still feeding the site.
 - The cron log is append-only and a run emits at most one line, so the tail of
   it is the run history. `crontab -l` shows what's installed.
+- `/health-server` covers the server side in one pass. It compares the files in
+  the live and update folders with `main`, which says whether steps 4 and 5 are
+  complete, and it reads the PHP error log and cron mail along with the cron
+  log, since a PHP fatal error or a cron that has stopped firing leaves nothing
+  in the cron log.
 
 ## Ending a season
 
@@ -100,6 +105,7 @@ three — this is the list it's checking against:
   feed returns 404 for a day that isn't over, and the incremental index writes
   that day down as done and never asks for it again.
 - Confirm the cron is running before the first game day, not after it.
+  `/health-server` reports whether it is.
 - Turn `offseasonBanner` back off.
 - If days were missed, backfill them: one closing price per player in every slot
   from an odds archive into `public/data/<date>`, with the pick lists rebuilt

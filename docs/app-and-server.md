@@ -111,6 +111,12 @@ bet2, bet3 and bet4 take an end-of-day cutoff and drop markets closing after it.
 bet1 takes none, so its file can include tomorrow's games — worth remembering
 when book coverage looks uneven.
 
+Coverage can also go missing without any error. A book that changes its format
+still parses, into an empty file or into prices from the wrong market, and a
+player whose name a book spells differently from the pick-list feed gets no
+price from that book in the app. `/health-odds` looks for both in a fresh pull
+of every book, and fixes them in the name mappings or the parser.
+
 Every fetch rejects a non-2xx status or an empty body before anything parses it —
 otherwise an outage reaches the JSON parser and is reported as a decode error,
 which is what a feed mid-rollover used to look like. The exception is the first

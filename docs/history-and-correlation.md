@@ -67,8 +67,8 @@ The pasted object records what the lifts were fitted on, so compare its last day
 and day count with the archive before trusting it. A run on the development
 server reads the checkout's own copies of the archive and the slot snapshots,
 which can lack days the live folder holds. A day without its snapshots drops out
-of the fit without an error; the day count is the only sign. The analyze skill
-fits the lifts to the full archive and names any shipped value that differs.
+of the fit without an error; the day count is the only sign. `/analyze` fits
+the lifts to the full archive and names any shipped value that differs.
 
 ## What bounds the fit, regardless of the archive
 
@@ -115,7 +115,7 @@ days instead reads below 1 even with no correlation at all. The days are pooled
 by Mantel-Haenszel.
 
 The fit uses every listed pair, though the picks come from near the top of the
-lists. The analyze skill checks whether the lifts hold there: on 2026-10-17, over
+lists. `/analyze` checks whether the lifts hold there: on 2026-10-17, over
 the archive through 2026-10-15, the near-top pairs' lifts did not differ
 significantly from the rest.
 
