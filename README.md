@@ -15,6 +15,27 @@ App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hor
   archive and the fitted correlation lifts are regenerated, in what order, and
   why a run can come out byte-identical
 
+## Skills
+
+Agent skills for working on the repo and the live server:
+
+- `/commit` — when a batch is ready to deploy: reviews and commits everything
+  since the last version commit, brings the README and docs up to date, ends
+  with a version commit, and lists what to copy to the live server, without
+  pushing
+- `/health-server` — when the live data looks stale, the cron may have stopped,
+  or a deploy needs confirming: a read-only check of the cron log and the places
+  cron failures hide, the live data and the banner visitors see, and whether the
+  deployed files match `main`
+- `/health-odds` — when a player shows no odds from a book, or a book may have
+  changed its format: pulls bet1–bet4 fresh, checks that they still parse into
+  anytime goal scorer odds and that every listed player's name matches a price
+  in each book, then fixes the name mappings or the parser
+- `/analyze` — when deciding whether correlation, a time slot or a sportsbook
+  has a real edge: read-only tests of the archive for each, including whether
+  the correlation lifts hold near the top of the lists and whether any result
+  changes between the regular season and the playoffs
+
 ## About
 During the 2025-2026 season, the Tim Hortons Hockey Challenge presented 6 Challenges in addition to the Playoffs.
 
