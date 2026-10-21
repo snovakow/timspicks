@@ -109,7 +109,7 @@ Rewrite a range message only in these cases, and leave good messages alone:
 - it has a file-name or vague subject ("Update App.tsx", "wip", "fix")
 - it doesn't match its diff
 
-Keep each commit's author. New commits other than the version commit end with the attribution trailer this session uses. Reworded commits keep the trailers they already have.
+Keep each commit's author. New commits other than the version commit end with the attribution trailer this thread uses. Reworded commits keep the trailers they already have.
 
 No other commit's subject may start with `Version` and a number, because the baseline depends on that pattern being unique. Reword an unpushed one to describe what it actually changed.
 
@@ -189,7 +189,7 @@ tidy.
    - **An older commit, message fix:** write `amend! <sha>`, a blank line and the new message to a file, then run `git commit --allow-empty --only -F <file>`.
    - **Then fold the fixups in:** `GIT_EDITOR=true git rebase --autosquash --autostash <rewrite base>`. Check afterwards that the `fixup!` commits are gone, because an older git (2.37, for one) ignores `--autosquash` unless the rebase is interactive: it reports success, rewrites nothing and leaves them sitting at the tip. If that happens, run `GIT_SEQUENCE_EDITOR=true GIT_EDITOR=true git rebase -i --autosquash --autostash <rewrite base>`, which honours it and still needs no editor.
    - If the rebase stops on a conflict, run `git rebase --abort` and ask. If a merge commit sits anywhere but the tip, report it and ask rather than flatten it. If a fix touches a file that also has uncommitted edits, `git stash push --include-untracked` first and `git stash pop` after.
-   - Keep message files outside the repo (the session scratchpad if there is one), so they never get committed.
+   - Keep message files outside the repo (the thread's scratchpad if there is one), so they never get committed.
 3. Fix site mentions in the working-tree changes.
 4. Commit the groups from step 7, in the planned order. Stage explicit paths, never `-A` or `.`, and check `git diff --cached --stat` against the group's subject before committing: if something unrelated is staged, unstage it rather than widen the message. Commit untracked files that belong to the project and ask about the rest. Never delete the user's files or edit `.gitignore` without asking.
 5. Make the prose commits, if steps 5 and 5a call for them: README and `docs/`, one concern each.
@@ -221,4 +221,4 @@ Then report, briefly:
 
 ## 10. After the report
 
-The run ends with the report. This skill stays in context afterwards, but anything the user asks for next in the same thread is ordinary development, not part of the run: make and commit that work as usual, with the session's attribution trailer, and stop there. These are ordinary commits, not this skill's: they carry no version bump, so the next run finds them above the newest version commit and reviews them. Don't bump the version or make a version commit, even when the follow-up commits come straight after one. The next batch gets its own `/commit`, which the user starts in a fresh thread so the review begins from a clean context. If the follow-up work leaves a batch ready to go, say so instead.
+The run ends with the report. This skill stays in context afterwards, but anything the user asks for next in the same thread is ordinary development, not part of the run: make and commit that work as usual, with the thread's attribution trailer, and stop there. These are ordinary commits, not this skill's: they carry no version bump, so the next run finds them above the newest version commit and reviews them. Don't bump the version or make a version commit, even when the follow-up commits come straight after one. The next batch gets its own `/commit`, which the user starts in a fresh thread so the review begins from a clean context. If the follow-up work leaves a batch ready to go, say so instead.

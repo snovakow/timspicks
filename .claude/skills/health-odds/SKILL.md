@@ -31,7 +31,7 @@ If this checkout is on `main`, ask before changing anything, because work lands 
 
     node .claude/skills/health-odds/scripts/odds.mjs --out <new folder> $ARGUMENTS
 
-- `--out <dir>`: where the pull lands, which has to be new or empty. Use a new folder in the session scratchpad when there is one. Without it the script makes a temp folder and prints where.
+- `--out <dir>`: where the pull lands, which has to be new or empty. Use a new folder in the thread's scratchpad when there is one. Without it the script makes a temp folder and prints where.
 - `--no-pull`: re-check what `--out` already holds, without requesting anything. It loads `src/` afresh, so it's the check to run after a name fix.
 - `--days N` or `--all`: how far back the snapshot sweep reads. The default is this season, back to the off-season gap between snapshot days.
 - `--lib <path>`: parse with another `fetch_lib.php`. The default is this checkout's `public/fetch_lib.php`. When the live folder's copy differs, the script pulls with that too, into `<out>/live-lib`, so both parsers get checked.
