@@ -19,10 +19,10 @@ App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hor
 
 Agent skills for working on the repo and the live server:
 
-- `/commit` — when a batch is ready to deploy: reviews and commits everything
-  since the last version commit, brings the README and docs up to date, ends
-  with a version commit, and lists what to copy to the live server, without
-  pushing
+- `/commit` — when a batch is ready to deploy, as the first message of a new
+  thread: reviews and commits everything since the last version commit, brings
+  the README and docs up to date, ends with a version commit, and lists what to
+  copy to the live server, without pushing
 - `/health-server` — when the live data looks stale, the cron may have stopped,
   or a deploy needs confirming: a read-only check of the cron log and the places
   cron failures hide, the live data and the banner visitors see, and whether the
