@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Review and finalize everything since the last version commit for pushing. Fixes messages and site mentions, updates the README and docs where needed, commits it all, ends with a version commit, and lists what to copy to the live server.
+description: Review and finalize everything since the last version commit for pushing. Fixes messages and site mentions, updates the README and docs where needed, commits it all, ends with a version commit, and lists what to copy to the live server. Stops unless it is the first thing in its thread.
 disable-model-invocation: true
 argument-hint: "[x.y.z]"
 model: opus
@@ -13,6 +13,8 @@ allowed-tools: Read, Edit, Write, Bash(git status:*), Bash(git diff:*), Bash(git
 Arguments: $ARGUMENTS
 
 This repo is public: whatever gets pushed (code, comments and commit messages) stays public. The user commits ad hoc while working and runs this skill when a batch is ready to go. Review everything since the last version commit, fix what can still be fixed, commit all of it, and finish with a version commit. The user pushes; never push.
+
+Run in a fresh thread, as the first thing in it. A thread that made the changes remembers making them and cannot review them from the repository alone, and one that has already run this would run it again over the same work. So if anything precedes this command in the conversation, an earlier message, work done here or a summary carried over from a longer context, stop before anything is read or run, and say to start a new thread with `/commit` as its first message.
 
 ## How the pieces fit
 
@@ -219,4 +221,4 @@ Then report, briefly:
 
 ## 10. After the report
 
-The run ends with the report. This skill stays in context afterwards, but anything the user asks for next in the same thread is ordinary development, not part of the run: make and commit that work as usual, with the session's attribution trailer, and stop there. Don't bump the version or make a version commit, even when the follow-up commits come straight after one. The next batch gets its own `/commit`, which the user starts in a fresh thread so the review begins from a clean context. If the follow-up work leaves a batch ready to go, say so instead.
+The run ends with the report. This skill stays in context afterwards, but anything the user asks for next in the same thread is ordinary development, not part of the run: make and commit that work as usual, with the session's attribution trailer, and stop there. These are ordinary commits, not this skill's: they carry no version bump, so the next run finds them above the newest version commit and reviews them. Don't bump the version or make a version commit, even when the follow-up commits come straight after one. The next batch gets its own `/commit`, which the user starts in a fresh thread so the review begins from a clean context. If the follow-up work leaves a batch ready to go, say so instead.
