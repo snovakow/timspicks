@@ -77,9 +77,10 @@ three — this is the list it's checking against:
   it is the run history. `crontab -l` shows what's installed.
 - `/health-server` covers the server side in one pass. It compares the files in
   the live and update folders with `main`, which says whether steps 4 and 5 are
-  complete, and it reads the PHP error log and cron mail along with the cron
-  log, since a PHP fatal error or a cron that has stopped firing leaves nothing
-  in the cron log.
+  complete. It reads the PHP error log, the web server's access log and cron
+  mail along with the cron log, since a PHP fatal error, a cron that has stopped
+  firing or a curl call that never reached the server leaves nothing in the cron
+  log.
 
 ## Ending a season
 

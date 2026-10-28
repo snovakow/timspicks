@@ -22,11 +22,12 @@ script can drive more than one site folder — a local one and the live one — 
 varying the parameter. Cron runs it every minute, with the host elided here:
 
 ```
-* * * * * curl "<update-host>/update.php?lib=<site-folder>" >> timspicks_log.txt
+* * * * * curl -sS "<update-host>/update.php?lib=<site-folder>" >> timspicks_log.txt
 ```
 
 `crontab -l` lists what is installed. The log is append-only, and a run emits at
-most one line.
+most one line. `-sS` keeps curl's progress meter off stderr, which cron would
+otherwise mail on every call, while still letting curl's own errors through.
 
 The build emits relative asset and data URLs rather than absolute ones. That is
 what lets the same build run from a subfolder.
