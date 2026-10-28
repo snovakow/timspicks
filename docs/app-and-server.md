@@ -120,9 +120,14 @@ of every book, and fixes them in the name mappings or the parser.
 
 Every fetch rejects a non-2xx status or an empty body before anything parses it —
 otherwise an outage reaches the JSON parser and is reported as a decode error,
-which is what a feed mid-rollover used to look like. The exception is the first
-page of bet4, where an unreachable feed has always counted as "no offers today";
-it still does, but it records a warning now instead of passing for a quiet day.
+which is what a feed mid-rollover used to look like.
+
+A book that fails, by an error or by throwing, doesn't stop the run. Its file is
+written empty, so the page shows no prices from that book rather than stale ones,
+the snapshot keeps the slot's earlier copy (see below), and the failure becomes a
+warning. The run still completes, so it waits the full period like any other,
+even inside the game window. The pick list and the schedule still stop the run,
+as does a book file that can't be written.
 
 The History fetch tolerates one status of its own: a 404 means the challenge
 didn't run that day, so it is skipped as before. Every other failure stops the

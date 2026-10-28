@@ -296,8 +296,53 @@ function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool 
 	return $output;
 }
 
-/* DraftKings */
+/*
+	A book that fails, by an error or by throwing, doesn't stop the run. Its file is emptied, so the page
+	shows no prices from it rather than stale ones and the snapshot keeps the slot's earlier copy
+	(keepsEarlierPrices), and the failure becomes a warning, which the site's banner lists. Only a file
+	that can't be written stays an error.
+*/
+function withoutFailedBook(string $title, string $local_file, callable $fetch)
+{
+	try {
+		$output = $fetch();
+	} catch (Throwable $e) {
+		$output = ['title' => $title, 'content' => null, 'error' => get_class($e) . ': ' . $e->getMessage()];
+	}
+	if ($output['error'] === null) return $output;
+
+	if (file_put_contents($local_file, '[]', LOCK_EX) === false) {
+		$output['error'] = 'Error saving local JSON file: ' . $local_file;
+		return $output;
+	}
+	$output['warning'][] = "$title: no odds recorded: {$output['error']}";
+	$output['content'] = 'No odds recorded';
+	$output['error'] = null;
+	return $output;
+}
+
 function updateBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
+{
+	return withoutFailedBook('DraftKings', $basePath . '/bet1.json', fn() => fetchBet1($ch, $basePath, $savesrc));
+}
+
+function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
+{
+	return withoutFailedBook('FanDuel', $basePath . '/bet2.json', fn() => fetchBet2($endOfDay, $ch, $basePath, $savesrc));
+}
+
+function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
+{
+	return withoutFailedBook('BetMGM', $basePath . '/bet3.json', fn() => fetchBet3($endOfDay, $ch, $basePath, $savesrc));
+}
+
+function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
+{
+	return withoutFailedBook('BetRivers', $basePath . '/bet4.json', fn() => fetchBet4($endOfDay, $basePath, $savesrc));
+}
+
+/* DraftKings */
+function fetchBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'DraftKings';
@@ -372,7 +417,7 @@ function updateBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
 }
 
 /* FanDuel */
-function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
+function fetchBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'FanDuel';
@@ -511,7 +556,7 @@ function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 }
 
 /* BetMGM */
-function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
+function fetchBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'BetMGM';
@@ -681,9 +726,9 @@ function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $
 }
 
 /* BetRivers */
-function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
+function fetchBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 {
-	$output = ['title' => null, 'content' => null, 'warning' => [], 'error' => null];
+	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'BetRivers';
 
 	$remote_url_base = 'https://on.betrivers.ca/api/service/sportsbook/offering/propcentral/offers?groupId=1000093657&marketCategory=TO_SCORE&pageSize=20&cageCode=249&t=' . time() . '&pageNr=';
@@ -692,14 +737,60 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 	$remote_url = $remote_url_base . '1';
 
 	$fetched = fetchUrl($remote_url);
+	if ($fetched['error'] !== null) {
+		$output['error'] = $fetched['error'];
+		return $output;
+	}
 	$json_data = $fetched['body'];
+
 	$map = [];
-	if ($json_data === null) {
-		// Tolerated as "no offers today", the way it always has been, but it should not pass for a quiet day
-		$output['warning'][] = "No offers recorded: {$fetched['error']}";
-		$pages = 0;
-	} else {
-		if ($savesrc) file_put_contents($basePath . '/src_bet4_1.json', $json_data);
+	if ($savesrc) file_put_contents($basePath . '/src_bet4_1.json', $json_data);
+
+	$data_array = json_decode($json_data, false);
+	if (json_last_error() !== JSON_ERROR_NONE) {
+		$output['error'] = "Error decoding JSON from $remote_url: " . json_last_error_msg();
+		return $output;
+	}
+
+	if ($savesrc) $items = [$data_array->items];
+
+	if (!isset($data_array->items)) {
+		$output['error'] = "Missing items in response from page 1 of $remote_url_base";
+		return $output;
+	}
+
+	foreach ($data_array->items as $item) {
+		// Newer responses nest the closing time and odds under betOffers
+		$offer = $item->betOffers[0] ?? $item;
+		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $offer->closingTime);
+		if (!$closingTime) {
+			$output['error'] = "Invalid date format in response: " . $offer->closingTime;
+			return $output;
+		}
+		if ($closingTime > $endOfDay) continue;
+
+		$map[] = [
+			"name" => $item->playerInfo->name,
+			"odds" => $offer->outcomes[0]->odds
+		];
+	}
+
+	if (!isset($data_array->paging->totalPages)) {
+		$output['error'] = "Missing paging info in response from page 1 of $remote_url_base";
+		return $output;
+	}
+	$pages = $data_array->paging->totalPages;
+
+	for ($i = 2; $i <= $pages; $i++) {
+		$remote_url = $remote_url_base . $i;
+		$fetched = fetchUrl($remote_url);
+		if ($fetched['error'] !== null) {
+			$output['error'] = $fetched['error'];
+			return $output;
+		}
+		$json_data = $fetched['body'];
+
+		if ($savesrc) file_put_contents($basePath . '/src_bet4_' . $i . '.json', $json_data);
 
 		$data_array = json_decode($json_data, false);
 		if (json_last_error() !== JSON_ERROR_NONE) {
@@ -707,15 +798,9 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 			return $output;
 		}
 
-		if ($savesrc) $items = [$data_array->items];
-
-		if (!isset($data_array->items)) {
-			$output['error'] = "Missing items in response from page 1 of $remote_url_base";
-			return $output;
-		}
+		if ($savesrc) $items[] = $data_array->items;
 
 		foreach ($data_array->items as $item) {
-			// Newer responses nest the closing time and odds under betOffers
 			$offer = $item->betOffers[0] ?? $item;
 			$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $offer->closingTime);
 			if (!$closingTime) {
@@ -729,53 +814,12 @@ function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 				"odds" => $offer->outcomes[0]->odds
 			];
 		}
+	}
 
-		if (!isset($data_array->paging->totalPages)) {
-			$output['error'] = "Missing paging info in response from page 1 of $remote_url_base";
-			return $output;
-		}
-		$pages = $data_array->paging->totalPages;
-
-		for ($i = 2; $i <= $pages; $i++) {
-			$remote_url = $remote_url_base . $i;
-			$fetched = fetchUrl($remote_url);
-			if ($fetched['error'] !== null) {
-				$output['error'] = $fetched['error'];
-				return $output;
-			}
-			$json_data = $fetched['body'];
-
-			if ($savesrc) file_put_contents($basePath . '/src_bet4_' . $i . '.json', $json_data);
-
-			$data_array = json_decode($json_data, false);
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				$output['error'] = "Error decoding JSON from $remote_url: " . json_last_error_msg();
-				return $output;
-			}
-
-			if ($savesrc) $items[] = $data_array->items;
-
-			foreach ($data_array->items as $item) {
-				$offer = $item->betOffers[0] ?? $item;
-				$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $offer->closingTime);
-				if (!$closingTime) {
-					$output['error'] = "Invalid date format in response: " . $offer->closingTime;
-					return $output;
-				}
-				if ($closingTime > $endOfDay) continue;
-
-				$map[] = [
-					"name" => $item->playerInfo->name,
-					"odds" => $offer->outcomes[0]->odds
-				];
-			}
-		}
-
-		if ($savesrc && isset($items)) {
-			$items = array_merge([], ...$items);
-			$json_string = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-			file_put_contents($basePath . '/src_bet4.json', $json_string);
-		}
+	if ($savesrc && isset($items)) {
+		$items = array_merge([], ...$items);
+		$json_string = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+		file_put_contents($basePath . '/src_bet4.json', $json_string);
 	}
 
 	$json_string = json_encode($map, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
