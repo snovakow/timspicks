@@ -1,6 +1,6 @@
 ---
 name: health-server
-description: Check the live server's health from the machine it runs on. Reads the cron log and the two places cron failures hide (the PHP error log and cron mail), the live data folder (run state, today's feeds, the site banner, snapshot folders), and whether the files deployed to the live and update folders match main. Read-only. Use when asked whether the live site or the cron is healthy, why the live data looks stale, or whether a deploy is complete.
+description: Check the live server's health from the machine it runs on. Reads the cron log and the places cron failures hide (the PHP error log, the web server's access log and cron mail), the live data folder (run state, today's feeds, the site banner, snapshot folders), and whether the files deployed to the live and update folders match main. Read-only. Use when asked whether the live site or the cron is healthy, why the live data looks stale, or whether a deploy is complete.
 argument-hint: "[ref] [--days N] [--no-build]"
 model: opus
 effort: max
@@ -48,9 +48,10 @@ Older history in the window is listed in the sections, but only flagged within t
 
 **Cron.** The cron calls `update.php` every minute, and `update.php` throttles itself (docs/app-and-server.md, "Cadence"). So the log gets one line per run that did work: a snapshot path, a `Complete` line, or a step's error.
 - Errors are grouped by kind. A failure streak that retries every minute means the failed-run gate never engaged. That happens when a run dies before `startRun()` (docs/deployment.md, step 5).
-- The per-day table lists gaps over 75 minutes between midnight and the day's last start. A game day with no runs at all is a day the cron was off. Gaps aren't flagged on their own, because an Update from the admin page resets the hourly clock without writing to the cron log. A gap is a real miss when cron mail shows a silence across it, or the PHP log shows an error inside it.
+- The per-day table lists gaps over 75 minutes between midnight and the day's last start. A game day with no runs at all is a day the cron was off. Gaps aren't flagged on their own, because an Update from the admin page resets the hourly clock without writing to the cron log. A gap is a real miss when the access log shows a silence across it, or the PHP log shows an error inside it.
 - **PHP error log.** PHP doesn't display errors on this server, so a fatal error in `update.php` or `fetch_lib.php` writes nothing to the cron log. It only shows up in PHP's own log. The survey keeps the entries that name the live or update folder. A "Failed opening required" fatal for `fetch_lib.php` around a deploy usually means the cron ran while files were being copied.
-- **Cron mail.** curl's progress meter goes to stderr, so cron mails it on every call, which makes the mail a record of every call. A silence over 15 minutes means cron itself didn't fire, because the machine slept or cron stopped. A `curl: (N)` line means the call never reached the web server. Cron sometimes fires the job twice in one minute. The throttle absorbs the extra call, and "Minutes with two or more runs" in the cron log section flags the rare case where both got through.
+- **Cron calls.** The web server's access log has a line for every cron call that reached it, so it is the record of every call. A silence over 15 minutes means cron itself didn't fire, because the machine slept or cron stopped, or that curl failed, which cron mail then shows. Cron can fire the job twice in one minute, though rarely; cron mail sometimes holds two copies of one call's message, which isn't a second call. The throttle absorbs an extra call, and "Minutes with two or more runs" in the cron log section flags the rare case where both got through.
+- **Cron mail.** The cron line runs `curl -sS`, so cron mails only what curl prints when a call fails. A `curl: (N)` line means the call never reached the web server. Without `-sS`, curl's progress meter gets mailed on every call and the spool grows without end; the survey says so when mail still arrives every minute.
 
 **Data.** The survey reads the live data the way the app and the cron read it.
 - "Site banner now" applies the app's own rules, from `getDataStatus` in src/dataProcessor.ts and App.tsx, so it says what visitors see.
@@ -67,7 +68,7 @@ Older history in the window is listed in the sections, but only flagged within t
 - Leftover assets from older builds are harmless.
 - The copy list follows the order in docs/deployment.md: the front-end assets, then `index.html`, then the PHP in the live folder, then `update.php`.
 
-**Server.** This covers free disk space, the size of the web server's log folder and the cron mail spool. The spool grows with every call, because of the progress meter. `curl -sS` in the cron line would stop that and still mail curl's errors, but the survey would lose its view of when cron didn't fire. Suggest it with that trade-off, and never apply it.
+**Server.** This covers free disk space, the size of the web server's log folder and the cron mail spool. With `-sS` in the cron line the spool only grows when curl fails.
 
 ## 3. Dig into what's flagged
 

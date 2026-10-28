@@ -263,6 +263,9 @@ const confFiles = httpdConf
 const confText = confFiles.map(readText).filter(Boolean).join('\n');
 const documentRoots = [...new Set([...confText.matchAll(/^\s*DocumentRoot\s+"?([^"\n]+?)"?\s*$/gm)].map((match) => match[1]))];
 const serverLogs = [...confText.matchAll(/^\s*ErrorLog\s+"?([^"\n|]+?)"?\s*$/gm)].map((match) => match[1]).filter((path) => path.startsWith('/'));
+// Every request that reaches the web server gets a line here, which makes it the record of every cron call
+const accessLogs = [...new Set([...confText.matchAll(/^\s*(?:CustomLog|TransferLog)\s+(?:"([^"\n]+)"|(\S+))/gm)].map((match) => match[1] ?? match[2]))]
+	.filter((path) => path.startsWith('/') && isFile(path));
 
 // The update folder holds update.php, and update.php loads fetch_lib.php from ../<lib>
 const validUpdate = (dir, lib) => isFile(join(dir, 'update.php')) && isFile(join(dir, '..', lib, 'fetch_lib.php'));
@@ -339,6 +342,7 @@ say(`Update folder: ${updateDir ? `${updateDir}, from ${updateHow}` : '(not foun
 if (updateOthers.length) say(`Also matched: ${updateOthers.join(', ')}`);
 say(`Live folder: ${liveDir ?? '(unknown without the update folder)'}`);
 say(`PHP error log: ${phpLog ?? '(not found; pass --php-log <file>)'}`);
+say(`Access logs: ${accessLogs.length ? accessLogs.join(', ') : '(none named in the web server config)'}`);
 say(`Cron mail: ${mailPath ?? '(none)'}`);
 if (ignored.length) say(`Ignored arguments: ${ignored.join(' ')}`);
 
@@ -469,10 +473,64 @@ guard('cron', () => {
 		}
 	}
 
-	// Cron mail: one message per run while curl prints its progress meter, so a silence means cron didn't fire
+	// The access log: one line per cron call that reached the web server, so a silence means cron didn't fire
 	say('');
+	const ACCESS_LINE = /\[(\d{2})\/(\w{3})\/(\d{4}):(\d{2}:\d{2}:\d{2}) ([+-]\d{4})\] "GET (\S+)/;
+	const calls = [];
+	let callsReach = null;
+	for (const path of accessLogs) {
+		const tail = readTail(path);
+		let first = null;
+		for (const line of (tail?.text ?? '').split('\n')) {
+			const match = ACCESS_LINE.exec(line);
+			if (!match) continue;
+			const [, day, month, year, clock, zone, target] = match;
+			const time = new Date(`${day} ${month} ${year} ${clock} ${zone}`);
+			if (isNaN(time)) continue;
+			first ??= time;
+			let request = null;
+			try { request = new URL(target, 'http://localhost'); } catch { continue; }
+			if (job && request.pathname === job.urlPath && (request.searchParams.get('lib') ?? 'public') === lib) calls.push(time);
+		}
+		// With several logs, only the span all of them cover is complete
+		if (first && tail?.partial && (!callsReach || first > callsReach)) callsReach = first;
+	}
+	calls.sort((a, b) => a - b);
+	callsReach ??= calls[0] ?? null;
+	if (!accessLogs.length) {
+		say('Cron calls: no access log, so cron silences can\'t be checked');
+	} else if (!calls.length) {
+		say(`Cron calls: none to ${job?.urlPath ?? 'update.php'} in the access log`);
+		if (job) warn('The access log has no calls to update.php, so the cron\'s calls aren\'t reaching the web server');
+	} else {
+		const lastDay = calls.filter((time) => time >= dayAgo);
+		// Cron sometimes fires the job twice in one minute; the throttle absorbs the extra call unless a run is due
+		const perMinute = new Map();
+		for (const time of lastDay) {
+			const minute = Math.floor(time / 60000);
+			perMinute.set(minute, (perMinute.get(minute) ?? 0) + 1);
+		}
+		const twice = [...perMinute.values()].filter((count) => count > 1).length;
+		say(`Cron calls in the access log: ${calls.length}, back to ${etStamp(callsReach)}`);
+		say(`Cron calls in the last 24 h: ${lastDay.length} across ${plural(perMinute.size, 'minute')}${twice ? `, ${twice} of them with two calls` : ''}`
+			+ `${callsReach > dayAgo ? `; the access log only reaches back ${span(now - callsReach)}` : ''}`);
+
+		const silences = [];
+		for (let index = 1; index < calls.length; index += 1) {
+			const gap = calls[index] - calls[index - 1];
+			if (gap > CRON_GAP_LIMIT) silences.push({ from: calls[index - 1], to: calls[index], gap });
+		}
+		const sinceLast = now - calls.at(-1);
+		if (sinceLast > CRON_GAP_LIMIT) silences.push({ from: calls.at(-1), to: null, gap: sinceLast });
+		say(`Times cron didn't fire for over 15 min: ${silences.length ? '' : 'none'}`);
+		for (const silence of silences.slice(-5)) say(`    ${etStamp(silence.from)} to ${silence.to ? etStamp(silence.to) : 'now'}, ${span(silence.gap)}`);
+		if (sinceLast > CRON_GAP_LIMIT) fail(`Cron hasn't reached update.php for ${span(sinceLast)}; the machine may be asleep, cron stopped, or curl is failing (see cron mail)`);
+		else if (silences.some((silence) => silence.to >= flagSince)) warn(`Cron didn't fire for over 15 min at least once in the last 48 h; see Cron`);
+	}
+
+	// Cron mail: with curl -sS, only what curl prints when a call fails; without it, the progress meter on every call
 	if (!mailPath) {
-		say('Cron mail: none, so curl failures and cron silences can\'t be checked');
+		say('Cron mail: none, so curl failures can\'t be checked');
 	} else {
 		const mail = readTail(mailPath);
 		const chunks = (mail?.text ?? '').split(/^From \S+ .*$/m);
@@ -486,41 +544,17 @@ guard('cron', () => {
 			messages.push({ time, errors: [...body.matchAll(/(?:curl: \(\d+\)|(?:\/bin\/)?sh: )[^\r\n]*/g)].map((match) => match[0].trim()) });
 		}
 		messages.sort((a, b) => a.time - b.time);
-		const reach = messages[0]?.time ?? null;
-		const lastDay = messages.filter((message) => message.time >= dayAgo);
-		// Cron sometimes fires the job twice in one minute; the throttle absorbs the extra call unless a run is due
-		const perMinute = new Map();
-		for (const message of lastDay) {
-			const minute = Math.floor(message.time / 60000);
-			perMinute.set(minute, (perMinute.get(minute) ?? 0) + 1);
-		}
-		const twice = [...perMinute.values()].filter((count) => count > 1).length;
-		say(`Cron mail: ${sizeOf(mail?.size ?? 0)}, ${plural(messages.length, 'run')} in its last 4 MB${reach ? `, back to ${etStamp(reach)}` : ''}`);
-		say(`Cron runs in the last 24 h: ${lastDay.length} across ${plural(perMinute.size, 'minute')}${twice ? `, ${twice} of them with two calls` : ''}`
-			+ `${reach && reach > dayAgo ? `; the mail read only reaches back ${span(now - reach)}` : ''}`);
-
+		say(`Cron mail: ${sizeOf(mail?.size ?? 0)}, ${plural(messages.length, 'message')}${mail?.partial ? ' in its last 4 MB' : ''}${messages.length ? `, back to ${etStamp(messages[0].time)}` : ''}`);
 		const typical = median(messages.slice(1).map((message, index) => message.time - messages[index].time));
-		if (typical !== null && typical <= 90 * 1000) {
-			const silences = [];
-			for (let index = 1; index < messages.length; index += 1) {
-				const gap = messages[index].time - messages[index - 1].time;
-				if (gap > CRON_GAP_LIMIT) silences.push({ from: messages[index - 1].time, to: messages[index].time, gap });
-			}
-			const sinceLast = messages.length ? now - messages.at(-1).time : 0;
-			if (sinceLast > CRON_GAP_LIMIT) silences.push({ from: messages.at(-1).time, to: null, gap: sinceLast });
-			say(`Times cron didn't fire for over 15 min: ${silences.length ? '' : 'none'}`);
-			for (const silence of silences.slice(-5)) say(`    ${etStamp(silence.from)} to ${silence.to ? etStamp(silence.to) : 'now'}, ${span(silence.gap)}`);
-			if (sinceLast > CRON_GAP_LIMIT) fail(`Cron hasn't run update.php for ${span(sinceLast)}; the machine may be asleep or cron stopped`);
-			else if (silences.some((silence) => silence.to >= flagSince)) warn(`Cron didn't fire for over 15 min at least once in the last 48 h; see Cron`);
-		} else if (messages.length) {
-			say('Cron mail isn\'t sent on every run, so it can\'t show when cron didn\'t fire');
-		}
+		if (typical !== null && typical <= 90 * 1000 && messages.at(-1).time >= dayAgo) say('Cron mail still arrives on every call, so the spool keeps growing; curl -sS in the cron line stops that');
 
 		const curlErrors = messages.flatMap((message) => message.errors.map((text) => ({ time: message.time, text })));
 		const recentCurl = curlErrors.filter((error) => error.time >= dayAgo);
 		say(`curl errors: ${recentCurl.length} in the last 24 h, ${curlErrors.length} in the mail read`);
 		for (const group of groupBy(curlErrors, (error) => normalize(error.text)).slice(0, 5)) say(`    ${group.count} × ${clip(group.key, 120)}, last ${etStamp(group.last)}`);
-		if (messages.at(-1)?.errors.length) fail(`The latest cron call failed in curl: ${clip(normalize(messages.at(-1).errors[0]), 120)}`);
+		// A failed call never reaches the access log, so the failure is current until a call gets through
+		const lastError = curlErrors.at(-1);
+		if (lastError && (!calls.length || lastError.time > calls.at(-1))) fail(`The latest cron call failed in curl: ${clip(normalize(lastError.text), 120)}`);
 		else if (recentCurl.length) warn(`curl failed ${plural(recentCurl.length, 'time')} in the last 24 h, the latest ${at(recentCurl.at(-1).time)}`);
 	}
 
