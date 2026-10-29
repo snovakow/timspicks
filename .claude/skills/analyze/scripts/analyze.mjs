@@ -3,9 +3,10 @@
 // replays build them (runSimulation and runHistoricalStrategyAudit in src/picksOptimizer.ts), proves the
 // rebuild by fitting the correlation lifts from it and matching runSimulation's own, then tests three
 // questions on actual results: whether picks from one game score together beyond their odds and whether the
-// correlation lifts improve picks, whether one time slot gives better picks, and whether one book, or the
-// average of any two, three or all four books, picks better. Each answer is then measured within the regular
-// season and within the playoffs, and the two are compared.
+// correlation lifts improve picks, whether one time slot gives better picks or a player's odds get more accurate
+// as his game approaches, and whether one book, or the average of any two, three or all four books, picks
+// better. Each answer is then measured within the regular season and within the playoffs, and the two are
+// compared.
 //
 //   node .claude/skills/analyze/scripts/analyze.mjs [--since YYYY-MM-DD] [--until YYYY-MM-DD]
 //       [--format regular|playoff] [--root <site folder>]... [--live <dir>] [--seed N] [--boot N] [--out <dir>]
@@ -928,6 +929,184 @@ holm(slotPairs.map((pair) => pair.streak.p)).forEach((adjusted, index) => { slot
 holm(slotPairs.map((pair) => pair.picks.p)).forEach((adjusted, index) => { slotPairs[index].picks.adjusted = adjusted; });
 results.slots = { rows: slotRows, pairs: slotPairs };
 
+// How often a scorer is priced above a non-scorer, a tie counting half, with each day weighted by how often a
+// bootstrap draw took it. The pairs are counted once for every pair of days, so a draw costs a sum over the days it
+// took instead of a pass over every player-day. Every count is whole or half, so the sums are exact in any order
+const aucOf = (rows, score) => {
+	const size = days.length;
+	const sorted = rows.map((row) => ({ score: score(row), positive: row.scored, day: row.dayIndex })).sort((a, b) => a.score - b.score);
+	const above = new Float64Array(size * size); // [scorer's day * size + non-scorer's day]
+	const scorers = new Float64Array(size);
+	const others = new Float64Array(size); // by day, the non-scorers priced below the current price, and at the end all of them
+	const tied = new Float64Array(size);
+	for (let start = 0; start < sorted.length;) {
+		let end = start;
+		while (end < sorted.length && sorted[end].score === sorted[start].score) end += 1;
+		for (let index = start; index < end; index += 1) if (!sorted[index].positive) tied[sorted[index].day] += 1;
+		for (let index = start; index < end; index += 1) {
+			if (!sorted[index].positive) continue;
+			const day = sorted[index].day;
+			scorers[day] += 1;
+			for (let other = 0; other < size; other += 1) above[day * size + other] += others[other] + tied[other] / 2;
+		}
+		for (let index = start; index < end; index += 1) {
+			const day = sorted[index].day;
+			others[day] += tied[day];
+			tied[day] = 0;
+		}
+		start = end;
+	}
+	const ones = new Float64Array(size).fill(1);
+	return (weights = ones) => {
+		const drawn = [];
+		for (let day = 0; day < size; day += 1) if (weights[day]) drawn.push(day);
+		let sum = 0;
+		let positives = 0;
+		let negatives = 0;
+		for (const a of drawn) {
+			let row = 0;
+			for (const b of drawn) row += weights[b] * above[a * size + b];
+			sum += weights[a] * row;
+			positives += weights[a] * scorers[a];
+			negatives += weights[a] * others[a];
+		}
+		return sum / (positives * negatives);
+	};
+};
+
+// Do a player's odds get more accurate as his game approaches? A window's prices are as of its book files' last
+// write, since later runs before the same lock overwrite them. Each player-day pairs his earliest priced snapshot
+// with his latest before puck drop, and the Brier score of each against his result is compared day by day. A window
+// has a usable time only when one run wrote all its book files, on its own day, after the day's earlier windows: a
+// backfill is written on another day, and a book file rewritten later isn't a snapshot of that time. A row written
+// after its game started is a live price, not a pre-game one
+const SAME_RUN = 5 * 60000; // one run writes a window's book files within this of each other
+const etDay = (date) => etStamp(date).slice(0, 10);
+const gameStarts = new Map();
+const startOfGame = (day, team) => {
+	if (!gameStarts.has(day)) {
+		const map = new Map();
+		for (const week of archiveJson(`./data/${day}/games.json`)?.gameWeek ?? []) {
+			if (week.date !== day) continue;
+			for (const game of week.games ?? []) for (const side of [game.awayTeam, game.homeTeam]) if (side?.abbrev) map.set(side.abbrev, Date.parse(game.startTimeUTC));
+		}
+		gameStarts.set(day, map);
+	}
+	return gameStarts.get(day).get(team) ?? null;
+};
+const TIMED_KEYS = ['betAvg', ...BOOKS];
+const timingCoverage = { otherDay: [], apart: [], outOfOrder: [], afterStart: 0 };
+const writtenAt = new Map(); // the windows with a usable time, and when their prices are from
+for (const list of groupBy(windows, (window) => window.day).values()) {
+	const timed = [];
+	for (const window of list) {
+		const label = `${window.day} ${window.time}`;
+		const stamps = BOOKS.map((book) => statOf(archivePath(`./data/${window.day}/${window.time}/${book}.json`))?.mtimeMs ?? NaN);
+		const written = Math.max(...stamps);
+		if (!Number.isFinite(written) || etDay(new Date(written)) !== window.day) timingCoverage.otherDay.push(label);
+		else if (written - Math.min(...stamps) > SAME_RUN) timingCoverage.apart.push(label);
+		else timed.push({ window, written });
+	}
+	// Each window is written after the previous lock, so a day written out of slot order was copied or rewritten
+	if (timed.some((entry, index) => index && entry.written < timed[index - 1].written - SAME_RUN)) timingCoverage.outOfOrder.push(...timed.map(({ window }) => `${window.day} ${window.time}`));
+	else for (const { window, written } of timed) writtenAt.set(window, written);
+}
+const snapshotsOf = new Map(); // day|player: his snapshots that day, each with every price
+for (const [window, written] of writtenAt) {
+	for (const row of window.rows) {
+		const start = startOfGame(window.day, row.team);
+		if (start === null) continue;
+		if (start <= written) {
+			timingCoverage.afterStart += 1;
+			continue;
+		}
+		const key = `${window.day}|${row.id}`;
+		if (!snapshotsOf.has(key)) snapshotsOf.set(key, { day: window.day, dayIndex: dayIndex.get(window.day), sid: row.sid, scored: !!row.scored, snaps: [] });
+		snapshotsOf.get(key).snaps.push({ written, lead: (start - written) / 60000, prices: Object.fromEntries(TIMED_KEYS.map((price) => [price, row[price]])) });
+	}
+}
+const brierOf = (scored, price) => ((scored ? 1 : 0) - price) ** 2;
+const logLossOf = (scored, price) => -Math.log(scored ? price : 1 - price);
+const timingRows = TIMED_KEYS.map((key) => {
+	const pairs = [];
+	for (const { snaps, ...player } of snapshotsOf.values()) {
+		const priced = snaps.filter((snap) => snap.prices[key] !== null).sort((a, b) => a.written - b.written);
+		if (priced.length < 2 || priced[0].written === priced.at(-1).written) continue;
+		const [early, late] = [priced[0], priced.at(-1)];
+		pairs.push({ ...player, early: early.prices[key], late: late.prices[key], earlyLead: early.lead, lateLead: late.lead });
+	}
+	const units = [...groupBy(pairs, (pair) => pair.dayIndex).entries()].map(([day, list]) => ({
+		day, sum: total(list, (pair) => brierOf(pair.scored, pair.early) - brierOf(pair.scored, pair.late)), count: list.length,
+	}));
+	const median = (pick) => quantile(pairs.map(pick).sort((a, b) => a - b), 0.5);
+	return {
+		key, pairs, units, days: units.length, moved: pairs.filter((pair) => Math.abs(pair.late - pair.early) > 1e-12).length,
+		earlyLead: median((pair) => pair.earlyLead), lateLead: median((pair) => pair.lateLead),
+		priceEarly: average(pairs, (pair) => pair.early), priceLate: average(pairs, (pair) => pair.late), scoredRate: average(pairs, (pair) => (pair.scored ? 1 : 0)),
+		brierEarly: average(pairs, (pair) => brierOf(pair.scored, pair.early)), brierLate: average(pairs, (pair) => brierOf(pair.scored, pair.late)),
+		logLossEarly: average(pairs, (pair) => logLossOf(pair.scored, pair.early)), logLossLate: average(pairs, (pair) => logLossOf(pair.scored, pair.late)),
+		better: units.filter((unit) => unit.sum > 1e-12).length, worse: units.filter((unit) => unit.sum < -1e-12).length,
+		test: units.length ? pairedTest(`timing-${key}`, units) : null,
+	};
+}).filter((row) => row.test);
+const avgTiming = timingRows.find((row) => row.key === 'betAvg') ?? null;
+// Secondary, the Avg and each book corrected together: prices that predict better change the picks only through the
+// lists they change, which the lines below count
+holm(timingRows.map((row) => row.test.p)).forEach((adjusted, index) => { timingRows[index].test.adjusted = adjusted; });
+// The Avg's AUC at each end, and whether it would change the pick: each list's top player among the players with both
+// snapshots, by the earliest prices and by the latest, with tied players sharing the pick
+let timingAuc = null;
+let timingPicks = null;
+if (avgTiming) {
+	const early = aucOf(avgTiming.pairs, (pair) => pair.early);
+	const late = aucOf(avgTiming.pairs, (pair) => pair.late);
+	const draws = bootstrap('timing-auc', days.length, (pick) => {
+		const weights = new Float64Array(days.length);
+		for (const index of pick) weights[index] += 1;
+		return late(weights) - early(weights);
+	});
+	timingAuc = { early: early(), late: late(), diff: late() - early(), interval: interval(draws) };
+	const lists = [...groupBy(avgTiming.pairs, (pair) => `${pair.day}|${pair.sid}`).values()];
+	const topOf = (list, price) => {
+		const best = Math.max(...list.map(price));
+		return list.filter((pair) => price(pair) === best);
+	};
+	const changed = lists
+		.map((list) => ({ early: topOf(list, (pair) => pair.early), late: topOf(list, (pair) => pair.late) }))
+		.filter(({ early: a, late: b }) => a.length !== b.length || a.some((pair) => !b.includes(pair)));
+	const scoredShare = (tops) => average(tops, (pair) => (pair.scored ? 1 : 0));
+	timingPicks = { lists: lists.length, changed: changed.length, early: average(changed, (entry) => scoredShare(entry.early)), late: average(changed, (entry) => scoredShare(entry.late)) };
+}
+// The day's last window holds only players in games about to start, so all its prices are the freshest. The Avg top
+// ticket from its own players, on their prices in the day's first window and on its own, separates the freshness of
+// the odds from the smaller pool, which the slot comparisons can't. Both windows need a usable time: a backfill can
+// hold the same prices in every window
+const lastWindow = { days: 0, changed: 0, early: 0, late: 0, differ: 0 };
+for (const list of avgByDay.values()) {
+	if (list.length < 2 || !writtenAt.has(list[0]) || !writtenAt.has(list.at(-1))) continue;
+	const firstPrices = new Map(list[0].rows.filter((row) => row.betAvg !== null).map((row) => [row.id, row.betAvg]));
+	const players = list.at(-1).rows.filter((row) => row.betAvg !== null && firstPrices.has(row.id));
+	const tops = (price) => LISTS.map((sid) => {
+		const pool = players.filter((row) => row.sid === sid);
+		if (!pool.length) return null;
+		const best = Math.max(...pool.map(price));
+		const tied = pool.filter((row) => price(row) === best);
+		return { ids: tied.map((row) => row.id).sort().join(), missed: average(tied, (row) => (row.scored ? 0 : 1)) };
+	});
+	const [early, late] = [tops((row) => firstPrices.get(row.id)), tops((row) => row.betAvg)];
+	if (early.some((top) => !top)) continue;
+	const streak = (ticket) => 1 - ticket.reduce((product, top) => product * top.missed, 1);
+	lastWindow.days += 1;
+	lastWindow.changed += early.filter((top, index) => top.ids !== late[index].ids).length;
+	lastWindow.early += streak(early);
+	lastWindow.late += streak(late);
+	if (Math.abs(streak(early) - streak(late)) > 1e-12) lastWindow.differ += 1;
+}
+results.timing = {
+	coverage: timingCoverage, auc: timingAuc, picks: timingPicks, lastWindow,
+	rows: timingRows.map(({ pairs, units, ...row }) => ({ ...row, pairs: pairs.length })),
+};
+
 // --- 3. Sportsbooks: the top ticket of each subset of the books, the Avg's among them ------------
 
 // Only windows where every subset has a ticket, so every subset is measured on the same windows
@@ -974,50 +1153,6 @@ for (const measure of ['streak', 'picks']) {
 
 // Player level: how well each subset's prices sort scorers from non-scorers, on players all four books priced
 const fourBooks = playerDays.filter((row) => BOOKS.every((book) => row[book] !== null));
-// How often a scorer is priced above a non-scorer, a tie counting half, with each day weighted by how often a
-// bootstrap draw took it. The pairs are counted once for every pair of days, so a draw costs a sum over the days it
-// took instead of a pass over every player-day. Every count is whole or half, so the sums are exact in any order
-const aucOf = (rows, score) => {
-	const size = days.length;
-	const sorted = rows.map((row) => ({ score: score(row), positive: row.scored, day: row.dayIndex })).sort((a, b) => a.score - b.score);
-	const above = new Float64Array(size * size); // [scorer's day * size + non-scorer's day]
-	const scorers = new Float64Array(size);
-	const others = new Float64Array(size); // by day, the non-scorers priced below the current price, and at the end all of them
-	const tied = new Float64Array(size);
-	for (let start = 0; start < sorted.length;) {
-		let end = start;
-		while (end < sorted.length && sorted[end].score === sorted[start].score) end += 1;
-		for (let index = start; index < end; index += 1) if (!sorted[index].positive) tied[sorted[index].day] += 1;
-		for (let index = start; index < end; index += 1) {
-			if (!sorted[index].positive) continue;
-			const day = sorted[index].day;
-			scorers[day] += 1;
-			for (let other = 0; other < size; other += 1) above[day * size + other] += others[other] + tied[other] / 2;
-		}
-		for (let index = start; index < end; index += 1) {
-			const day = sorted[index].day;
-			others[day] += tied[day];
-			tied[day] = 0;
-		}
-		start = end;
-	}
-	const ones = new Float64Array(size).fill(1);
-	return (weights = ones) => {
-		const drawn = [];
-		for (let day = 0; day < size; day += 1) if (weights[day]) drawn.push(day);
-		let sum = 0;
-		let positives = 0;
-		let negatives = 0;
-		for (const a of drawn) {
-			let row = 0;
-			for (const b of drawn) row += weights[b] * above[a * size + b];
-			sum += weights[a] * row;
-			positives += weights[a] * scorers[a];
-			negatives += weights[a] * others[a];
-		}
-		return sum / (positives * negatives);
-	};
-};
 const aucs = Object.fromEntries(SUBSET_KEYS.map((key) => [key, aucOf(fourBooks, (row) => row[key])]));
 const playerRows = SUBSET_KEYS.map((key) => {
 	const row = { key, implied: average(fourBooks, (player) => player[key]), auc: aucs[key]() };
@@ -1237,6 +1372,7 @@ if (splitFormats) {
 		add({ question: 'time slot', primary: true, type: 'slot', a: pair.a, b: pair.b, label: `${pair.label}, Streak` },
 			formatPaired(`slot-${pair.label}`, matchSlots(pair.a, pair.b).map(([x, y]) => ({ day: dayIndex.get(x.day), sum: metric(x).streak - metric(y).streak, count: 1 }))));
 	}
+	if (avgTiming) add({ question: 'odds timing', primary: false, type: 'timing', label: 'Avg Brier, latest vs earliest' }, formatPaired('timing', avgTiming.units));
 	for (const measure of ['streak', 'picks']) {
 		add({ question: 'sportsbooks', primary: true, type: 'books', measure, label: `any subset, ${measure === 'streak' ? 'Streak' : 'picks correct'}` }, formatBooks(measure));
 	}
@@ -1274,6 +1410,7 @@ holm(correlationPrimary.map((test) => test.p)).forEach((adjusted, index) => {
 // Secondary: the other books' backtests, corrected together. The near-top tests are a family of their own
 const otherBacktests = KEYS.filter((key) => key !== 'betAvg').flatMap((key) => CORRELATED.map((strategy) => backtest[key][strategy])).filter(Boolean);
 holm(otherBacktests.map((result) => result.test.p)).forEach((adjusted, index) => { otherBacktests[index].test.adjusted = adjusted; });
+const timingText = (row) => `${keyName(row.key)}'s latest price before each game vs its earliest that day: Brier ${signed(row.test.estimate, 5, 1, '')} ${span([row.test.low, row.test.high], (v) => signed(v, 5, 1, ''))} per player over ${plural(row.days, 'day')} (better on ${row.better} vs ${row.worse})`;
 const slotPrimary = slotPairs.map((pair) => ({
 	text: `${pair.label}: Streak ${signed(pair.streak.estimate)} ${span([pair.streak.low, pair.streak.high], (v) => signed(v))} over ${plural(pair.days, 'day')} (better on ${pair.aBetter} vs ${pair.bBetter})`,
 	p: pair.streak.p, adjusted: pair.streak.adjusted,
@@ -1349,6 +1486,7 @@ for (const pair of slotPairs) {
 		});
 	}
 }
+for (const row of timingRows) consider({ primary: false, question: 'odds timing', p: row.test.p, adjusted: row.test.adjusted, favors: 'none', text: timingText(row) });
 const versusFindings = (versus, primary, where, label) => {
 	for (const entry of versus) {
 		consider({
@@ -1381,7 +1519,7 @@ for (const [rows, name, label] of [[perSlotBooks, (row) => `${bucketName(row.buc
 // Regular season vs playoffs. A result within one format is primary only when its pooled test is primary and the
 // result also differs significantly between the formats; otherwise the pooled result stands, and it's for rechecking
 const FORMAT_QUESTION = 'regular season vs playoffs';
-const formatValue = (test, value) => (test.type === 'lift' ? times(value) : test.type === 'auc' ? signed(value, 4, 1, '') : test.type === 'backtest' ? backtestFormat(test.strategy)(value) : signed(value));
+const formatValue = (test, value) => (test.type === 'lift' ? times(value) : test.type === 'auc' ? signed(value, 4, 1, '') : test.type === 'timing' ? signed(value, 5, 1, '') : test.type === 'backtest' ? backtestFormat(test.strategy)(value) : signed(value));
 const formatCell = (test, part) => {
 	if (test.type === 'books') return part.rates ? `${pct(Math.min(...part.rates), 0)}–${pct(Math.max(...part.rates), 0)}` : '';
 	const bound = test.type === 'lift' ? (v) => v.toFixed(2) : (v) => formatValue(test, v);
@@ -1415,10 +1553,11 @@ for (const test of formatTests) {
 			}
 			return;
 		}
-		const favors = test.type === 'slot' ? 'when' : test.type === 'lift' ? 'other' : part.estimate > 0 ? 'other' : 'avg';
+		const favors = test.type === 'slot' ? 'when' : test.type === 'timing' ? 'none' : test.type === 'lift' ? 'other' : part.estimate > 0 ? 'other' : 'avg';
 		const short = test.type === 'lift' ? liftShort(test.label, part.estimate)
 			: test.type === 'backtest' ? backtestShort(test.strategy, part.estimate)
-				: test.type === 'slot' ? slotShort(test.a, test.b, part.estimate, 'Streak') : aucShort(test.key, part.estimate);
+				: test.type === 'slot' ? slotShort(test.a, test.b, part.estimate, 'Streak')
+					: test.type === 'auc' ? aucShort(test.key, part.estimate) : undefined;
 		consider({ primary, question: test.question, format, p: part.p, adjusted: part.adjusted, favors, text: `${where}${test.label}: ${formatCell(test, part)} over ${plural(test.days[f], 'day')}`, short });
 	});
 }
@@ -1488,6 +1627,11 @@ say(`  Near the top of the lists: ${['same', 'opp'].map((kind) => {
 	return `${kind === 'same' ? 'teammates' : 'opponents'} ${times(test.near)} against ${times(test.rest)} for the other pairs (p ${pText(test.p)}, Holm ${pText(test.adjusted)})${test.adjusted < ALPHA ? ', SIGNIFICANT' : ''}`;
 }).join('; ')}`);
 say(`Time slot: ${verdictLine(slotPrimary)}`);
+if (avgTiming) {
+	say(`  Odds timing (secondary): ${timingText(avgTiming)} (p ${pText(avgTiming.test.p)}, Holm ${pText(avgTiming.test.adjusted)})${avgTiming.test.adjusted < ALPHA ? ', SIGNIFICANT' : ''}${lastWindow.days
+		? `; the last window's top ticket on its own prices against the day's first: Streak ${pct(lastWindow.late / lastWindow.days)} vs ${pct(lastWindow.early / lastWindow.days)}`
+		: ''}`);
+}
 const anySubsetText = `any-subset test p ${pText(anySubset.streak)} on Streak, ${pText(anySubset.picks)} on picks (Holm ${pText(anySubset.streakAdjusted)}, ${pText(anySubset.picksAdjusted)})`;
 say(`Sportsbooks: ${anySubset.streakAdjusted < ALPHA || anySubset.picksAdjusted < ALPHA ? `SIGNIFICANT: ${anySubsetText}${bookHits.length ? `; ${bookHits.join('; ')}` : '; no single subset differs from the Avg after Holm'}` : `no subset of the books picks differently from the others: ${anySubsetText}`}`);
 if (formatTests.length) {
@@ -1573,6 +1717,38 @@ table(['comparison', 'days', 'better on', 'odds diff', 'Streak diff', '95% CI', 
 	pText(pair.streak.p), pText(pair.streak.adjusted), signed(pair.picks.estimate), pText(pair.picks.p), pText(pair.picks.adjusted),
 ]));
 
+sub('Odds as the game approaches');
+say('Each player-day priced at least twice before his game: his earliest snapshot that day against his latest. A snapshot\'s prices are as of');
+say('its book files\' last write; lead is how long before his puck drop that was. Brier gain is the earliest\'s Brier score minus the latest\'s,');
+say('per player, so above 0 means the latest prices predicted better. The test flips each day\'s summed gain.');
+const daysOf = (labels) => {
+	const list = [...new Set(labels.map((label) => label.slice(0, 10)))];
+	return `${list.slice(0, SHOW).join(', ')}${list.length > SHOW ? ', …' : ''}`;
+};
+const { otherDay, apart, outOfOrder, afterStart } = timingCoverage;
+const leftOut = [
+	otherDay.length && `${plural(otherDay.length, 'window')} written on another day (${daysOf(otherDay)})`,
+	apart.length && `${plural(apart.length, 'window')} whose book files were written at different times (${apart.slice(0, SHOW).join(', ')}${apart.length > SHOW ? ', …' : ''})`,
+	outOfOrder.length && `${plural(outOfOrder.length, 'window')} on days written out of slot order (${daysOf(outOfOrder)})`,
+	afterStart && `${plural(afterStart, 'row')} written after the player's game started`,
+].filter(Boolean);
+if (leftOut.length) say(`Left out: ${leftOut.join('; ')}`);
+table(['price', 'player-days', 'days', 'moved', 'lead, earliest', 'latest', 'Brier earliest', 'latest', 'gain', '95% CI', 'better on', 'p', 'Holm'], timingRows.map((row) => [
+	keyName(row.key), row.pairs.length, row.days, row.moved, `${Math.round(row.earlyLead)} min`, `${Math.round(row.lateLead)} min`,
+	row.brierEarly.toFixed(5), row.brierLate.toFixed(5), signed(row.test.estimate, 5, 1, ''), span([row.test.low, row.test.high], (v) => signed(v, 5, 1, '')),
+	`${row.better} vs ${row.worse}`, pText(row.test.p), pText(row.test.adjusted),
+]));
+say('Secondary: Holm over the Avg and the four books together.');
+if (avgTiming && timingAuc) {
+	say(`Avg: mean price ${pct(avgTiming.priceEarly)} earliest, ${pct(avgTiming.priceLate)} latest, against ${pct(avgTiming.scoredRate)} scored; log loss ${avgTiming.logLossEarly.toFixed(4)} earliest, ${avgTiming.logLossLate.toFixed(4)} latest; AUC ${timingAuc.early.toFixed(4)} earliest, ${timingAuc.late.toFixed(4)} latest (${signed(timingAuc.diff, 4, 1, '')} ${span(timingAuc.interval, (v) => signed(v, 4, 1, ''))}).`);
+	say(`Picks: among these players, each list's top Avg player by the latest prices differs from the earliest prices' in ${timingPicks.changed} of ${timingPicks.lists} lists${timingPicks.changed ? `; there, the earliest prices' top player scored ${pct(timingPicks.early, 0)} and the latest's ${pct(timingPicks.late, 0)}` : ''}.`);
+}
+if (lastWindow.days) {
+	say(`Last window, same players: its Avg top ticket on the day's first-window prices against its own, on ${plural(lastWindow.days, 'day')}. The top player changed in ${lastWindow.changed} of ${lastWindow.days * 3} lists;`);
+	say(`Streak ${pct(lastWindow.early / lastWindow.days)} on the first-window prices, ${pct(lastWindow.late / lastWindow.days)} on the last's, with ${plural(lastWindow.differ, 'day')} differing in result. A gap in "first vs last window"`);
+	say('above that doesn\'t show here doesn\'t come from fresher odds.');
+}
+
 section('3. Sportsbooks');
 say('The top ticket of each subset of the books: each book alone, each pair and each triple, and all four, which is the Avg. A subset prices a player');
 say(`at the average of its books that price him, among the players with ${minSportsbooks}+ books, on the ${plural(common.length, 'window')} where all ${SUBSET_KEYS.length} have a ticket.`);
@@ -1643,6 +1819,7 @@ if (formatTests.length) {
 	};
 	formatTable('Correlation (primary): the pair lifts and the Avg\'s held-out backtests', formatTests.filter((test) => test.question === 'correlation'));
 	formatTable('Time slot (primary): same-day comparisons of the Avg top ticket', formatTests.filter((test) => test.question === 'time slot'));
+	formatTable('Odds timing (secondary): the Avg\'s Brier gain, latest vs earliest price, per player', formatTests.filter((test) => test.type === 'timing'));
 	formatTable(`Sportsbooks (primary): the range of the ${SUBSET_KEYS.length} subsets' rates; the difference tests whether their gaps to the Avg change`, formatTests.filter((test) => test.type === 'books'));
 	formatTable(`Player level (secondary): each subset's AUC minus the Avg's, over ${formatAucs.map((entry) => entry.rows.toLocaleString('en-US')).join(' and ')} player-days`, formatTests.filter((test) => test.type === 'auc'));
 	for (const test of formatTests.filter((entry) => entry.type === 'books')) {
