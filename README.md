@@ -34,8 +34,9 @@ Agent skills for working on the repo and the live server:
 - `/analyze` — when deciding whether correlation, a time slot or a sportsbook
   has a real edge: read-only tests of the archive for each, including every
   average of two or three books, whether the correlation lifts hold near the
-  top of the lists, and whether any result changes between the regular season
-  and the playoffs
+  top of the lists, whether a player's odds get more accurate as his game
+  approaches, and whether any result changes between the regular season and
+  the playoffs
 
 ## About
 During the 2025-2026 season, the Tim Hortons Hockey Challenge presented 6 Challenges in addition to the Playoffs.
