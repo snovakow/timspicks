@@ -1,4 +1,4 @@
-import { AllStrategyModes, StrategyLabels, type LogStatsKey, type StrategyMode } from "../dataTypes";
+import { AllStrategyModes, LogStatsKeys, StrategyLabels, type LogStatsKey, type SportsbookKey, type StrategyMode } from "../dataTypes";
 import type { Team } from "./logo";
 import * as Feature from '../features';
 
@@ -143,20 +143,14 @@ export class Player {
 	homeGame: boolean;
 
 	fullName: string;
-	betRaw1: number | null = null;
-	betRaw2: number | null = null;
-	betRaw3: number | null = null;
-	betRaw4: number | null = null;
-	bet1: number | null = null;
-	bet2: number | null = null;
-	bet3: number | null = null;
-	bet4: number | null = null;
+	// Each shown book's implied probability under its key, as the tables use it: raw, or de-vigged when
+	// that's on. Sorting, the stats and the replays read a book's value as player[key]
+	[book: SportsbookKey]: number | null;
+	// Each shown book's implied probability as the book gave it
+	raw: Partial<Record<SportsbookKey, number | null>> = {};
 	betAvg: number | null = null;
-	betDisplay1: string = "-";
-	betDisplay2: string = "-";
-	betDisplay3: string = "-";
-	betDisplay4: string = "-";
-	betDisplayAvg: string = "-";
+	// The text each book's cell and the Avg's show
+	display: Partial<Record<LogStatsKey, string>> = {};
 	betCount: number = 0;
 
 	pick: 0 | 1 | 2 | 3 = 0;
@@ -212,16 +206,9 @@ export interface OddsItem {
 export class PickOdds {
 	player: Player;
 
-	highlight1: boolean = false;
-	highlight2: boolean = false;
-	highlight3: boolean = false;
-	highlight4: boolean = false;
-	highlightAvg: boolean = false;
-	strategy1: Set<StrategyMode> = new Set();
-	strategy2: Set<StrategyMode> = new Set();
-	strategy3: Set<StrategyMode> = new Set();
-	strategy4: Set<StrategyMode> = new Set();
-	strategyAvg: Set<StrategyMode> = new Set();
+	// The books, and the Avg, whose top ticket holds this player, and the strategies each one picks him for
+	highlight: Set<LogStatsKey> = new Set();
+	strategy: Map<LogStatsKey, Set<StrategyMode>> = new Map();
 	constructor(player: Player) {
 		this.player = player;
 	}
@@ -258,24 +245,17 @@ export function Table(props: {
 			</span>
 		);
 	};
-	const strategyFor = (row: PickOdds, key: LogStatsKey): Set<StrategyMode> => {
-		if (key === 'bet1') return row.strategy1;
-		if (key === 'bet2') return row.strategy2;
-		if (key === 'bet3') return row.strategy3;
-		if (key === 'bet4') return row.strategy4;
-		return row.strategyAvg;
-	};
 	const visibleStrategyFor = (row: PickOdds, key: LogStatsKey): Set<StrategyMode> | undefined => {
-		const strategy = strategyFor(row, key);
-		return enabledModes.some((mode) => strategy.has(mode)) ? strategy : undefined;
+		const strategy = row.strategy.get(key);
+		return strategy && enabledModes.some((mode) => strategy.has(mode)) ? strategy : undefined;
 	};
-	const renderBetCell = (value: string, highlight?: boolean, strategy?: Set<StrategyMode>) => {
+	const renderBetCell = (key: LogStatsKey, value: string, highlight?: boolean, strategy?: Set<StrategyMode>) => {
 		const classes = [highlight && strategy ? cellClass(highlight) : undefined, strategy ? 'cell-bet-with-dots' : undefined]
 			.filter(Boolean)
 			.join(' ');
 		const show = strategy && Feature.correlation;
 		return (
-			<td className={classes || undefined} title={show ? strategyTitle(strategy) : undefined}>
+			<td key={key} className={classes || undefined} title={show ? strategyTitle(strategy) : undefined}>
 				<span className='cell-bet-value'>{value}</span>
 				{show && renderStrategyDots(strategy)}
 			</td>
@@ -334,11 +314,7 @@ export function Table(props: {
 								<td><a href={player.link} target="_blank" rel="noopener noreferrer">🔗</a></td>
 							)}
 
-							{renderBetCell(player.betDisplay1, picks ? row.highlight1 : undefined, picks ? visibleStrategyFor(row, 'bet1') : undefined)}
-							{renderBetCell(player.betDisplay2, picks ? row.highlight2 : undefined, picks ? visibleStrategyFor(row, 'bet2') : undefined)}
-							{renderBetCell(player.betDisplay3, picks ? row.highlight3 : undefined, picks ? visibleStrategyFor(row, 'bet3') : undefined)}
-							{renderBetCell(player.betDisplay4, picks ? row.highlight4 : undefined, picks ? visibleStrategyFor(row, 'bet4') : undefined)}
-							{renderBetCell(player.betDisplayAvg, picks ? row.highlightAvg : undefined, picks ? visibleStrategyFor(row, 'betAvg') : undefined)}
+							{LogStatsKeys.map((key) => renderBetCell(key, player.display[key] ?? '-', picks ? row.highlight.has(key) : undefined, picks ? visibleStrategyFor(row, key) : undefined))}
 							{!picks && (<td>{(row.pick === 0 ? "-" : row.pick)}</td>)}
 							{!picks && (<td className="cell-container">{row.gameTime?.toLocaleTimeString([], timeFormat)}</td>)}
 						</tr>

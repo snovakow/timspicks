@@ -2,6 +2,8 @@ import logo1 from './sportsbook-logo/sb-logo-16-draftkings.svg';
 import logo2 from './sportsbook-logo/sb-logo-16-fanduel.svg';
 import logo3 from './sportsbook-logo/sb-logo-16-mgm.svg';
 import logo4 from './sportsbook-logo/sb-logo-16-betrivers.svg';
+import logo5 from './sportsbook-logo/sb-logo-16-score.svg';
+import logo6 from './sportsbook-logo/bet365.svg';
 
 export const AllStrategies = ['least1', 'points', 'hits'] as const;
 export type Strategy = typeof AllStrategies[number];
@@ -39,11 +41,19 @@ export const strategyTitle = (strategy: ComboPattern): string => {
     return strategy;
 }
 
-export const SportsbookKeys = ['bet1', 'bet2', 'bet3', 'bet4'] as const;
-export type SportsbookKey = typeof SportsbookKeys[number];
+// A book's key, which also names its odds file
+export type SportsbookKey = `bet${number}`;
 
-export const LogStatsKeys = [...SportsbookKeys, 'betAvg'] as const;
-export type LogStatsKey = typeof LogStatsKeys[number];
+type BookMode = 'direct' | 'comparison' | 'off';
+// public/sportsbooks.json as the build read it (vite.config.ts): every book in display order, with its mode
+declare const __SPORTSBOOKS__: ReadonlyArray<{ key: SportsbookKey; title: string; mode: BookMode }>;
+
+// The books the page shows, in the list's order. A book that's off isn't fetched or shown
+const shownBooks = __SPORTSBOOKS__.filter((book) => book.mode !== 'off');
+export const SportsbookKeys: readonly SportsbookKey[] = shownBooks.map((book) => book.key);
+
+export type LogStatsKey = SportsbookKey | 'betAvg';
+export const LogStatsKeys: readonly LogStatsKey[] = [...SportsbookKeys, 'betAvg'];
 
 export type LogStatAlign = 'left' | 'center';
 export interface LogLine {
@@ -58,14 +68,20 @@ export type SportsbookLog = Record<LogStatsKey, LogLines>;
 
 export type Sportsbook = {
     title: string;
-    logo: string;
+    logo?: string;
 };
-export const Sportsbooks: Record<SportsbookKey, Sportsbook> = {
-    bet1: { title: "DraftKings", logo: logo1 },
-    bet2: { title: "FanDuel", logo: logo2 },
-    bet3: { title: "BetMGM", logo: logo3 },
-    bet4: { title: "BetRivers", logo: logo4 },
+// Each book's logo; one without shows its title instead
+const logos: Partial<Record<SportsbookKey, string>> = {
+    bet1: logo1,
+    bet2: logo2,
+    bet3: logo3,
+    bet4: logo4,
+    bet5: logo5,
+    bet6: logo6,
 };
+export const Sportsbooks: Record<SportsbookKey, Sportsbook> = Object.fromEntries(
+    shownBooks.map((book) => [book.key, { title: book.title, logo: logos[book.key] }])
+);
 
 export const AllPoolSlots = ['1', '2', '3', '4+', 'all'] as const;
 export type PoolSlots = typeof AllPoolSlots[number];

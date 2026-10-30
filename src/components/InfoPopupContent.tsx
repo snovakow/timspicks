@@ -24,7 +24,7 @@ export default function InfoPopupContent() {
 				<div className="sportsbook-list" >
 					{getEntries(Sportsbooks).map(([key, book]) => (
 						<div key={key} className="sportsbook-item">
-							<img className="sportsbook-logo sportsbook-logo-rounded" src={book.logo} alt={`${book.title} logo`} />
+							{book.logo && <img className="sportsbook-logo sportsbook-logo-rounded" src={book.logo} alt={`${book.title} logo`} />}
 							<span>{book.title}</span>
 						</div>
 					))}

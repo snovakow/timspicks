@@ -5,7 +5,7 @@ import Popup from './components/Popup';
 import InfoPopupContent, { LegendPopupContent } from './components/InfoPopupContent';
 import StatsPopupContent, { StatsSportsbookList } from './components/StatsPopupContent';
 import type { SportsbookLog, LogStatsKey, StrategyMode } from './dataTypes';
-import { Sportsbooks } from './dataTypes';
+import { SportsbookKeys, Sportsbooks } from './dataTypes';
 import SettingsPanel from './components/Settings';
 import { roundToPercent, probabilityToAmerican, getEntries } from './utility';
 import * as DataProcessor from './dataProcessor';
@@ -97,16 +97,8 @@ const makeSort = (sortConfig: Picks.SortConfig) => {
 
 const clearDerivedPickState = (rows: Picks.PickOdds[]) => {
 	for (const row of rows) {
-		row.highlight1 = false;
-		row.highlight2 = false;
-		row.highlight3 = false;
-		row.highlight4 = false;
-		row.highlightAvg = false;
-		row.strategy1.clear();
-		row.strategy2.clear();
-		row.strategy3.clear();
-		row.strategy4.clear();
-		row.strategyAvg.clear();
+		row.highlight.clear();
+		row.strategy.clear();
 	}
 };
 
@@ -149,7 +141,7 @@ function App() {
 
 	const [showPercentage, setShowPercentage] = useState(true);
 	const [deVigEnabled, setDeVigEnabled] = useState(false);
-	const [minSportsbooks, setMinSportsbooks] = useState(3);
+	const [minSportsbooks, setMinSportsbooks] = useState(4);
 	const [correlationFactor, setCorrelationFactor] = useState(Feature.correlation ? 1 : 0);
 	const [showCorrelate, setShowCorrelate] = useState(false);
 	const [enabledStrategies, setEnabledStrategies] = useState<Record<StrategyMode, boolean>>({
@@ -179,13 +171,7 @@ function App() {
 					normalizedNameMap
 				);
 
-				DataProcessor.compilePlayerList(
-					playerList,
-					initialData.playerOddsDraftKings,
-					initialData.playerOddsFanDuel,
-					initialData.playerOddsBetMGM,
-					initialData.playerOddsBetRivers
-				);
+				DataProcessor.compilePlayerList(playerList, initialData.playerOdds);
 
 				setData({
 					gamesList,
@@ -276,12 +262,14 @@ function App() {
 
 		const { gamesList, playerList: origPlayerList, table1Rows: origTable1, table2Rows: origTable2, table3Rows: origTable3 } = data;
 
+		// The display text and the derived pick state get containers of their own, so filling them here
+		// can't reach the source rows
 		const clonePlayer = (player: Picks.Player): Picks.Player => {
-			return Object.assign(Object.create(Picks.Player.prototype), player) as Picks.Player;
+			return Object.assign(Object.create(Picks.Player.prototype), player, { display: {} }) as Picks.Player;
 		};
 
 		const clonePickRow = (row: Picks.PickOdds, player: Picks.Player): Picks.PickOdds => {
-			return Object.assign(Object.create(Picks.PickOdds.prototype), row, { player }) as Picks.PickOdds;
+			return Object.assign(Object.create(Picks.PickOdds.prototype), row, { player, highlight: new Set(), strategy: new Map() }) as Picks.PickOdds;
 		};
 
 		// Preserve shared player identity across cloned rows so updates stay consistent per player.
@@ -305,39 +293,23 @@ function App() {
 		const table3Rows = cloneRows(origTable3);
 
 		// Update player betting display values
-		const key1 = deVigEnabled ? 'bet1' : 'betRaw1';
-		const key2 = deVigEnabled ? 'bet2' : 'betRaw2';
-		const key3 = deVigEnabled ? 'bet3' : 'betRaw3';
-		const key4 = deVigEnabled ? 'bet4' : 'betRaw4';
-
 		if (Feature.normalizeSportsbooks) {
 			// Reset to raw values before reapplying de-vig to avoid compounding transformations.
 			for (const player of playerList) {
-				player.bet1 = player.betRaw1;
-				player.bet2 = player.betRaw2;
-				player.bet3 = player.betRaw3;
-				player.bet4 = player.betRaw4;
+				for (const key of SportsbookKeys) player[key] = player.raw[key] ?? null;
 			}
 			if (deVigEnabled) DataProcessor.deVig(playerList);
 		}
 
 		for (const player of playerList) {
-			const values = [player[key1], player[key2], player[key3], player[key4]];
-			const rawValues = [player.betRaw1, player.betRaw2, player.betRaw3, player.betRaw4];
-			const displays = ['betDisplay1', 'betDisplay2', 'betDisplay3', 'betDisplay4'] as const;
-
-			for (let i = 0; i < values.length; i++) {
-				const value = values[i] as number | null;
-				if (value === null) continue;
-				player[displays[i]] = showPercentage
-					? roundToPercent(value, precision)
-					: probabilityToAmerican(rawValues[i]);
-			}
-
 			let count = 0;
 			let avg = 0;
-			for (const value of values as (number | null)[]) {
+			for (const key of SportsbookKeys) {
+				const value = deVigEnabled ? player[key] : player.raw[key] ?? null;
 				if (value === null) continue;
+				player.display[key] = showPercentage
+					? roundToPercent(value, precision)
+					: probabilityToAmerican(player.raw[key] ?? null);
 				avg += value;
 				count++;
 			}
@@ -345,10 +317,10 @@ function App() {
 			player.betCount = count;
 			if (count > 0) {
 				player.betAvg = avg / count;
-				player.betDisplayAvg = betDisplayRounded(player.betAvg);
+				player.display.betAvg = betDisplayRounded(player.betAvg);
 			} else {
 				player.betAvg = null;
-				player.betDisplayAvg = '-';
+				player.display.betAvg = '-';
 			}
 		}
 

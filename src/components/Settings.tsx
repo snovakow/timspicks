@@ -1,4 +1,4 @@
-import { StrategyLabels, type StrategyMode } from '../dataTypes';
+import { SportsbookKeys, StrategyLabels, type StrategyMode } from '../dataTypes';
 import * as Feature from '../features';
 import './Settings.css';
 
@@ -42,10 +42,11 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					value={minSportsbooks}
 					onChange={(e) => onMinSportsbooksChange(Number(e.target.value))}
 				>
-					<option value="1">1 sportsbook</option>
-					<option value="2">2 sportsbooks</option>
-					<option value="3">3 sportsbooks</option>
-					<option value="4">All 4 sportsbooks</option>
+					{SportsbookKeys.map((_, index) => {
+						const count = index + 1;
+						const label = count === SportsbookKeys.length ? `All ${count} sportsbooks` : `${count} ${count === 1 ? 'sportsbook' : 'sportsbooks'}`;
+						return <option key={count} value={count}>{label}</option>;
+					})}
 				</select>
 				<div className="settings-description">
 					Minimum number of available sportsbook odds for a top pick.

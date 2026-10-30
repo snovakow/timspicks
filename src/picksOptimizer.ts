@@ -3,7 +3,7 @@ import * as Picks from "./components/Table";
 import { pairLifts } from "./correlationData";
 import type { PairLifts } from "./correlationData";
 import { deVig, oddsNameCandidates, removeAccentsNormalize } from "./dataProcessor";
-import type { LogStatsKey, Strategy, PoolSlots } from "./dataTypes";
+import type { LogStatsKey, SportsbookKey, Strategy, PoolSlots } from "./dataTypes";
 import {
 	SportsbookKeys, LogStatsKeys, StrategyLabels,
 	AllStrategies, Sportsbooks, AllPoolSlots
@@ -112,10 +112,8 @@ interface SnapshotOddsRowType {
 	team: string;
 	opponent: string;
 	scored: boolean;
-	bet1: number | null;
-	bet2: number | null;
-	bet3: number | null;
-	bet4: number | null;
+	// Each shown book's implied probability, by key
+	prices: Partial<Record<SportsbookKey, number | null>>;
 	betAvg: number | null;
 	betCount: number;
 }
@@ -126,10 +124,8 @@ class SnapshotOddsRow {
 	team: string;
 	opponent: string;
 	scored: boolean;
-	bet1: number | null;
-	bet2: number | null;
-	bet3: number | null;
-	bet4: number | null;
+	// Each shown book's implied probability under its key, as Picks.Player holds them
+	[book: SportsbookKey]: number | null;
 	betAvg: number | null;
 	betCount: number;
 	constructor(row: SnapshotOddsRowType) {
@@ -138,10 +134,7 @@ class SnapshotOddsRow {
 		this.team = row.team;
 		this.opponent = row.opponent;
 		this.scored = row.scored;
-		this.bet1 = row.bet1;
-		this.bet2 = row.bet2;
-		this.bet3 = row.bet3;
-		this.bet4 = row.bet4;
+		for (const key of SportsbookKeys) this[key] = row.prices[key] ?? null;
 		this.betAvg = row.betAvg;
 		this.betCount = row.betCount;
 	}
@@ -280,13 +273,9 @@ const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
 
 const bookTitle = (key: LogStatsKey): string => (key === 'betAvg') ? 'Average' : Sportsbooks[key].title;
 
-const createAuditBuckets = (): Record<LogStatsKey, AccumulateOutcome> => ({
-	bet1: new AccumulateOutcome(),
-	bet2: new AccumulateOutcome(),
-	bet3: new AccumulateOutcome(),
-	bet4: new AccumulateOutcome(),
-	betAvg: new AccumulateOutcome(),
-});
+const createAuditBuckets = (): Record<LogStatsKey, AccumulateOutcome> => (
+	Object.fromEntries(LogStatsKeys.map((key) => [key, new AccumulateOutcome()])) as Record<LogStatsKey, AccumulateOutcome>
+);
 
 const countGamesFromHelper = (
 	helper: Record<PickGroup, Picks.OddsItem[]>,
@@ -491,11 +480,11 @@ export const runHistoricalStrategyAudit = async (
 					const helper = await fetchOptionalJson<Record<PickGroup, Picks.OddsItem[]>>(`${folder}/helper.json`);
 					if (!helper) continue;
 
+					// A book without a file in this window prices no one there, as an empty one would
 					const bookOdds = await Promise.all(SportsbookKeys.map(async (key) => {
 						const items = await fetchOptionalJson<Array<{ name: string; odds: number }>>(`${folder}/${key}.json`);
 						return items;
 					}));
-					if (bookOdds.some((items) => items === null)) continue;
 
 					const oddsMaps = bookOdds.map((items) => {
 						const oddsMap = new Map<string, number>();
@@ -517,13 +506,14 @@ export const runHistoricalStrategyAudit = async (
 
 							const fullName = `${item.firstName} ${item.lastName}`;
 							const candidates = oddsNameCandidates(fullName);
-							const probs: Array<number | null> = [null, null, null, null];
+							const prices: Partial<Record<SportsbookKey, number | null>> = {};
 
 							for (let index = 0; index < oddsMaps.length; index++) {
+								prices[SportsbookKeys[index]] = null;
 								for (const candidate of candidates) {
 									const odds = oddsMaps[index].get(removeAccentsNormalize(candidate));
 									if (odds !== undefined) {
-										probs[index] = 1 / odds;
+										prices[SportsbookKeys[index]] = 1 / odds;
 										break;
 									}
 								}
@@ -535,10 +525,7 @@ export const runHistoricalStrategyAudit = async (
 								team: player.team,
 								opponent: player.opponent,
 								scored: player.scored,
-								bet1: probs[0],
-								bet2: probs[1],
-								bet3: probs[2],
-								bet4: probs[3],
+								prices,
 								betAvg: null,
 								betCount: 0,
 							}));
@@ -1712,11 +1699,11 @@ export const runSimulation = async (minSportsbooks: number): Promise<PairLifts> 
 					const helper = await fetchOptionalJson<Record<PickGroup, Picks.OddsItem[]>>(`${folder}/helper.json`);
 					if (!helper) continue;
 
+					// A book without a file in this window prices no one there, as an empty one would
 					const bookOdds = await Promise.all(SportsbookKeys.map(async (key) => {
 						const items = await fetchOptionalJson<Array<{ name: string; odds: number }>>(`${folder}/${key}.json`);
 						return items;
 					}));
-					if (bookOdds.some((items) => items === null)) continue;
 
 					const oddsMaps = bookOdds.map((items) => {
 						const oddsMap = new Map<string, number>();
@@ -1738,13 +1725,14 @@ export const runSimulation = async (minSportsbooks: number): Promise<PairLifts> 
 
 							const fullName = `${item.firstName} ${item.lastName}`;
 							const candidates = oddsNameCandidates(fullName);
-							const probs: Array<number | null> = [null, null, null, null];
+							const prices: Partial<Record<SportsbookKey, number | null>> = {};
 
 							for (let index = 0; index < oddsMaps.length; index++) {
+								prices[SportsbookKeys[index]] = null;
 								for (const candidate of candidates) {
 									const odds = oddsMaps[index].get(removeAccentsNormalize(candidate));
 									if (odds !== undefined) {
-										probs[index] = 1 / odds;
+										prices[SportsbookKeys[index]] = 1 / odds;
 										break;
 									}
 								}
@@ -1756,10 +1744,7 @@ export const runSimulation = async (minSportsbooks: number): Promise<PairLifts> 
 								team: player.team,
 								opponent: player.opponent,
 								scored: player.scored,
-								bet1: probs[0],
-								bet2: probs[1],
-								bet3: probs[2],
-								bet4: probs[3],
+								prices,
 								betAvg: null,
 								betCount: 0,
 							}));

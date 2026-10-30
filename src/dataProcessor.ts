@@ -1,6 +1,6 @@
 import { isTeam, type Team } from './components/logo';
 import * as Picks from './components/Table';
-import { SportsbookKeys } from './dataTypes';
+import { SportsbookKeys, Sportsbooks, type SportsbookKey } from './dataTypes';
 
 // Raw player structure from playerId.json
 type RawPlayerJson = {
@@ -60,7 +60,7 @@ export const getDataStatus = (processed: Date, started: Date | null, warnings: s
 	return unfinished || stopped || staleList || earlierDraw || warnings.length > 0 ? { processed, unfinished, stopped, staleList, earlierDraw, warnings } : null;
 };
 
-interface SportsbookOddsItem {
+export interface SportsbookOddsItem {
 	name: string;
 	odds: number;
 }
@@ -314,43 +314,31 @@ interface InitialData {
 	dataStatus: DataStatus | null;
 	processed: Date | null;
 	lastGameStart: Date | null;
-	playerOddsDraftKings: SportsbookOddsItem[];
-	playerOddsFanDuel: SportsbookOddsItem[];
-	playerOddsBetMGM: SportsbookOddsItem[];
-	playerOddsBetRivers: SportsbookOddsItem[];
+	// Each shown book's odds file, by key
+	playerOdds: Partial<Record<SportsbookKey, SportsbookOddsItem[]>>;
 }
 
 export const loadInitialData = async (): Promise<InitialData> => {
-	const [
-		playerData,
-		gamesAndPlayers,
-		playerOddsDraftKings,
-		playerOddsFanDuel,
-		playerOddsBetMGM,
-		playerOddsBetRivers,
-	] = await Promise.all([
+	const isOddsList = (value: unknown): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem);
+	const [playerData, gamesAndPlayers, bookOdds] = await Promise.all([
 		loadAndValidate('./data/helper.json', isPlayerDataByPick, 'Helper data'),
 		loadGamesAndPlayers('./data/process.json', './data/helper.json', './data/games.json'),
-		loadAndValidate('./data/bet1.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'DraftKings odds data'),
-		loadAndValidate('./data/bet2.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'FanDuel odds data'),
-		loadAndValidate('./data/bet3.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'BetMGM odds data'),
-		loadAndValidate('./data/bet4.json', (value): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem), 'BetRivers odds data'),
+		Promise.all(SportsbookKeys.map((key) => loadAndValidate(`./data/${key}.json`, isOddsList, `${Sportsbooks[key].title} odds data`))),
 	]);
 
 	return {
 		playerData,
 		...gamesAndPlayers,
-		playerOddsDraftKings,
-		playerOddsFanDuel,
-		playerOddsBetMGM,
-		playerOddsBetRivers,
+		playerOdds: Object.fromEntries(SportsbookKeys.map((key, index) => [key, bookOdds[index]])),
 	};
 };
 
 export const oddsNameMap = new Map<string, string>();
 oddsNameMap.set("Aatu Räty", "Aatu Raty");
 oddsNameMap.set("Alex DeBrincat", "Alex Debrincat"); // BetMGM
+oddsNameMap.set("Alex Kerfoot", "Alexander Kerfoot"); // bet1 bet2 bet4 bet5 bet6
 oddsNameMap.set("Alexander Wennberg", "Alex Wennberg"); // FanDuel
+oddsNameMap.set("Alexei Toropchenko", "Alexey Toropchenko"); // bet1 bet2 bet3 bet5 bet6
 oddsNameMap.set("Alexis Lafrenière", "Alexis Lafreniere"); // DraftKings FanDuel
 oddsNameMap.set("Aliaksei Protas", "Alexei Protas"); // BetRivers (lang)
 oddsNameMap.set("Arseny Gritsyuk", "Arseni Gritsyuk"); // BetRivers
@@ -373,11 +361,13 @@ oddsNameMap.set("Jake Middleton", "Jacob Middleton"); // BetRivers (lang)
 oddsNameMap.set("James van Riemsdyk", "James Van Riemsdyk"); // BetMGM
 oddsNameMap.set("Jeffrey Viel", "Jeff Viel"); // bet1 bet2 bet3 bet4
 oddsNameMap.set("JJ Peterka", "John-Jason Peterka"); // BetRivers
+oddsNameMap.set("Joe Veleno", "Joseph Veleno"); // bet4 bet5 bet6
 oddsNameMap.set("Josh Morrissey", "Joshua Morrissey"); // BetRivers
 oddsNameMap.set("Josh Norris", "Joshua Norris"); // bet1 bet2 bet3 bet4
 oddsNameMap.set("Josh Samanski", "Joshua Samanski"); // bet3
 oddsNameMap.set("Lenni Hameenaho", "Lenni Hämeenaho"); // BetRivers
 oddsNameMap.set("Liam Ohgren", "Liam Öhgren"); // BetRivers (lang)
+oddsNameMap.set("MacKenzie Weegar", "MacKenzie Weegar (UTA)"); // bet3
 oddsNameMap.set("Martin Fehérváry", "Martin Fehervary");
 oddsNameMap.set("Martin Pospisil", "Martin Pospíšil"); // BetRivers (lang)
 oddsNameMap.set("Matt Boldy", "Matthew Boldy"); // BetRivers
@@ -468,37 +458,30 @@ export const mapPlayers = (
 	return { table1Rows, table2Rows, table3Rows };
 };
 
+// Each book's spellings for the two Elias Petterssons, by player id, since the plain name can't tell them apart. A
+// book that changed its spelling keeps the old one after the new, since older snapshots still carry it
+const eliasPettersson: Record<number, Partial<Record<SportsbookKey, string[]>>> = {
+	8480012: { bet1: ["Elias Pettersson"], bet2: ["Elias Pettersson #40"], bet4: ["Elias Pettersson (1998)"], bet5: ["Elias Pettersson"], bet6: ["Elias Pettersson"] },
+	8483678: { bet1: ["Elias-Nils Pettersson"], bet2: ["Elias Nils Pettersson #25", "Elias Pettersson #25"], bet4: ["Elias Pettersson (2004)"] },
+};
+
 export const compilePlayerList = (
 	playerList: Picks.Player[],
-	playerOddsDraftKings: SportsbookOddsItem[],
-	playerOddsFanDuel: SportsbookOddsItem[],
-	playerOddsBetMGM: SportsbookOddsItem[],
-	playerOddsBetRivers: SportsbookOddsItem[]
+	playerOdds: Partial<Record<SportsbookKey, SportsbookOddsItem[]>>
 ) => {
-	type betKey = "betRaw1" | "betRaw2" | "betRaw3" | "betRaw4";
-
-	const nameFind = (player: Picks.Player, oddsMap: Map<string, number>, betKey: betKey) => {
+	const nameFind = (player: Picks.Player, oddsMap: Map<string, number>, key: SportsbookKey) => {
 		const process = (name: string | undefined): boolean => {
 			if (name === undefined) return false;
 			const decimal = oddsMap.get(removeAccentsNormalize(name));
 			if (decimal === undefined) return false;
 
 			const chance = 1 / decimal;
-			player[betKey] = chance;
+			player.raw[key] = chance;
 			return true;
 		};
 
 		if (player.fullName === "Elias Pettersson") {
-			if (player.playerId === 8480012) {
-				if (betKey === 'betRaw1' && process("Elias Pettersson")) return;
-				if (betKey === 'betRaw2' && process("Elias Pettersson #40")) return;
-				if (betKey === 'betRaw4' && process("Elias Pettersson (1998)")) return;
-			}
-			if (player.playerId === 8483678) {
-				if (betKey === 'betRaw1' && process("Elias-Nils Pettersson")) return;
-				if (betKey === 'betRaw2' && process("Elias Pettersson #25")) return;
-				if (betKey === 'betRaw4' && process("Elias Pettersson (2004)")) return;
-			}
+			for (const name of eliasPettersson[player.playerId]?.[key] ?? []) if (process(name)) return;
 			return;
 		}
 
@@ -531,32 +514,14 @@ export const compilePlayerList = (
 		}
 	};
 
-	const bet1 = new Map<string, number>();
-	const bet2 = new Map<string, number>();
-	const bet3 = new Map<string, number>();
-	const bet4 = new Map<string, number>();
-
-	const mapNames = (
-		item: { name: string; odds: number },
-		betMap: Map<string, number>
-	): void => {
-		betMap.set(removeAccentsNormalize(item.name), item.odds);
-	}
-
-	for (const item of playerOddsDraftKings) mapNames(item, bet1);
-	for (const item of playerOddsFanDuel) mapNames(item, bet2);
-	for (const item of playerOddsBetMGM) mapNames(item, bet3);
-	for (const item of playerOddsBetRivers) mapNames(item, bet4);
+	const oddsMaps = SportsbookKeys.map((key) => new Map((playerOdds[key] ?? []).map((item): [string, number] => [removeAccentsNormalize(item.name), item.odds])));
 
 	for (const player of playerList) {
-		nameFind(player, bet1, 'betRaw1');
-		nameFind(player, bet2, 'betRaw2');
-		nameFind(player, bet3, 'betRaw3');
-		nameFind(player, bet4, 'betRaw4');
-		player.bet1 = player.betRaw1;
-		player.bet2 = player.betRaw2;
-		player.bet3 = player.betRaw3;
-		player.bet4 = player.betRaw4;
+		SportsbookKeys.forEach((key, index) => {
+			player.raw[key] = null;
+			nameFind(player, oddsMaps[index], key);
+			player[key] = player.raw[key];
+		});
 	}
 };
 
@@ -583,7 +548,7 @@ export function deVig(playerList: Picks.Player[]) {
 		strength: number;
 	}
 
-	const corrections: Partial<Record<typeof SportsbookKeys[number], Correction>> = {};
+	const corrections: Partial<Record<SportsbookKey, Correction>> = {};
 	for (const key of SportsbookKeys) {
 		const xs: number[] = [];
 		const ys: number[] = [];
@@ -639,12 +604,12 @@ export function deVig(playerList: Picks.Player[]) {
 	}
 
 	// Apply all at once in logit-space to keep tail behavior stable.
-	const originalByBook = new Map<typeof SportsbookKeys[number], Array<number | null>>();
+	const originalByBook = new Map<SportsbookKey, Array<number | null>>();
 	for (const key of SportsbookKeys) {
 		originalByBook.set(key, playerList.map((player) => player[key]));
 	}
 
-	const getOriginal = (key: typeof SportsbookKeys[number], index: number): number | null => {
+	const getOriginal = (key: SportsbookKey, index: number): number | null => {
 		const values = originalByBook.get(key);
 		if (!values) return null;
 		return values[index] ?? null;

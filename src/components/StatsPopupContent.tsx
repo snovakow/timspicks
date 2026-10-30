@@ -1,6 +1,7 @@
+import type { CSSProperties } from 'react';
 import { getEntries } from '../utility';
 import type { LogStatsKey, SportsbookKey, LogLines } from '../dataTypes';
-import { Sportsbooks } from '../dataTypes';
+import { SportsbookKeys, Sportsbooks } from '../dataTypes';
 
 import './StatsPopupContent.css';
 import './sportsbook.css';
@@ -51,7 +52,7 @@ export default function StatsPopupContent({ bookStats, selectedKey }: StatsPopup
 
 export function StatsSportsbookList({ selectedKey, onSelectKey }: StatsSportsbookListProps) {
 	return (
-		<div className="sportsbook-list stats-sportsbook-list">
+		<div className="sportsbook-list stats-sportsbook-list" style={{ '--book-count': SportsbookKeys.length } as CSSProperties}>
 			{getEntries(Sportsbooks).map(([key, book]) => (
 				<button
 					key={key}
@@ -60,7 +61,7 @@ export function StatsSportsbookList({ selectedKey, onSelectKey }: StatsSportsboo
 					aria-label={book.title}
 					onClick={() => onSelectKey(selectedKey === key ? 'betAvg' : key as SportsbookKey)}
 				>
-					<img className="sportsbook-logo sportsbook-logo-rounded" src={book.logo} alt={`${book.title} logo`} />
+					{book.logo && <img className="sportsbook-logo sportsbook-logo-rounded" src={book.logo} alt={`${book.title} logo`} />}
 					<span>{book.title}</span>
 				</button>
 			))}

@@ -59,13 +59,7 @@ const calculateStats = (
 	const logHandler = new LogHandler(stats);
 
 	const addPlayersToHighlight = (players: Set<Picks.PickOdds>) => {
-		for (const pick of players) {
-			if (betKey === 'bet1') pick.highlight1 = true;
-			else if (betKey === 'bet2') pick.highlight2 = true;
-			else if (betKey === 'bet3') pick.highlight3 = true;
-			else if (betKey === 'bet4') pick.highlight4 = true;
-			else pick.highlightAvg = true;
-		}
+		for (const pick of players) pick.highlight.add(betKey);
 	};
 
 	const printName = (player: Picks.Player) => `${player.fullName} (${player.team.code})`;
@@ -233,11 +227,9 @@ const calculateStats = (
 	}
 
 	const setStrategy = (pick: Picks.PickOdds, mode: StrategyMode) => {
-		if (betKey === 'bet1') pick.strategy1.add(mode);
-		else if (betKey === 'bet2') pick.strategy2.add(mode);
-		else if (betKey === 'bet3') pick.strategy3.add(mode);
-		else if (betKey === 'bet4') pick.strategy4.add(mode);
-		else pick.strategyAvg.add(mode);
+		const modes = pick.strategy.get(betKey) ?? new Set<StrategyMode>();
+		modes.add(mode);
+		pick.strategy.set(betKey, modes);
 	};
 	const addStrategyHighlights = (result: Result, strategy: StrategyMode) => {
 		for (const pick of result.players1) setStrategy(pick, strategy);
