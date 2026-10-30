@@ -6,14 +6,15 @@ App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hor
 - [The Hockey Challenge](docs/hockey-challenge.md) — how the contest works:
   three picks a game day from three tiered pools, how the lists are redrawn as
   games start, scoring, and the strategies the app optimizes for
-- [The app and the server](docs/app-and-server.md) — the feeds, what lands on
-  disk, the update cadence, the history archive, and how a change reaches the
-  live site
+- [The app and the server](docs/app-and-server.md) — the feeds, the book list
+  and where each book's prices come from, what lands on disk, the update
+  cadence, the history archive, and how a change reaches the live site
 - [Deploying](docs/deployment.md) — the daily merge, build and copy routine,
-  the checks before a merge, and what changes at each end of a season
+  changing a book's mode, the checks before a merge, and what changes at each
+  end of a season
 - [History and the correlation lifts](docs/history-and-correlation.md) — how the
-  archive and the fitted correlation lifts are regenerated, in what order, and
-  why a run can come out byte-identical
+  archive and the fitted correlation lifts are regenerated, in what order, why
+  a run can come out byte-identical, and which archived prices were backfilled
 
 ## Skills
 
@@ -28,15 +29,16 @@ Agent skills for working on the repo and the live server:
   cron failures hide, the live data and the banner visitors see, and whether the
   deployed files match `main`
 - `/health-odds` — when a player shows no odds from a book, or a book may have
-  changed its format: pulls bet1–bet4 fresh, checks that they still parse into
+  changed its format: pulls every book fresh, from its own site or the
+  comparison pages as the book list sets, checks that they still parse into
   anytime goal scorer odds and that every listed player's name matches a price
   in each book, then fixes the name mappings or the parser
 - `/analyze` — when deciding whether correlation, a time slot or a sportsbook
   has a real edge: read-only tests of the archive for each, including every
-  average of two or three books, whether the correlation lifts hold near the
-  top of the lists, whether a player's odds get more accurate as his game
-  approaches, and whether any result changes between the regular season and
-  the playoffs
+  combination of the books, whether the correlation lifts hold near the top of
+  the lists, whether a player's odds get more accurate as his game approaches,
+  and whether any result changes between the regular season and the playoffs,
+  or rests on prices backfilled after the games
 
 ## About
 During the 2025-2026 season, the Tim Hortons Hockey Challenge presented 6 Challenges in addition to the Playoffs.
