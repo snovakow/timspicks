@@ -81,6 +81,8 @@ The rewards changed for the 2026-2027 season. Per game day, 1 correct pick now e
 
 Reacts adaptively to light-dark scheme
 
+Shows the stats from the average of all the sportsbooks or any combination of them, or from one sportsbook alone
+
 Shows a notice when the data is over a day old, an update didn't finish, a game has started since the last update, today's pick lists haven't posted yet, or the last update had warnings
 
 Clears the games, the pick lists and their stats once the day's last game has started, since nothing is left to play until the next day's lists post
