@@ -133,6 +133,13 @@ spellings. On 2026-10-29 their prices matched the books' own for 94–99% of
 players, and the rest differed by a step or two, as a page a few minutes behind
 the book would.
 
+Asked for a day without games, the matchups page shows the nearest day that has
+some, and those games haven't started either, so their prices would pass for
+today's. Its games count only when it shows today. A day the schedule lists no
+games for leaves the comparison books empty without a warning, as the books read
+from their own sites are; a page without today's games on any other day is a
+warning, since its layout may have changed.
+
 Read from their own sites, bet2, bet3 and bet4 take an end-of-day cutoff and drop
 markets closing after it. bet1's site takes none, so in direct mode its file can
 include tomorrow's games — worth remembering when book coverage looks uneven.

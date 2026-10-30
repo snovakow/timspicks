@@ -969,9 +969,15 @@ function fetchComparison(DateTime $now, array $books, string $basePath, bool $sa
 	}
 	if ($savesrc) file_put_contents($basePath . '/src_comparison.html', $fetched['body']);
 
-	$games = comparisonGames($fetched['body']);
-	if (!$games) {
-		$fail(array_column($books, 'key'), "No games listed on $url");
+	/* For a day without games the page shows the nearest day that has some, so its games count only when it shows
+	   today. Without today's games, it's a quiet day only when the schedule agrees; otherwise the layout may have changed */
+	$today = $now->format('M d');
+	$shown = comparisonDate($fetched['body']);
+	$games = $shown === $today ? comparisonGames($fetched['body']) : [];
+	if (!$games && scheduledGames($now, $basePath) !== 0) {
+		$error = $shown === null ? 'The comparison matchups page names no date'
+			: ($shown === $today ? "The comparison matchups page lists none of today's games" : "The comparison matchups page shows $shown, not today");
+		$fail(array_column($books, 'key'), $error);
 		return $outputs;
 	}
 	$upcoming = array_keys(array_filter($games));
@@ -1041,6 +1047,22 @@ function fetchParallel(array $urls, array $options, int $limit = 4)
 	}
 	curl_multi_close($multi);
 	return $results;
+}
+
+/* How many games today's schedule, as this run wrote it, lists for today; null when it can't be read */
+function scheduledGames(DateTime $now, string $basePath)
+{
+	$data = json_decode((string)@file_get_contents($basePath . '/games.json'), true);
+	$week = $data['gameWeek'][0] ?? null;
+	if (!is_array($week) || ($week['date'] ?? null) !== $now->format('Y-m-d')) return null;
+	return count($week['games'] ?? []);
+}
+
+/* The day a matchups page shows, as its date bar marks it, such as "Nov 01"; null when the bar can't be read */
+function comparisonDate(string $page)
+{
+	if (!preg_match('#aria-current="page" aria-label="\w+ &middot; (\w+ \d+)"#', $page, $match)) return null;
+	return $match[1];
 }
 
 /* The games on a matchups page, by id: true for a game that hasn't started */
