@@ -303,24 +303,25 @@ function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool 
 
 /*
 	A book that fails, by an error or by throwing, doesn't stop the run, and the failure becomes a warning,
-	which the site's banner lists. The warning names the book by its key, without the addresses the error held,
-	since visitors read it. Prices it wrote earlier today are left in place, so the page keeps showing
-	them. A file from an earlier day holds another day's games, so it is emptied instead, and the snapshot
-	then keeps the slot's earlier copy (keepsEarlierPrices). Only a file that can't be written stays an error.
+	which the site's banner lists. The warning names the book as the page does, without the addresses the
+	error held, since visitors read it. Prices it wrote earlier today are left in place, so the page keeps
+	showing them. A file from an earlier day holds another day's games, so it is emptied instead, and the
+	snapshot then keeps the slot's earlier copy (keepsEarlierPrices). Only a file that can't be written stays
+	an error.
 */
-function withoutFailedBook(string $key, string $local_file, callable $fetch)
+function withoutFailedBook(string $title, string $local_file, callable $fetch)
 {
 	try {
 		$output = $fetch();
 	} catch (Throwable $e) {
-		$output = ['title' => $key, 'content' => null, 'error' => get_class($e) . ': ' . $e->getMessage()];
+		$output = ['title' => $title, 'content' => null, 'error' => get_class($e) . ': ' . $e->getMessage()];
 	}
 	if ($output['error'] === null) return $output;
 
-	$reason = withoutAddresses($output['error'], $key);
+	$reason = withoutAddresses($output['error'], $title);
 	$earlier = earlierPricesToday($local_file);
 	if ($earlier !== null) {
-		$output['warning'][] = "$key: kept odds from $earlier: $reason";
+		$output['warning'][] = "$title: kept odds from $earlier: $reason";
 		$output['content'] = "Kept odds from $earlier";
 		$output['error'] = null;
 		return $output;
@@ -330,22 +331,23 @@ function withoutFailedBook(string $key, string $local_file, callable $fetch)
 		$output['error'] = 'Error saving local JSON file: ' . $local_file;
 		return $output;
 	}
-	$output['warning'][] = "$key: no odds recorded: $reason";
+	$output['warning'][] = "$title: no odds recorded: $reason";
 	$output['content'] = 'No odds recorded';
 	$output['error'] = null;
 	return $output;
 }
 
 /* An error without its addresses: "from <url>" and the like are dropped, and any other URL or host name, such as
-   one in a cURL message, becomes the book's key. A server path, as a thrown error gives it, keeps only its file
+   one in a cURL message, becomes the book's name. A server path, as a thrown error gives it, keeps only its file
    name, and a file name keeps its extension, which isn't a host */
-function withoutAddresses(string $error, string $key)
+function withoutAddresses(string $error, string $title)
 {
 	$url = 'https?://\S*?(?=:?\s|:?$)';
+	$name = str_replace(['\\', '$'], ['\\\\', '\\$'], $title);
 	$error = preg_replace("#\s+(?:from|of|on)\s+$url#", '', $error);
-	$error = preg_replace("#$url#", $key, $error);
+	$error = preg_replace("#$url#", $name, $error);
 	$error = preg_replace('#(?<![\w.])/(?:[^\s/:]+/)+([^\s/:]+)#', '$1', $error);
-	return preg_replace('#\b(?:[a-z0-9-]+\.)+(?!(?:php|json|html?|m?js)\b)[a-z]{2,}\b#i', $key, $error);
+	return preg_replace('#\b(?:[a-z0-9-]+\.)+(?!(?:php|json|html?|m?js)\b)[a-z]{2,}\b#i', $name, $error);
 }
 
 // The time a book file was written, when that was today (ET) and it holds prices; null otherwise
@@ -438,7 +440,7 @@ function updateBooks(DateTime $now, DateTime $endOfDay, CurlHandle $ch, string $
 				if ($fetcher === null) return ['title' => null, 'content' => null, 'error' => "$key has no fetcher for its own site, so it can only run in comparison mode"];
 				return $fetcher($endOfDay, $ch, $basePath, $savesrc);
 			};
-		$output = withoutFailedBook($key, "$basePath/$key.json", $fetch);
+		$output = withoutFailedBook($book['title'], "$basePath/$key.json", $fetch);
 		$output['title'] = $book['title'];
 		$outputs[] = $output;
 	}
