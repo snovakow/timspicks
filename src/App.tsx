@@ -562,7 +562,7 @@ function App() {
 			</header>
 			<main className='content'>
 				<Popup title={showPopup.title} showPopUp={showPopup.visible} closePopUp={closePopup} top={popupView === 'stats'}
-					pinned={popupView === 'stats' && popupStats && (
+					pinned={popupView === 'stats' && popupStats && !dayLocked && (
 						<StatsSportsbookList selectedKey={selectedStatsKey} onSelectKey={setSelectedStatsKey} />
 					)}>
 					{popupView === 'info' ? (
@@ -583,7 +583,7 @@ function App() {
 							onXgEnabledChange={setXgEnabled}
 						/>
 					) : (
-						<StatsPopupContent bookStats={popupStats} selectedKey={selectedStatsKey} />
+						<StatsPopupContent bookStats={popupStats} selectedKey={selectedStatsKey} locked={dayLocked} />
 					)}
 				</Popup>
 

@@ -11,6 +11,8 @@ type SportsbookLog = Record<LogStatsKey, LogLines>
 interface StatsPopupContentProps {
 	bookStats: SportsbookLog | null;
 	selectedKey: LogStatsKey;
+	// The stats come from today's pick lists, so they go when the tables do
+	locked: boolean;
 }
 
 interface StatsSportsbookListProps {
@@ -18,18 +20,21 @@ interface StatsSportsbookListProps {
 	onSelectKey: (key: LogStatsKey) => void;
 }
 
-const emptyStats: LogLines = [[
+const messageStats = (text: string): LogLines => [[
 	{
-		text: 'No stats available',
+		text,
 		align: 'center',
 		bold: true,
 		title: true,
 	}
 ]];
 
-export default function StatsPopupContent({ bookStats, selectedKey }: StatsPopupContentProps) {
+const emptyStats = messageStats('No stats available');
+const lockedStats = messageStats('Picks are locked');
 
-	const display = bookStats?.[selectedKey] ?? emptyStats;
+export default function StatsPopupContent({ bookStats, selectedKey, locked }: StatsPopupContentProps) {
+
+	const display = locked ? lockedStats : bookStats?.[selectedKey] ?? emptyStats;
 	return (
 		<div className="stats-layout">
 			{display.map((section, index) => (
