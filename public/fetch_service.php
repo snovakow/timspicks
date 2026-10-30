@@ -100,7 +100,7 @@ if ($live && isset($_GET['history'])) {
 		// bet5 and bet6 hold closing lines, backfilled into every snapshot from before they were first fetched live; each snapshot's backfill.json marks every backfilled book
 		// 2026-10-12's 1300 slot has bet3 odds for FLA@BUF only, backfilled from Rotowire's US prices (the capture came back empty)
 		// 2026-09-29 and 2026-09-30 odds were backfilled from closing lines on Covers' odds tab, with gaps from Action Network (cron was off)
-		['season' => '2026-2027', 'format' => 'regular', 'start' => '2026-09-29', 'end' => '2026-10-24'],
+		['season' => '2026-2027', 'format' => 'regular', 'start' => '2026-09-29', 'end' => '2026-10-29'],
 	];
 
 	$index_file = $baseHistoryPath . '/history.json';
