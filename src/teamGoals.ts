@@ -96,11 +96,14 @@ const fitPoissonMean = (lines: TeamGoalLine[]): number | null => {
     return bestMean;
 };
 
+// The feed's three-letter codes that differ from the app's
+const teamAliases: Record<string, Team> = { WAS: "WSH" };
+
 const extractTeam = (name: string): Team | null => {
     const parse = name.split(" ");
     if (parse.length < 1) return null;
 
-    const team = parse[0];
+    const team = teamAliases[parse[0]] ?? parse[0];
     if (team.length === 2 && parse.length > 1) {
         const initial = parse[1];
         if (initial && initial.length > 0) {
