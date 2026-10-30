@@ -298,23 +298,11 @@ $playersPath = "../{$codeRoot}/players";
 $output = updatePicks($ch, $basePath, $playersPath);
 $warnings = array_merge($warnings, logStep($now, $output, $minOutput));
 
-/* DraftKings */
-$output = updateBet1($ch, $basePath);
-$warnings = array_merge($warnings, logStep($now, $output, $minOutput));
-
+/* Sportsbooks, each through the source its mode in the book list names */
 $endOfDay = new DateTime('tomorrow midnight', $timezone);
-
-/* FanDuel */
-$output = updateBet2($endOfDay, $ch, $basePath);
-$warnings = array_merge($warnings, logStep($now, $output, $minOutput));
-
-/* BetMGM */
-$output = updateBet3($endOfDay, $ch, $basePath);
-$warnings = array_merge($warnings, logStep($now, $output, $minOutput));
-
-/* BetRivers */
-$output = updateBet4($endOfDay, $basePath);
-$warnings = array_merge($warnings, logStep($now, $output, $minOutput));
+foreach (updateBooks($now, $endOfDay, $ch, $basePath) as $output) {
+    $warnings = array_merge($warnings, logStep($now, $output, $minOutput));
+}
 
 /* Backup */
 // Don't backup before 3am to make sure any time zone changes have passed

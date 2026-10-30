@@ -10,7 +10,12 @@
    with JSON, so this has to run before json_decode reports an outage as "Error decoding JSON". */
 function fetchCurl(CurlHandle $ch, string $url)
 {
-	$response = curl_exec($ch);
+	return curlResult($ch, curl_exec($ch), $url);
+}
+
+/* The checks above, for a response a handle has already fetched, alone or alongside others */
+function curlResult(CurlHandle $ch, string|false $response, string $url)
+{
 	if ($response === false) return ['body' => null, 'status' => null, 'error' => 'cURL Error: ' . curl_error($ch)];
 
 	$status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
@@ -297,10 +302,10 @@ function updatePicks(CurlHandle $ch, string $basePath, string $playerPath, bool 
 }
 
 /*
-	A book that fails, by an error or by throwing, doesn't stop the run. Its file is emptied, so the page
-	shows no prices from it rather than stale ones and the snapshot keeps the slot's earlier copy
-	(keepsEarlierPrices), and the failure becomes a warning, which the site's banner lists. Only a file
-	that can't be written stays an error.
+	A book that fails, by an error or by throwing, doesn't stop the run, and the failure becomes a warning,
+	which the site's banner lists. Prices it wrote earlier today are left in place, so the page keeps showing
+	them. A file from an earlier day holds another day's games, so it is emptied instead, and the snapshot
+	then keeps the slot's earlier copy (keepsEarlierPrices). Only a file that can't be written stays an error.
 */
 function withoutFailedBook(string $title, string $local_file, callable $fetch)
 {
@@ -310,6 +315,14 @@ function withoutFailedBook(string $title, string $local_file, callable $fetch)
 		$output = ['title' => $title, 'content' => null, 'error' => get_class($e) . ': ' . $e->getMessage()];
 	}
 	if ($output['error'] === null) return $output;
+
+	$earlier = earlierPricesToday($local_file);
+	if ($earlier !== null) {
+		$output['warning'][] = "$title: kept odds from $earlier: {$output['error']}";
+		$output['content'] = "Kept odds from $earlier";
+		$output['error'] = null;
+		return $output;
+	}
 
 	if (file_put_contents($local_file, '[]', LOCK_EX) === false) {
 		$output['error'] = 'Error saving local JSON file: ' . $local_file;
@@ -321,28 +334,105 @@ function withoutFailedBook(string $title, string $local_file, callable $fetch)
 	return $output;
 }
 
-function updateBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
+// The time a book file was written, when that was today (ET) and it holds prices; null otherwise
+function earlierPricesToday(string $local_file)
 {
-	return withoutFailedBook('DraftKings', $basePath . '/bet1.json', fn() => fetchBet1($ch, $basePath, $savesrc));
+	clearstatcache(true, $local_file);
+	$mtime = @filemtime($local_file);
+	if ($mtime === false) return null;
+
+	$timezone = new DateTimeZone('America/New_York');
+	if ($mtime < (new DateTime('today midnight', $timezone))->getTimestamp()) return null;
+
+	$prices = json_decode((string)file_get_contents($local_file), true);
+	if (!is_array($prices) || count($prices) === 0) return null;
+
+	return (new DateTime('@' . $mtime))->setTimezone($timezone)->format('g:i A');
 }
 
-function updateBet2(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
+/*
+	The master list of books, sportsbooks.json beside this file, in display order. Each book's mode says where
+	its prices come from: direct reads the book's own site, comparison reads the book's prices off an
+	odds-comparison page in the book's region, and off leaves the book alone, so it isn't fetched, its file
+	isn't touched or copied into snapshots, and the page doesn't show it. The front end is built from the
+	same file, so turning a book off or on also takes a build.
+*/
+const BOOK_MODES = ['direct', 'comparison', 'off'];
+
+/* The books with a fetcher for their own site. A book without one can only run in comparison mode. The fetchers
+   share one signature, since they're called through this table, and each ignores what its site doesn't need */
+const DIRECT_FETCHERS = ['bet1' => 'fetchBet1', 'bet2' => 'fetchBet2', 'bet3' => 'fetchBet3', 'bet4' => 'fetchBet4'];
+
+function sportsbooks()
 {
-	return withoutFailedBook('FanDuel', $basePath . '/bet2.json', fn() => fetchBet2($endOfDay, $ch, $basePath, $savesrc));
+	$local_file = __DIR__ . '/sportsbooks.json';
+	$data = @file_get_contents($local_file);
+	if ($data === false) return ['books' => null, 'error' => "Error reading the book list $local_file"];
+
+	$books = json_decode($data, true);
+	if (!is_array($books) || !array_is_list($books)) return ['books' => null, 'error' => "The book list $local_file isn't a JSON list"];
+
+	$keys = [];
+	foreach ($books as $index => $book) {
+		$key = is_array($book) ? ($book['key'] ?? null) : null;
+		$where = "Book " . ($index + 1) . " in $local_file";
+		if (!is_string($key) || !preg_match('/^bet\d+$/', $key)) return ['books' => null, 'error' => "$where has no key of the form bet<n>"];
+		if (isset($keys[$key])) return ['books' => null, 'error' => "$where repeats the key $key"];
+		$keys[$key] = true;
+		if (!is_string($book['title'] ?? null) || trim($book['title']) === '') return ['books' => null, 'error' => "$where ($key) has no title"];
+		if (!in_array($book['mode'] ?? null, BOOK_MODES, true)) return ['books' => null, 'error' => "$where ($key) has a mode other than " . implode(', ', BOOK_MODES)];
+		if ($book['mode'] !== 'comparison') continue;
+		$slug = $book['comparison']['slug'] ?? null;
+		$region = $book['comparison']['region'] ?? null;
+		if (!is_string($slug) || !preg_match('/^[a-z0-9-]+$/', $slug) || !is_string($region) || !preg_match('/^[A-Z]{2}-[A-Z]{2}$/', $region)) {
+			return ['books' => null, 'error' => "$where ($key) runs in comparison mode without a comparison slug and region"];
+		}
+	}
+	return ['books' => $books, 'error' => null];
 }
 
-function updateBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
+/*
+	Every book the list doesn't turn off, in its order, one step output each. A book that fails is a warning
+	(withoutFailedBook), so only an unreadable list, or a file that can't be written, stops the run. The
+	comparison books share one pass over the comparison pages. $books stands in for the list, for a check
+	that pulls the books through other modes.
+*/
+function updateBooks(DateTime $now, DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false, ?array $books = null)
 {
-	return withoutFailedBook('BetMGM', $basePath . '/bet3.json', fn() => fetchBet3($endOfDay, $ch, $basePath, $savesrc));
-}
+	if ($books === null) {
+		$list = sportsbooks();
+		if ($list['error'] !== null) return [['title' => 'Sportsbooks', 'content' => null, 'error' => $list['error']]];
+		$books = $list['books'];
+	}
+	$active = array_values(array_filter($books, fn($book) => $book['mode'] !== 'off'));
 
-function updateBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
-{
-	return withoutFailedBook('BetRivers', $basePath . '/bet4.json', fn() => fetchBet4($endOfDay, $basePath, $savesrc));
+	$compared = array_values(array_filter($active, fn($book) => $book['mode'] === 'comparison'));
+	try {
+		$comparison = $compared ? fetchComparison($now, $compared, $basePath, $savesrc) : [];
+	} catch (Throwable $e) {
+		$failed = ['title' => null, 'content' => null, 'error' => get_class($e) . ': ' . $e->getMessage()];
+		$comparison = array_fill_keys(array_column($compared, 'key'), $failed);
+	}
+
+	$outputs = [];
+	foreach ($active as $book) {
+		$key = $book['key'];
+		$fetch = $book['mode'] === 'comparison'
+			? fn() => $comparison[$key]
+			: function () use ($key, $endOfDay, $ch, $basePath, $savesrc) {
+				$fetcher = DIRECT_FETCHERS[$key] ?? null;
+				if ($fetcher === null) return ['title' => null, 'content' => null, 'error' => "$key has no fetcher for its own site, so it can only run in comparison mode"];
+				return $fetcher($endOfDay, $ch, $basePath, $savesrc);
+			};
+		$output = withoutFailedBook($book['title'], "$basePath/$key.json", $fetch);
+		$output['title'] = $book['title'];
+		$outputs[] = $output;
+	}
+	return $outputs;
 }
 
 /* DraftKings */
-function fetchBet1(CurlHandle $ch, string $basePath, bool $savesrc = false)
+function fetchBet1(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'DraftKings';
@@ -726,7 +816,7 @@ function fetchBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $s
 }
 
 /* BetRivers */
-function fetchBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
+function fetchBet4(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $savesrc = false)
 {
 	$output = ['title' => null, 'content' => null, 'error' => null];
 	$output['title'] = 'BetRivers';
@@ -832,6 +922,177 @@ function fetchBet4(DateTime $endOfDay, string $basePath, bool $savesrc = false)
 	return $output;
 }
 
+/* The odds-comparison pages: a day's matchups, and a game's odds tab for a region such as CA-ON */
+const COMPARISON_MATCHUPS = 'https://www.covers.com/sports/nhl/matchups?selectedDate=';
+const COMPARISON_TAB = 'https://www.covers.com/sport/hockey/nhl/matchup/%s/tab/odds?countryCode=%s&stateProv=%s';
+
+/* A comparison page's request. The odds tab answers the page's own request for it with the tab alone */
+function comparisonOptions(bool $tab)
+{
+	$headers = [
+		'accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+		'accept-language: en-US,en;q=0.9',
+		'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+	];
+	if ($tab) $headers[] = 'x-requested-with: XMLHttpRequest';
+	return [
+		CURLOPT_RETURNTRANSFER => true,
+		CURLOPT_FOLLOWLOCATION => true,
+		CURLOPT_ENCODING => '',
+		CURLOPT_CONNECTTIMEOUT => 5,
+		CURLOPT_TIMEOUT => 20,
+		CURLOPT_HTTPHEADER => $headers,
+	];
+}
+
+/*
+	The comparison books' prices for today's games that haven't started. The matchups page names the games,
+	and each game's odds tab lists every book in its region with each player's anytime goal scorer price, so
+	a tab is fetched once per game and region, whichever books share it. A started game's tab would hold
+	live prices, and the books take a game's player markets down at puck drop anyway. One output per book,
+	by key: a page that fails fails every book that needed it.
+*/
+function fetchComparison(DateTime $now, array $books, string $basePath, bool $savesrc = false)
+{
+	$outputs = [];
+	$fail = function (array $keys, string $error) use (&$outputs) {
+		foreach ($keys as $key) $outputs[$key] = ['title' => null, 'content' => null, 'error' => $error];
+	};
+
+	$url = COMPARISON_MATCHUPS . $now->format('Y-m-d');
+	$ch = curl_init($url);
+	curl_setopt_array($ch, comparisonOptions(false));
+	$fetched = fetchCurl($ch, $url);
+	if ($fetched['error'] !== null) {
+		$fail(array_column($books, 'key'), $fetched['error']);
+		return $outputs;
+	}
+	if ($savesrc) file_put_contents($basePath . '/src_comparison.html', $fetched['body']);
+
+	$games = comparisonGames($fetched['body']);
+	if (!$games) {
+		$fail(array_column($books, 'key'), "No games listed on $url");
+		return $outputs;
+	}
+	$upcoming = array_keys(array_filter($games));
+
+	$byRegion = [];
+	foreach ($books as $book) $byRegion[$book['comparison']['region']][] = $book;
+
+	foreach ($byRegion as $region => $regionBooks) {
+		[$country, $state] = explode('-', $region);
+		$urls = [];
+		foreach ($upcoming as $id) $urls[$id] = sprintf(COMPARISON_TAB, $id, $country, $state);
+
+		$slugs = array_column(array_column($regionBooks, 'comparison'), 'slug');
+		$prices = array_fill_keys($slugs, []);
+		$error = null;
+		foreach (fetchParallel($urls, comparisonOptions(true)) as $id => $page) {
+			if ($page['error'] !== null) {
+				$error = $page['error'];
+				break;
+			}
+			if ($savesrc) file_put_contents("$basePath/src_comparison_{$region}_$id.html", $page['body']);
+			foreach (comparisonPrices($page['body'], $slugs) as $slug => $entries) array_push($prices[$slug], ...$entries);
+		}
+		if ($error !== null) {
+			$fail(array_column($regionBooks, 'key'), $error);
+			continue;
+		}
+
+		foreach ($regionBooks as $book) {
+			$local_file = "$basePath/{$book['key']}.json";
+			$json_string = json_encode($prices[$book['comparison']['slug']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+			if (file_put_contents($local_file, $json_string, LOCK_EX) === false) {
+				$outputs[$book['key']] = ['title' => null, 'content' => null, 'error' => 'Error saving local JSON file: ' . $local_file];
+				continue;
+			}
+			$outputs[$book['key']] = ['title' => null, 'content' => count($upcoming) . " games of data have been merged and written to $local_file", 'error' => null];
+		}
+	}
+	return $outputs;
+}
+
+/* Several pages at once, at most $limit in flight, each through fetchCurl's checks, returned by the key each URL came under */
+function fetchParallel(array $urls, array $options, int $limit = 4)
+{
+	$results = array_fill_keys(array_keys($urls), null);
+	$waiting = $urls;
+	$running = [];
+	$multi = curl_multi_init();
+	while ($waiting || $running) {
+		while ($waiting && count($running) < $limit) {
+			$key = array_key_first($waiting);
+			$ch = curl_init($waiting[$key]);
+			curl_setopt_array($ch, $options);
+			curl_multi_add_handle($multi, $ch);
+			$running[spl_object_id($ch)] = [$key, $ch];
+			unset($waiting[$key]);
+		}
+		curl_multi_exec($multi, $active);
+		if ($active) curl_multi_select($multi, 1.0);
+		while ($done = curl_multi_info_read($multi)) {
+			[$key, $ch] = $running[spl_object_id($done['handle'])];
+			$response = $done['result'] === CURLE_OK ? curl_multi_getcontent($ch) : false;
+			$results[$key] = curlResult($ch, $response ?? false, $urls[$key]);
+			curl_multi_remove_handle($multi, $ch);
+			unset($running[spl_object_id($ch)]);
+		}
+	}
+	curl_multi_close($multi);
+	return $results;
+}
+
+/* The games on a matchups page, by id: true for a game that hasn't started */
+function comparisonGames(string $page)
+{
+	preg_match_all('#<article id="nhl-(\d+)" class="gamebox (\w+)#', $page, $matches, PREG_SET_ORDER);
+	$games = [];
+	foreach ($matches as [, $id, $state]) $games[$id] = $state === 'pregamebox';
+	return $games;
+}
+
+/*
+	Each book's anytime goal scorer prices on a game's odds tab, by slug. The Goals Scored section holds a
+	block per player, and a book's price is its over on 0.5 goals. A book can appear twice in a block, since
+	the best price is repeated above the full list, so only its first appears.
+*/
+function comparisonPrices(string $page, array $slugs)
+{
+	$prices = array_fill_keys($slugs, []);
+	$start = strpos($page, '>Goals Scored</h2>');
+	if ($start === false) return $prices;
+	$end = strpos($page, '</article>', $start);
+	$section = $end === false ? substr($page, $start) : substr($page, $start, $end - $start);
+
+	foreach (array_slice(preg_split('#<a href="[^"]*/sport/hockey/nhl/players/#', $section), 1) as $block) {
+		if (!preg_match('#<span class="category fw-bold text-nowrap">\s*([^<]+?)\s*</span>#', $block, $match)) continue;
+		$name = html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+		preg_match_all('#slug=([a-z0-9-]+)[^>]*>\s*<span class="oddsSideLineText">o0\.5</span>\s*<span class="oddsSideOddsText[^"]*">([^<]+)<#', $block, $offers, PREG_SET_ORDER);
+		$seen = [];
+		foreach ($offers as [, $slug, $american]) {
+			if (!isset($prices[$slug]) || isset($seen[$slug])) continue;
+			$seen[$slug] = true;
+			$odds = americanToDecimal(html_entity_decode($american, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+			if ($odds !== null) $prices[$slug][] = ["name" => $name, "odds" => $odds];
+		}
+	}
+	return $prices;
+}
+
+/* American odds as decimal odds to four places, or null for text that isn't a price */
+function americanToDecimal(string $american)
+{
+	$american = str_replace(["\u{2212}", "\u{2013}"], '-', trim($american));
+	if (strcasecmp($american, 'even') === 0 || strcasecmp($american, 'ev') === 0) return 2.0;
+	if (!preg_match('/^[+-]?\d+$/', $american)) return null;
+
+	$value = (int)$american;
+	if (abs($value) < 100) return null;
+	return round($value > 0 ? 1 + $value / 100 : 1 + 100 / -$value, 4);
+}
+
 /* True when a book came back empty and the snapshot already holds its prices from an earlier run.
    A feed that drops its market partway through the day would otherwise wipe the last prices the
    slot captured; the kept file's older time stamp is the trace */
@@ -842,6 +1103,15 @@ function keepsEarlierPrices(string $source, string $target)
 
 	$earlier = json_decode((string)file_get_contents($target), true);
 	return is_array($earlier) && count($earlier) > 0;
+}
+
+/* A copy with its source's modified time, so a book file kept from an earlier run shows in the snapshot when its prices are from */
+function copyKeepingTime(string $source, string $target)
+{
+	if (!copy($source, $target)) return false;
+	clearstatcache(true, $source);
+	$mtime = filemtime($source);
+	return $mtime === false || touch($target, $mtime);
 }
 
 /* Backup */
@@ -875,6 +1145,12 @@ function backup(DateTime $now, DateTimeZone $timezone, string $basePath, array $
 
 	$games = $data["gameWeek"][0]["games"] ?? [];
 
+	$list = sportsbooks();
+	if ($list['error'] !== null) {
+		$output['error'] = $list['error'];
+		return $output;
+	}
+
 	$closestGame = null;
 	$closestTime = null;
 	foreach ($games as $game) {
@@ -898,17 +1174,15 @@ function backup(DateTime $now, DateTimeZone $timezone, string $basePath, array $
 		$backupSubPath = $basePath . '/' . $date . '/' . $time;
 		if (!is_dir($backupPath)) mkdir($backupPath, 0755, true);
 		if (!is_dir($backupSubPath)) mkdir($backupSubPath, 0755, true);
-		$bet1file = '/bet1.json';
-		$bet2file = '/bet2.json';
-		$bet3file = '/bet3.json';
-		$bet4file = '/bet4.json';
 		$gamesfile = '/games.json';
 		$helperfile = '/helper.json';
 		$copyErrors = [];
 		if (!copy($basePath . $gamesfile, $backupPath . $gamesfile)) $copyErrors[] = $gamesfile;
-		foreach ([$bet1file, $bet2file, $bet3file, $bet4file] as $betfile) {
+		foreach ($list['books'] as $book) {
+			if ($book['mode'] === 'off') continue;
+			$betfile = "/{$book['key']}.json";
 			if (keepsEarlierPrices($basePath . $betfile, $backupSubPath . $betfile)) continue;
-			if (!copy($basePath . $betfile, $backupSubPath . $betfile)) $copyErrors[] = $betfile;
+			if (!copyKeepingTime($basePath . $betfile, $backupSubPath . $betfile)) $copyErrors[] = $betfile;
 		}
 		if (!copy($basePath . $helperfile, $backupSubPath . $helperfile)) $copyErrors[] = $helperfile;
 

@@ -1,0 +1,8 @@
+[
+	{ "key": "bet1", "title": "DraftKings", "mode": "comparison", "comparison": { "slug": "draft-kings", "region": "CA-ON" } },
+	{ "key": "bet2", "title": "FanDuel", "mode": "direct", "comparison": { "slug": "fanduel", "region": "CA-ON" } },
+	{ "key": "bet3", "title": "BetMGM", "mode": "direct", "comparison": { "slug": "betmgm", "region": "CA-ON" } },
+	{ "key": "bet4", "title": "BetRivers", "mode": "direct", "comparison": { "slug": "betrivers", "region": "US-NJ" } },
+	{ "key": "bet5", "title": "theScore", "mode": "comparison", "comparison": { "slug": "thescore", "region": "CA-ON" } },
+	{ "key": "bet6", "title": "bet365", "mode": "comparison", "comparison": { "slug": "bet365", "region": "CA-ON" } }
+]
