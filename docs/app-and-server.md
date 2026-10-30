@@ -101,16 +101,41 @@ at ET midnight.
 | the schedule feed | `games.json` | only the first game-week entry, i.e. today |
 | the pick-list feed | `helper.json` | keyed by the feed's own list ids |
 | the player feed | `players/<id>.json` | one file per player |
-| bet1–bet4 | `data/bet1.json` … `bet4.json` | flat arrays of player names and odds |
+| each book | `data/bet1.json`, `bet2.json` and on | flat arrays of player names and odds |
 
 Player files are refreshed only when missing or when the player has changed
 teams, so their season stats go stale over a season unless the player is traded;
 current games and goals come from the pick-list feed instead. An override table
 covers pick-list entries that arrive with a missing or wrong player id.
 
-bet2, bet3 and bet4 take an end-of-day cutoff and drop markets closing after it.
-bet1 takes none, so its file can include tomorrow's games — worth remembering
-when book coverage looks uneven.
+### The books
+
+The books are kept in one list beside the scraping library. Its order is the
+order the page shows them in, and it gives each book a mode:
+
+- **direct** reads the book's own site.
+- **comparison** reads the book's prices off an odds-comparison page instead,
+  which shows every book's prices for a game in one place, in the region the list
+  gives that book. It serves a book whose own site refuses the scraper, or one the
+  scraper has no reader for.
+- **off** leaves the book alone: it isn't fetched, its file isn't touched or copied
+  into snapshots, and the page doesn't show it.
+
+The front end is built from the same list, so switching a book between direct and
+comparison needs only the list copied to the live folder, while turning a book off
+or back on needs a build as well.
+
+The comparison pages are fetched once per game and region, whichever books share
+them, and only for games that haven't started: the books take a game's player
+markets down at puck drop, and a started game's page would hold live prices. They
+spell names their own way, so every book in comparison mode shares those
+spellings. On 2026-10-29 their prices matched the books' own for 94–99% of
+players, and the rest differed by a step or two, as a page a few minutes behind
+the book would.
+
+Read from their own sites, bet2, bet3 and bet4 take an end-of-day cutoff and drop
+markets closing after it. bet1's site takes none, so in direct mode its file can
+include tomorrow's games — worth remembering when book coverage looks uneven.
 
 Coverage can also go missing without any error. A book that changes its format
 still parses, into an empty file or into prices from the wrong market, and a
@@ -122,12 +147,14 @@ Every fetch rejects a non-2xx status or an empty body before anything parses it 
 otherwise an outage reaches the JSON parser and is reported as a decode error,
 which is what a feed mid-rollover used to look like.
 
-A book that fails, by an error or by throwing, doesn't stop the run. Its file is
-written empty, so the page shows no prices from that book rather than stale ones,
-the snapshot keeps the slot's earlier copy (see below), and the failure becomes a
-warning. The run still completes, so it waits the full period like any other,
-even inside the game window. The pick list and the schedule still stop the run,
-as does a book file that can't be written.
+A book that fails, by an error or by throwing, doesn't stop the run, and the
+failure becomes a warning. Prices the book gave earlier the same day (ET) stay in
+its file, so the page keeps showing them. A file from an earlier day is written
+empty instead, since it holds another day's games, and the snapshot then keeps the
+slot's earlier copy (see below). In comparison mode, a page that fails fails every
+book that needed it. The run still completes, so it waits the full period like
+any other, even inside the game window. The pick list, the schedule and the book
+list still stop the run, as does a book file that can't be written.
 
 The History fetch tolerates one status of its own: a 404 means the challenge
 didn't run that day, so it is skipped as before. Every other failure stops the
@@ -144,13 +171,14 @@ one of the release gates.
 data/
   games.json         today's schedule
   helper.json        today's three pick lists
-  bet1..bet4.json    today's odds, one file per book
+  bet1.json ...      today's odds, one file per book the list shows
   process.json       run state
   <Y-m-d>/
     games.json       that day's schedule
     <HHmm>/
-      bet1..bet4.json
+      bet1.json ...
       helper.json
+      backfill.json  the books whose prices here were filled in later, if any
 players/
   <id>.json
 history/
@@ -167,7 +195,15 @@ end-of-day state.
 A book that comes back completely empty doesn't replace a copy the folder already
 holds. Without that, a feed that drops its market partway through the day would
 wipe the last prices the slot captured. The kept file is older than the rest of
-its folder, which is the trace that it happened.
+its folder, which is the trace that it happened. A snapshot copy also keeps each
+book file's own time, so prices a failed book kept from an earlier run show their
+real age in the folder too.
+
+Prices filled in after the fact, from closing lines, look like any other book file,
+so a folder that holds some marks them in its backfill file, by book. A closing
+price knows late news, such as a scratch, that a price captured before the game
+didn't, so any analysis that compares books, or prices over time, has to be able
+to tell the two apart.
 
 The run-state file carries when a run began, when it last finished, and any
 warnings it raised. The front end reads it and shows a notice when the data is

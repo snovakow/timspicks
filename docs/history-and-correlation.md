@@ -119,6 +119,30 @@ lists. `/analyze` checks whether the lifts hold there: on 2026-10-17, over
 the archive through 2026-10-15, the near-top pairs' lifts did not differ
 significantly from the rest.
 
+## Backfilled prices in the archive
+
+Most book files in the slot snapshots were captured before the games. Some were
+filled in afterwards from closing lines, and the snapshot folder's
+`backfill.json` marks those books. As of 2026-10-29:
+
+| books | where |
+| --- | --- |
+| bet5, bet6 | every slot from 2026-04-09, where the archive starts, until they were first fetched with the other books |
+| bet1–bet4 | every slot on 2026-09-29 and 2026-09-30, missed while the cron was off |
+| bet3 | 2026-10-12's 1300 slot, whose capture came back empty; prices taken after the game |
+
+The lift fit reads them like any other price. A closing price makes a player's
+expected chance sharper, and each day's teammate and opponent pairs are still
+measured against that day's pairs from different games, so neither side gains. The
+app's other replays read them too. But a closing price knows late news, such as a
+scratch, that a captured one didn't, so `/analyze` never times one, flags every
+result that reads them, and checks each result on the days whose prices were all
+captured. Until there are enough of those days, no sportsbook result changes its
+conclusion. Its report's header lists exactly which books and days hold them.
+
+Adding bet5 and bet6 to the Avg changed the prices the fit reads on every archived
+day, so the lifts are due a refit once the backfill is in both archives.
+
 ## Checklist
 
 - [ ] Decided whether this run needs new archive days at all

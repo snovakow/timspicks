@@ -49,11 +49,29 @@ copying below is a step at all.
    gets recorded, so the failed-run gate never engages and it retries every
    minute.
 
+   The book list, `public/sportsbooks.json`, travels with the PHP: the scraping
+   library reads it from the live folder on every run, and a list it can't read
+   stops every run at the books. A release that drops a library function the old
+   update script calls can't keep that order safe either way, so copy the library,
+   the list and `update.php` back to back: a cron run that lands between them
+   fails once and retries.
+
 **Never copy `dist/data`, `dist/history`, `dist/players` or `dist/auth.json`.**
 The build fills those from the checkout's own stale copies, while the server owns
 the live ones: cron writes the data and players folders, the History action builds
 the archive, and the credentials file is rewritten in place on rehash. Copying the
 build output wholesale overwrites the live history index.
+
+## Changing a book's mode
+
+The book list sets each book's mode: `direct` for its own site, `comparison` for
+the odds-comparison pages, `off` for neither. Switching a book between `direct`
+and `comparison` touches only the scrapers, so copying the edited
+`public/sportsbooks.json` into the live folder is the whole deploy. Turning a book
+`off`, or back on, also changes what the page shows, and the front end is built
+from the list, so that one goes through the full flow above. Edit the list in the
+checkout and deploy it from there, never the live copy alone, or the next deploy
+undoes the change.
 
 ## Before the merge
 
@@ -114,6 +132,10 @@ three — this is the list it's checking against:
   dated folders into the live folder's data folder, along with
   `fetch_service.php`. That is a specific exception to the never-copy rule above
   — dated folders by hand, never `dist/data` wholesale.
+- Any backfill, of missed days or of a book added later, marks every book file it
+  writes in that slot's `backfill.json` as `"closing"`, and never replaces a book
+  file already there. A backfilled price looks like a captured one; the mark is
+  the only way an analysis can tell them apart.
 - One trap when backfilling: the live `history.json` only ever extends forward
   from the end it has stored. If it already holds an entry for the new season
   that starts after the days you just backfilled, that entry has to be deleted,
