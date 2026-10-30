@@ -140,8 +140,8 @@ result that reads them, and checks each result on the days whose prices were all
 captured. Until there are enough of those days, no sportsbook result changes its
 conclusion. Its report's header lists exactly which books and days hold them.
 
-Adding bet5 and bet6 to the Avg changed the prices the fit reads on every archived
-day, so the lifts are due a refit once the backfill is in both archives.
+Adding a book to the Avg changes the prices the fit reads on every archived day,
+so the lifts need a refit once that book's backfill is in both archives.
 
 ## Checklist
 
