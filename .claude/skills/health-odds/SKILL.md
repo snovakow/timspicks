@@ -1,7 +1,7 @@
 ---
 name: health-odds
-description: Check that bet1–bet4 still parse into anytime goal scorer odds, and that every listed player's name finds his odds in each book. Pulls the four books fresh through this checkout's parser, traces every parsed entry to the raw market it came from, compares prices across the books and against the live files, and runs the app's own name matchers over today's pick lists and the season's snapshots. Then fixes what it finds, in oddsNameMap or, when a book's format has changed, in the parser. Use when asked to check the sportsbooks or their parsing, whether the odds are anytime scorer odds, or why a player shows no odds from a book.
-argument-hint: "[--days N | --all] [--no-pull --out <dir>]"
+description: Check that every book in the book list still parses into anytime goal scorer odds, from its own site or from the comparison pages as its mode sets, and that every listed player's name finds his odds in each book. Pulls the books fresh through this checkout's parser, traces every parsed entry to the raw market it came from, compares prices across the books and against the live files, and runs the app's own name matchers over today's pick lists and the season's snapshots. Then fixes what it finds, in oddsNameMap or, when a book's format has changed, in the parser. Use when asked to check the sportsbooks or their parsing, whether the odds are anytime scorer odds, or why a player shows no odds from a book.
+argument-hint: "[--days N | --all] [--direct] [--no-pull --out <dir>]"
 model: opus
 effort: max
 allowed-tools: Read, Grep, Glob, Edit, Bash(node .claude/skills/health-odds/scripts/odds.mjs:*), Bash(npx tsc -b), Bash(npx eslint:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(ls:*), Bash(cmp:*), Bash(diff:*)
@@ -12,7 +12,7 @@ allowed-tools: Read, Grep, Glob, Edit, Bash(node .claude/skills/health-odds/scri
 Arguments: $ARGUMENTS
 
 This skill runs in this checkout, on the machine that serves the site, like health-server. It checks two things, then fixes what it finds:
-- **Parsing.** Each book's parser, `updateBet1`–`updateBet4` in `public/fetch_lib.php`, still reads the anytime goal scorer market, all of it, and nothing else. A book can rename or reshape that market without any error. The parser then writes an empty or partial list, or another market's prices, and the site carries on.
+- **Parsing.** Each book's parser in `public/fetch_lib.php` still reads the anytime goal scorer market, all of it, and nothing else: its own site's fetcher (`fetchBet1`–`fetchBet4`) for a book in direct mode, or the comparison parser (`comparisonPrices`) for one in comparison mode. The book list, `public/sportsbooks.json`, sets each book's mode. A book or a page can rename or reshape that market without any error. The parser then writes an empty or partial list, or another market's prices, and the site carries on.
 - **Names.** Every listed player finds his price in each book that prices his game. A book that spells him differently from the roster drops out for him silently, on the site and in the archive replays.
 
 It may change `oddsNameMap` in `src/dataProcessor.ts`, and the book parsers in `public/fetch_lib.php` when a format changed. Never:
@@ -21,7 +21,7 @@ It may change `oddsNameMap` in `src/dataProcessor.ts`, and the book parsers in `
 - edit `src/correlationData.ts`, which the user regenerates
 - commit: the user commits, and `/commit` reviews the batch
 
-A pull makes about a dozen requests to the books, the same ones the cron makes every hour. Pull once per run, and re-check that pull with `--no-pull`.
+A pull makes a few dozen requests to the books and the comparison pages, the same ones the cron makes every hour. Pull once per run, and re-check that pull with `--no-pull`.
 
 The repo is public. Keep hosts and server paths out of everything tracked. Comments state the rule, not the case that prompted it, so no book key, date or game. The one exception is a name-map line, which ends with the books that use its spelling, as bet keys (`// bet2 bet4`), never as book names (the commit skill, step 3).
 
@@ -33,8 +33,9 @@ If this checkout is on `main`, ask before changing anything, because work lands 
 
 - `--out <dir>`: where the pull lands, which has to be new or empty. Use a new folder in the thread's scratchpad when there is one. Without it the script makes a temp folder and prints where.
 - `--no-pull`: re-check what `--out` already holds, without requesting anything. It loads `src/` afresh, so it's the check to run after a name fix.
+- `--direct`: pull each book that has a fetcher for its own site through it, whatever its mode. It shows whether a book moved to comparison mode answers directly again, without changing the live list. Use it now and then, not every run: a site that blocked the scraper on purpose shouldn't be hit often.
 - `--days N` or `--all`: how far back the snapshot sweep reads. The default is this season, back to the off-season gap between snapshot days.
-- `--lib <path>`: parse with another `fetch_lib.php`. The default is this checkout's `public/fetch_lib.php`. When the live folder's copy differs, the script pulls with that too, into `<out>/live-lib`, so both parsers get checked.
+- `--lib <path>`: parse with another `fetch_lib.php`, and the book list beside it. The default is this checkout's `public/fetch_lib.php`. When the live folder's copy differs, the script pulls with that too, into `<out>/live-lib`, so both parsers get checked. A live copy from before the book list can't be pulled this way, and the report says so.
 - `--live <dir>`, `--php <path>`: overrides for when discovery fails. The Setup section says which one it needs.
 
 The script finds the live folder the way health-server does, from the cron line and the web server config. It runs PHP 8 from PATH, or the CLI beside the web server's own PHP. It lints the parser before pulling, and it catches the parser's notices rather than logging them, so a check never adds to the server's PHP error log. The name checks run the app's own code, loaded from `src/` through Vite. The Setup section says if that failed, and a check that can't load the app skips names rather than guess.
@@ -45,9 +46,9 @@ It opens with a verdict and an **Attention** list:
 - **FAIL** means the site gets wrong odds or none, now or on the next run. That includes a parser that throws, a market that isn't the anytime one, prices the parser never read, and entries the app would reject.
 - **WARN** means a book couldn't be checked, a finding to confirm, or a name to fix.
 
-**Pull.** One line for the schedule, then one per book.
-- "threw" is a parser error, which stops the cron's whole run, not just that book.
-- An HTTP error or timeout means that book couldn't be checked this time. health-server shows whether the cron is failing on it too.
+**Pull.** One line for the schedule, one for the books with each one's mode, then one per book.
+- A book that fails, by an error or by throwing, shows as a warning, as the cron records it: the run carries on without that book's prices. An HTTP error or timeout means that book couldn't be checked this time. health-server shows whether the cron is failing on it too.
+- In comparison mode, one failed page fails every book that needed it.
 - Notices are often the first sign of a changed feed.
 
 **Today's games.** The entries each book's parsed file holds for each game.
@@ -59,14 +60,15 @@ It opens with a verdict and an **Attention** list:
 - **Read** is the market the entries came from, with whatever the book states about how it settles (period, line, side), and the count per game against the prices that market holds. Expect one market per game, named as the anytime goal scorer market, settling on the whole game and on one or more goals, overtime included.
 - **Left** lists the other player scorer markets in the responses, which the parser rightly ignores: first scorer, period markets, 2+ goals, parlays. One marked "anytime-like" is either a second copy of the market or the one the parser should now be reading.
 - Entries that match no raw selection mean the parser reads something this check's reader doesn't, usually a new layout. Inspect the raw files.
-- bet1 takes no end-of-day cutoff, so entries from games past today are expected there and nowhere else.
+- bet1's own site takes no end-of-day cutoff, so in direct mode its entries from games past today are expected there and nowhere else.
+- A book in comparison mode is read off each game's odds tab, as the over on 0.5 goals: the report calls that market "Goals Scored, 1 or more goals". Only games that hadn't started are read.
 - The anytime call is made from wording and stated terms. Confirm a FAIL, or an unfamiliar market name, in the raw file before acting on it.
 
 **Prices.** Each book against the median of the others for the same players.
 - Books price long shots differently, so single players spread widely.
 - A whole book running well apart from the others is reading another market, or another odds format. The app reads every price as decimal odds.
 
-**Live files.** The live `bet1.json`–`bet4.json` from the cron's last run, against this pull.
+**Live files.** The live book files from the cron's last run, against this pull.
 - The same names at about the same prices mean the site serves what the parser reads now.
 - An empty live file, or one that shares few names with the pull, means the cron's last run read something else. Check health-server, and the Setup line on whether the deployed `fetch_lib.php` differs; when it does, its own pull is compared under the table.
 
@@ -97,21 +99,22 @@ A namesake isn't a fix. Leave it, and say so in the report.
 - Add one entry per confirmed lead, as the report suggests. Copy the spelling exactly from the report or the book's file, including curly apostrophes and accents.
 - Keep the list in alphabetical order of key, ignoring case, and end the line with the books that use the spelling: `// bet2 bet4`.
 - The key is normally the roster name (`firstName.default` and `lastName.default` from the player file), which `compilePlayerList` starts from.
+- Every book in comparison mode takes its names from the comparison pages, so one spelling there misses in all of them at once. One entry covers them all; list each of them in its comment.
 - For a miss only the archive replays have, the report keys the entry so the archive lookup reaches the book's spelling:
   - The pick list and the roster disagree, and the books use the roster's spelling: map the roster name to the pick list's. The lookup reads it backwards, from the pick-list name to the roster's.
   - Otherwise: map the pick-list name to the book's spelling.
 - One key holds one spelling. If the key already maps to a spelling still in use, or two books spell the player two ways, don't overwrite it. Say so in the report.
 - Leave an entry whose spelling no book uses any more, because old snapshots still carry it.
-- The two Elias Petterssons are told apart by player id in `compilePlayerList`, which writes out each book's spelling for them. A change to one of those spellings is fixed there, not in the map.
+- The two Elias Petterssons are told apart by player id in `src/dataProcessor.ts`, which writes out each book's spelling for them. A change to one of those spellings is fixed there, not in the map. A book's spelling follows its mode, since the comparison pages spell names their own way.
 - Fix a name with a map entry, never new matching code, since the map is what both matchers read.
 
-### Parsing: `updateBet1`–`updateBet4` in `public/fetch_lib.php`
+### Parsing: the fetchers and the comparison parser in `public/fetch_lib.php`
 
 Only when the report shows a book's format changed and you've found the new shape in its raw files.
 - Read the new shape alongside the old, and keep the existing branches unless the old shape is certainly gone. Books switch back and forth, sometimes within a day.
 - Read only the anytime market, every priced player, with prices as decimal odds. Skip a selection without a price rather than divide by it.
-- Give any new parameter a default. `update.php` calls these functions too, and nothing checks the two against each other (the header comment in `fetch_lib.php`).
-- `scripts/pull.php` calls them the way `update.php` does. If a signature changes, change the calls in `update.php`, `fetch_service.php` and `pull.php` together.
+- Give any new parameter a default. `update.php` calls the library too, and nothing checks the two against each other (the header comment in `fetch_lib.php`).
+- `scripts/pull.php` calls `updateBooks` the way `update.php` does. If its signature changes, change the calls in `update.php`, `fetch_service.php` and `pull.php` together. The fetchers share one signature, since `updateBooks` calls them through a table.
 - Comments state the rule, never the case: no book key, date or game.
 
 ### Then verify

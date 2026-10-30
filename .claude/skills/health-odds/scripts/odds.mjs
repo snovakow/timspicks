@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Odds feed check for the health-odds skill. It pulls bet1–bet4 fresh through a fetch_lib.php, into a
-// folder of its own with every raw response saved, then checks each parsed file against the responses
-// it came from: which market each entry was read from, whether that market is the anytime goal scorer
-// one, and whether a market the parser should have read went unread. Then it compares prices across
-// the books and against the live files, and runs the app's own name matchers, loaded from src/, over
-// today's pick lists and the season's snapshots.
+// Odds feed check for the health-odds skill. It pulls every book the book list doesn't turn off fresh
+// through a fetch_lib.php, each from the source its mode names, into a folder of its own with every raw
+// response saved, then checks each parsed file against the responses it came from: which market each
+// entry was read from, whether that market is the anytime goal scorer one, and whether a market the parser
+// should have read went unread. Then it compares prices across the books and against the live files, and
+// runs the app's own name matchers, loaded from src/, over today's pick lists and the season's snapshots.
 //
-//   node .claude/skills/health-odds/scripts/odds.mjs [--out <dir>] [--no-pull] [--days N | --all]
+//   node .claude/skills/health-odds/scripts/odds.mjs [--out <dir>] [--no-pull] [--direct] [--days N | --all]
 //       [--lib <fetch_lib.php>] [--live <dir>] [--php <path>]
 //
 // It writes only into --out, plus a cache folder it removes. The repo is public, so nothing here names
@@ -18,7 +18,6 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ET = 'America/New_York';
-const BOOKS = ['bet1', 'bet2', 'bet3', 'bet4'];
 const LISTS = ['1', '2', '3'];
 
 // This check's own tolerances
@@ -31,7 +30,7 @@ const SHOW = 8; // how many examples a line lists
 
 // --- Options ------------------------------------------------------------------------------------
 
-const options = { out: null, pull: true, days: null, all: false, lib: null, live: null, php: null };
+const options = { out: null, pull: true, direct: false, days: null, all: false, lib: null, live: null, php: null };
 const ignored = [];
 const args = process.argv.slice(2);
 for (let index = 0; index < args.length; index += 1) {
@@ -39,6 +38,7 @@ for (let index = 0; index < args.length; index += 1) {
 	const value = () => args[++index] ?? null;
 	if (arg === '--out') options.out = value();
 	else if (arg === '--no-pull') options.pull = false;
+	else if (arg === '--direct') options.direct = true;
 	else if (arg === '--days') options.days = Math.max(1, Math.floor(Number(value())) || 1);
 	else if (arg === '--all') options.all = true;
 	else if (arg === '--lib') options.lib = value();
@@ -236,7 +236,7 @@ if (options.pull) {
 const pullScript = join(scriptDir, 'pull.php');
 const runPull = (libPath, dir) => {
 	const started = new Date();
-	const result = run(php.path, [pullScript, libPath, dir], { timeout: 4 * 60 * 1000 });
+	const result = run(php.path, [pullScript, libPath, dir, ...(options.direct ? ['--direct'] : [])], { timeout: 4 * 60 * 1000 });
 	const steps = {};
 	for (const line of (result.stdout ?? '').split('\n')) {
 		const parsed = parseJson(line);
@@ -277,7 +277,12 @@ if (options.pull) {
 	pull = readJson(join(outDir, 'pull.json'));
 	livePull = readJson(join(outDir, 'live-lib', 'pull.json'));
 }
-const pulledAt = pull?.when ? new Date(pull.when) : statOf(join(outDir, 'bet1.json'))?.mtime ?? now;
+const pulledAt = pull?.when ? new Date(pull.when) : statOf(join(outDir, 'games.json'))?.mtime ?? now;
+
+// The books as pulled, each with its mode; a folder pulled before that was recorded goes by the list beside the parser
+const bookList = pull?.steps?.books?.books ?? readJson(join(dirname(lib), 'sportsbooks.json'));
+const BOOK_INFO = Object.fromEntries((Array.isArray(bookList) ? bookList : []).filter((book) => book?.mode !== 'off').map((book) => [book.key, book]));
+const BOOKS = Object.keys(BOOK_INFO);
 
 // --- The app's own code, loaded from src/ the way the browser runs it ---------------------------
 
@@ -347,9 +352,72 @@ const newMarket = (fields) => ({
 	terms: { period: [], happening: [], line: [] }, ...fields,
 });
 const named = (...names) => [...new Set(names.filter((name) => typeof name === 'string' && name.trim()))];
+const decodeHtml = (text) => String(text)
+	.replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+	.replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+	.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+// American odds as decimal to four places, as the parser converts them, so the two compare exactly
+const americanOdds = (text) => {
+	const value = String(text).trim().replace(/[\u2212\u2013]/g, '-');
+	if (/^ev(en)?$/i.test(value)) return 2;
+	if (!/^[+-]?\d+$/.test(value) || Math.abs(Number(value)) < 100) return NaN;
+	const number = Number(value);
+	return Math.round((number > 0 ? 1 + number / 100 : 1 + 100 / -number) * 10000) / 10000;
+};
 const parameterValue = (parameters, key) => (Array.isArray(parameters) ? parameters.find((item) => item?.key === key)?.value : undefined);
 
 const readers = {
+	// A book in comparison mode: the matchups page names each game, and each game's odds tab lists every book in
+	// the region with each player's goals line on both sides. The parser reads the book's over on 0.5 goals, which
+	// settles on one or more goals in the game
+	comparison(dir, { slug, region } = {}) {
+		const matchups = readText(join(dir, 'src_comparison.html'));
+		if (!matchups) return { error: 'src_comparison.html is missing' };
+		const labels = new Map();
+		for (const match of matchups.matchAll(/<article id="nhl-(\d+)" class="gamebox [^"]*"([^>]*)>/g)) {
+			// The page leaves these values unquoted, spaces and all, so each runs on to the next attribute
+			const attribute = (name) => new RegExp(`data-${name}=("[^"]*"|.*?)(?= data-[a-z-]+=|\\s*$)`).exec(match[2])?.[1]?.replace(/^"|"$/g, '') ?? '?';
+			labels.set(match[1], `${attribute('away-team-fullname')} @ ${attribute('home-team-fullname')}`);
+		}
+		const files = listDir(dir).filter((name) => name.startsWith(`src_comparison_${region}_`) && name.endsWith('.html')).sort();
+		if (!files.length) return { error: labels.size ? `no ${region} odds tabs were saved, so the parser read no games` : 'the matchups page lists no games' };
+		const markets = [];
+		const notes = [];
+		for (const file of files) {
+			const id = /_(\d+)\.html$/.exec(file)?.[1] ?? '?';
+			const page = readText(join(dir, file)) ?? '';
+			const start = page.indexOf('>Goals Scored</h2>');
+			if (start < 0) {
+				notes.push(`${file} has no Goals Scored section`);
+				continue;
+			}
+			const end = page.indexOf('</article>', start);
+			const lines = new Map();
+			for (const block of page.slice(start, end < 0 ? undefined : end).split(/<a href="[^"]*\/sport\/hockey\/nhl\/players\//).slice(1)) {
+				const player = decodeHtml(/<span class="category fw-bold text-nowrap">\s*([^<]+?)\s*<\/span>/.exec(block)?.[1] ?? '');
+				const seen = new Set();
+				for (const offer of block.matchAll(/slug=([a-z0-9-]+)[^>]*>\s*<span class="oddsSideLineText">([^<]*)<\/span>\s*<span class="oddsSideOddsText[^"]*">([^<]+)</g)) {
+					const line = offer[2].trim();
+					if (offer[1] !== slug || seen.has(line)) continue;
+					seen.add(line);
+					const over = /^o/i.test(line);
+					const goals = Number(line.replace(/^[ou]/i, ''));
+					const market = lines.get(line) ?? newMarket({
+						game: labels.get(id) ?? `game ${id}`,
+						family: over && goals === 0.5 ? 'Goals Scored, 1 or more goals' : `Goals Scored, ${over ? 'over' : 'under'} ${goals}`,
+						detail: `${over ? 'over' : 'under'} ${goals}`,
+						files: [file],
+						terms: { period: [], happening: [], line: [String(goals)] },
+					});
+					market.selections.push({ player, names: named(player), odds: americanOdds(decodeHtml(offer[3])), side: over ? 'over' : 'under', market });
+					lines.set(line, market);
+				}
+			}
+			markets.push(...lines.values());
+		}
+		return { markets, notes };
+	},
+
 	bet1(dir) {
 		const raw = readJson(join(dir, 'src_bet1.json'));
 		if (!raw) return { error: 'src_bet1.json is missing or not JSON' };
@@ -537,6 +605,13 @@ const playerLevel = (market) => {
 
 // --- Each book: its parsed file against its raw responses ---------------------------------------
 
+// A book in comparison mode was read off the comparison pages; one read from its own site has a reader of its own
+const readerFor = (key) => {
+	const info = BOOK_INFO[key];
+	if (info?.mode === 'comparison') return (dir) => readers.comparison(dir, info.comparison);
+	return readers[key] ?? (() => ({ error: `this check has no reader for ${key}'s own site` }));
+};
+
 const books = BOOKS.map((key) => {
 	const step = pull?.steps?.[key] ?? null;
 	const file = join(outDir, `${key}.json`);
@@ -548,7 +623,7 @@ const books = BOOKS.map((key) => {
 	if (!book.exists) return book;
 	let read;
 	try {
-		read = readers[key](outDir);
+		read = readerFor(key)(outDir);
 	} catch (error) {
 		// A layout this reader doesn't expect is a finding, not a reason to stop the report
 		read = { error: `the reader stopped: ${clip(String(error?.message ?? error), 160)}` };
@@ -631,6 +706,9 @@ section('Pull');
 if (!pull) say(options.pull ? 'Nothing was pulled.' : `No pull.json in ${outDir}; reading the files there as they are.`);
 else {
 	if (pull.failure) fail(`The pull didn't finish: ${pull.failure}${pull.stderr ? `; ${clip(shorten(pull.stderr), 160)}` : ''}`);
+	const booksStep = pull.steps?.books;
+	if (booksStep?.error) fail(`The book list didn't load, so no book was pulled: ${clip(shorten(booksStep.error), 160)}`);
+	else if (booksStep) say(`Books: ${BOOKS.map((key) => `${key} ${BOOK_INFO[key].mode}`).join(', ')}${booksStep.direct ? ' (--direct: each book with a fetcher for its own site pulled through it)' : ''}, ${booksStep.seconds} s${booksStep.thrown ? `; threw ${booksStep.thrown}` : ''}`);
 	for (const step of ['games', ...BOOKS]) {
 		const result = pull.steps?.[step];
 		const name = step === 'games' ? 'games' : title(step);
@@ -639,8 +717,8 @@ else {
 			continue;
 		}
 		const outcome = result.thrown ? `threw ${result.thrown}` : result.error ? `error: ${result.error}` : 'ok';
-		const entries = step === 'games' ? '' : `, ${plural(bookByKey[step].entries.length, 'entry', 'entries')}`;
-		say(`${name}: ${shorten(outcome)}, ${result.seconds} s${entries}`);
+		const entries = step === 'games' ? '' : `, ${result.mode ? `${result.mode}, ` : ''}${plural(bookByKey[step].entries.length, 'entry', 'entries')}`;
+		say(`${name}: ${shorten(outcome)}${result.seconds !== undefined ? `, ${result.seconds} s` : ''}${entries}`);
 		for (const text of result.warning ?? []) say(`    warning: ${shorten(text)}`);
 		for (const text of (result.notices ?? []).slice(0, 3)) say(`    notice: ${shorten(text)}`);
 		if ((result.notices ?? []).length > 3) say(`    and ${(result.notices.length - 3)} more notices`);
@@ -736,8 +814,10 @@ for (const book of books) {
 	if (duplicates.length) warn(`${title(book.key)} lists ${plural(duplicates.length, 'name')} more than once, and the app keeps only the last: ${few(duplicates.map(([, list]) => `${list[0].name} ${list.map((entry) => price(entry.odds)).join('/')}`), 4)}`);
 	if (book.offSchedule) {
 		const note = `${plural(book.offSchedule, 'entry', 'entries')} came from games not on today's schedule`;
-		say(book.key === 'bet1' ? `${note}; bet1 takes no end-of-day cutoff, so that's expected` : note);
-		if (book.key !== 'bet1' && games.length) warn(`${title(book.key)}: ${note}, past its end-of-day cutoff`);
+		// Only bet1's own site is read without an end-of-day cutoff
+		const noCutoff = book.key === 'bet1' && BOOK_INFO[book.key]?.mode === 'direct';
+		say(noCutoff ? `${note}; bet1's own site takes no end-of-day cutoff, so that's expected` : note);
+		if (!noCutoff && games.length) warn(`${title(book.key)}: ${note}, past its end-of-day cutoff`);
 	}
 	for (const note of book.notes) say(`Note: ${note}`);
 	if (book.extra) warn(`${title(book.key)}: ${plural(book.extra, 'player')} carry more than one offer or outcome, and the parser reads only the first`);
@@ -822,7 +902,11 @@ else {
 		if (ratios.length >= 10 && beyond(median(ratios), 1.15)) warn(`The live ${book.key}.json prices run ${times(median(ratios))} the pull's`);
 	}
 }
-if (livePull) {
+if (livePull?.steps?.books?.error) {
+	say('');
+	say(`The live copy of fetch_lib.php, pulled on its own: ${shorten(livePull.steps.books.error)}`);
+	warn(`The live fetch_lib.php didn't pull its books (${clip(shorten(livePull.steps.books.error), 120)}), so it can't be compared; health-server's deploy check shows what's behind`);
+} else if (livePull) {
 	say('');
 	say('The live copy of fetch_lib.php, pulled on its own:');
 	for (const book of books) {
@@ -911,9 +995,9 @@ const appMatch = (players, files) => {
 		player,
 		made: new app.Player(player.json, teamStub(player.json.currentTeamAbbrev), teamStub('---'), true, new Date(0)),
 	}));
-	app.processor.compilePlayerList(built.map(({ made }) => made), ...BOOKS.map((key) => files[key] ?? []));
+	app.processor.compilePlayerList(built.map(({ made }) => made), Object.fromEntries(BOOKS.map((key) => [key, files[key] ?? []])));
 	return built.map(({ player, made }) => ({
-		...player, roster: made.fullName, found: Object.fromEntries(BOOKS.map((key, index) => [key, made[`betRaw${index + 1}`] !== null])),
+		...player, roster: made.fullName, found: Object.fromEntries(BOOKS.map((key) => [key, (made.raw?.[key] ?? null) !== null])),
 	}));
 };
 // The archive replays' matcher: the pick-list name, then the map read both ways (oddsNameCandidates)
