@@ -4,12 +4,12 @@ import * as Picks from './components/Table';
 import Popup from './components/Popup';
 import InfoPopupContent, { LegendPopupContent } from './components/InfoPopupContent';
 import StatsPopupContent, { StatsSportsbookList } from './components/StatsPopupContent';
-import type { SportsbookLog, LogStatsKey, StrategyMode } from './dataTypes';
+import type { SportsbookLog, LogStatsKey, SportsbookKey, StrategyMode } from './dataTypes';
 import { SportsbookKeys, Sportsbooks } from './dataTypes';
 import SettingsPanel from './components/Settings';
 import { roundToPercent, probabilityToAmerican, getEntries } from './utility';
 import * as DataProcessor from './dataProcessor';
-import { precalculateLogStats, cloneLogStats } from './statsCalculations';
+import { precalculateLogStats, cloneLogStats, calculateBooksStats } from './statsCalculations';
 import { bestPicks, logCorrelations, runSimulation } from './picksOptimizer';
 import CollapsibleSection from './components/CollapsibleSection';
 import type { Team } from './components/logo';
@@ -363,7 +363,16 @@ function App() {
 	const [showPopup, setShowPopup] = useState<{ visible: boolean; title: string; key?: LogStatsKey }>({ visible: false, title: 'Stats', key: 'betAvg' });
 	const [popupStats, setPopupStats] = useState<SportsbookLog | null>(null);
 	const [popupView, setPopupView] = useState<'info' | 'legend' | 'stats' | 'settings'>('stats');
-	const [selectedStatsKey, setSelectedStatsKey] = useState<LogStatsKey>('betAvg');
+	// The books whose average the stats show; none selected averages them all
+	const [selectedStatsBooks, setSelectedStatsBooks] = useState<ReadonlySet<SportsbookKey>>(new Set());
+	const toggleStatsBook = useCallback((key: SportsbookKey) => {
+		setSelectedStatsBooks((prev) => {
+			const next = new Set(prev);
+			if (!next.delete(key)) next.add(key);
+			return next;
+		});
+	}, []);
+	const statsBooks = useMemo(() => SportsbookKeys.filter((key) => selectedStatsBooks.has(key)), [selectedStatsBooks]);
 
 	const closePopup = () => {
 		setShowPopup({ ...showPopup, visible: false });
@@ -388,6 +397,20 @@ function App() {
 			correlationFactor
 		);
 	}, [memoizedDisplayData, minSportsbooks, correlationFactor]);
+
+	// One book or all of them read the precomputed stats; any other set of books is averaged here
+	const booksStats = useMemo(() => {
+		if (!memoizedDisplayData) return null;
+		if (statsBooks.length < 2 || statsBooks.length === SportsbookKeys.length) return null;
+		return calculateBooksStats(
+			statsBooks,
+			minSportsbooks,
+			memoizedDisplayData.table1Rows,
+			memoizedDisplayData.table2Rows,
+			memoizedDisplayData.table3Rows,
+			correlationFactor
+		);
+	}, [memoizedDisplayData, minSportsbooks, correlationFactor, statsBooks]);
 
 	if (memoizedDisplayData) {
 		// Run SIMULATE or ANALYZE only once after data has initialized
@@ -563,7 +586,7 @@ function App() {
 			<main className='content'>
 				<Popup title={showPopup.title} showPopUp={showPopup.visible} closePopUp={closePopup} top={popupView === 'stats'}
 					pinned={popupView === 'stats' && popupStats && !dayLocked && (
-						<StatsSportsbookList selectedKey={selectedStatsKey} onSelectKey={setSelectedStatsKey} />
+						<StatsSportsbookList selected={selectedStatsBooks} onToggle={toggleStatsBook} />
 					)}>
 					{popupView === 'info' ? (
 						<InfoPopupContent />
@@ -583,7 +606,7 @@ function App() {
 							onXgEnabledChange={setXgEnabled}
 						/>
 					) : (
-						<StatsPopupContent bookStats={popupStats} selectedKey={selectedStatsKey} locked={dayLocked} />
+						<StatsPopupContent stats={booksStats ?? popupStats?.[statsBooks.length === 1 ? statsBooks[0] : 'betAvg'] ?? null} locked={dayLocked} />
 					)}
 				</Popup>
 

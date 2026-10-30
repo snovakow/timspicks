@@ -2,7 +2,7 @@ import * as Picks from './components/Table';
 import { roundToPercent } from './utility';
 import { calcAny, calcPnt, calcHit, gamesCount, correlatedValue, pairLift } from './picksOptimizer';
 import type {
-	LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog,
+	LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, SportsbookKey,
 	Strategy, StrategyMode, ComboPattern
 } from './dataTypes';
 import { AllCombos, LogStatsKeys, Sportsbooks, StrategyLabels, strategyTitle } from './dataTypes';
@@ -47,8 +47,11 @@ class LogHandler {
 	}
 }
 
+// mark is the table column whose highlights and strategy dots the picks set, or null to leave the tables alone
 const calculateStats = (
-	betKey: LogStatsKey,
+	header: string,
+	price: (player: Picks.Player) => number | null,
+	mark: LogStatsKey | null,
 	minSportsbooks: number,
 	table1Rows: Picks.PickOdds[],
 	table2Rows: Picks.PickOdds[],
@@ -59,7 +62,8 @@ const calculateStats = (
 	const logHandler = new LogHandler(stats);
 
 	const addPlayersToHighlight = (players: Set<Picks.PickOdds>) => {
-		for (const pick of players) pick.highlight.add(betKey);
+		if (mark === null) return;
+		for (const pick of players) pick.highlight.add(mark);
 	};
 
 	const printName = (player: Picks.Player) => `${player.fullName} (${player.team.code})`;
@@ -81,7 +85,7 @@ const calculateStats = (
 	const makeChoices = (list: Picks.PickOdds[]): Choice[] => {
 		const choices: Choice[] = [];
 		for (const row of list) {
-			const avg = row.player[betKey];
+			const avg = price(row.player);
 			if (avg === null) continue;
 			if (row.player.betCount < minSportsbooks) continue;
 			choices.push(new Choice(row, avg));
@@ -227,9 +231,10 @@ const calculateStats = (
 	}
 
 	const setStrategy = (pick: Picks.PickOdds, mode: StrategyMode) => {
-		const modes = pick.strategy.get(betKey) ?? new Set<StrategyMode>();
+		if (mark === null) return;
+		const modes = pick.strategy.get(mark) ?? new Set<StrategyMode>();
 		modes.add(mode);
-		pick.strategy.set(betKey, modes);
+		pick.strategy.set(mark, modes);
 	};
 	const addStrategyHighlights = (result: Result, strategy: StrategyMode) => {
 		for (const pick of result.players1) setStrategy(pick, strategy);
@@ -302,7 +307,6 @@ const calculateStats = (
 	const points = processSameGroup('points');
 	const hits = processSameGroup('hits');
 
-	const header = betKey === 'betAvg' ? "Average" : `${Sportsbooks[betKey].title}`;
 	logHandler.addTitle(header + " Top Picks");
 	logTopPicks(topResult);
 	logHighlights(topResult);
@@ -391,9 +395,36 @@ export const precalculateLogStats = (
 
 	for (const key of LogStatsKeys) {
 		const stats: LogLines = [];
-		calculateStats(key, minSportsbooks, table1Rows, table2Rows, table3Rows, stats, correlationFactor);
+		const header = key === 'betAvg' ? "Average" : Sportsbooks[key].title;
+		calculateStats(header, (player) => player[key], key, minSportsbooks, table1Rows, table2Rows, table3Rows, stats, correlationFactor);
 		cache[key] = stats;
 	}
 
 	return cloneLogStats(cache);
+};
+
+// The top picks from the average of the given books, each player priced by the books that list him
+export const calculateBooksStats = (
+	books: readonly SportsbookKey[],
+	minSportsbooks: number,
+	table1Rows: Picks.PickOdds[],
+	table2Rows: Picks.PickOdds[],
+	table3Rows: Picks.PickOdds[],
+	correlationFactor: number
+): LogLines => {
+	const header = books.map((key) => Sportsbooks[key].title).join(" + ");
+	const price = (player: Picks.Player): number | null => {
+		let sum = 0;
+		let count = 0;
+		for (const key of books) {
+			const value = player[key];
+			if (value === null || value === undefined) continue;
+			sum += value;
+			count++;
+		}
+		return count > 0 ? sum / count : null;
+	};
+	const stats: LogLines = [];
+	calculateStats(header, price, null, minSportsbooks, table1Rows, table2Rows, table3Rows, stats, correlationFactor);
+	return stats;
 };

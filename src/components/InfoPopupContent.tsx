@@ -69,11 +69,11 @@ export default function InfoPopupContent() {
 				<h3>Stats</h3>
 				<p>
 					The <strong>Stats</strong> button displays the top picks from the average sportsbook's odds,
-					with sportsbook buttons to dispaly the top picks specific to each sportsbook.
+					with sportsbook buttons to choose which sportsbooks are averaged.
 				</p>
 				<p>
-					Selecting an already selected sportsbook deselects it,
-					restores the display to the average results.
+					Each sportsbook button toggles that sportsbook on or off. With none or all of them selected,
+					every sportsbook is averaged.
 				</p>
 			</section>
 
