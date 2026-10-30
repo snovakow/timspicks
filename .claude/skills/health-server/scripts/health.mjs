@@ -45,8 +45,6 @@ const LOW_DISK = 10e9;
 
 const ET = 'America/New_York';
 const NEVER_COPY = ['data', 'history', 'players', 'auth.json'];
-const BOOKS = ['bet1', 'bet2', 'bet3', 'bet4'];
-const SNAPSHOT_FILES = [...BOOKS.map((book) => `${book}.json`), 'helper.json'];
 const LISTS = ['1', '2', '3'];
 
 // --- Options ------------------------------------------------------------------------------------
@@ -321,6 +319,15 @@ if (options.update) {
 const lib = options.lib ?? job?.lib ?? null;
 const liveDir = updateDir && lib ? resolve(updateDir, '..', lib) : null;
 const dataDir = liveDir ? join(liveDir, 'data') : null;
+
+// The books the cron fetches: the book list beside the scraping library it loads, every book that isn't off. A
+// live folder without one runs a scraper from before the list, so the checkout's stands in, and the deploy check
+// shows the gap. A list the scraper can't read stops every run at the books
+const bookListPath = [liveDir && join(liveDir, 'sportsbooks.json'), join(repoRoot, 'public', 'sportsbooks.json')].find(isFile) ?? null;
+const bookList = readJson(bookListPath);
+const bookListOk = Array.isArray(bookList) && bookList.every((book) => /^bet\d+$/.test(book?.key ?? '') && ['direct', 'comparison', 'off'].includes(book?.mode));
+const BOOKS = bookListOk ? bookList.filter((book) => book.mode !== 'off').map((book) => book.key) : [];
+const SNAPSHOT_FILES = [...BOOKS.map((book) => `${book}.json`), 'helper.json'];
 const logPath = expand(options.log) ?? job?.log ?? null;
 
 // Fatal errors never reach the cron log when PHP doesn't display them; they go to PHP's own log
@@ -731,6 +738,12 @@ guard('data', () => {
 			say(`    Still lists teams whose games have started: ${few(staleTeams)}`);
 			if (now - oldest > REDRAW_GRACE) warn(`helper.json still lists ${few(staleTeams)}, whose games started ${span(now - oldest)} ago`);
 		}
+	}
+	if (!bookListPath) fail('No sportsbooks.json in the live folder or the checkout, so the cron fetches no books');
+	else if (!bookListOk) fail(`${bookListPath} isn't a valid book list, so every cron run stops at the books`);
+	else {
+		say(`Book list: ${bookListPath}, ${bookList.map((book) => `${book.key} ${book.mode}`).join(', ')}`);
+		if (liveDir && !bookListPath.startsWith(liveDir)) warn('The live folder has no sportsbooks.json, so its scraper predates the book list; the books below are the checkout\'s');
 	}
 	const books = [];
 	for (const book of BOOKS) {

@@ -59,7 +59,8 @@ Older history in the window is listed in the sections, but only flagged within t
 - A team still listed after its game started means the feed hadn't redrawn when the last pull landed.
 - "No draw stamp" means the deployed `fetch_lib.php` predates the stamp, so the rollover check for an earlier day's list can't run yet.
 - Every listed player needs `players/<id>.json`. One missing file stops the whole page from loading.
-- **Snapshots.** Each `data/<date>/<HHMM>` folder is named for a game's ET start and written by the runs before it (docs/app-and-server.md, "What lands on disk"). The first folder of the day waits for the first run after 3 a.m. A folder still missing after its game started can't be recovered by the cron. Backfilling is described in docs/deployment.md, under "Beginning a season".
+- **Books** are the ones the book list beside the live scraping library doesn't turn off, with each one's mode on the "Book list" line. A list the library can't read stops every run at the books. A live folder without one runs a scraper from before the list, so the checkout's stands in, and the deploy check shows what's behind. A book that's off isn't checked, since nothing updates its file.
+- **Snapshots.** Each `data/<date>/<HHMM>` folder is named for a game's ET start and written by the runs before it (docs/app-and-server.md, "What lands on disk"). The first folder of the day waits for the first run after 3 a.m. A folder still missing after its game started can't be recovered by the cron. Backfilling is described in docs/deployment.md, under "Beginning a season"; a backfilled book is marked in the folder's `backfill.json`.
 
 **Deploy.** The live files are held against the ref, never against this working tree, because unreleased work on `development` isn't meant to be live.
 - The update folder only needs `update.php`. The seeder files stay local, so they're compared only when present.
