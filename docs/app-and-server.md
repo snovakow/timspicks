@@ -155,7 +155,9 @@ otherwise an outage reaches the JSON parser and is reported as a decode error,
 which is what a feed mid-rollover used to look like.
 
 A book that fails, by an error or by throwing, doesn't stop the run, and the
-failure becomes a warning. Prices the book gave earlier the same day (ET) stay in
+failure becomes a warning. The site's banner shows warnings to visitors, so one
+names the book by its key and leaves out the addresses and server paths the error
+held. Prices the book gave earlier the same day (ET) stay in
 its file, so the page keeps showing them. A file from an earlier day is written
 empty instead, since it holds another day's games, and the snapshot then keeps the
 slot's earlier copy (see below). In comparison mode, a page that fails fails every
