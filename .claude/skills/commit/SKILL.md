@@ -90,7 +90,7 @@ the output, so a hit shows the pattern and a masked line. Investigate by opening
 The user doesn't want outside websites named or linked in anything that becomes public prose. Prose means commit messages, plus comments, docs and explanatory UI text added in the range. The rule is strict: no websites, sportsbooks, leagues, data sources, tool sites or forums, and no URLs, domains or markdown links. Check each commit's own diff, not only the end result, because the history is public too.
 
 Describe things in the app's own terms:
-- The books are `bet1`–`bet4`, as in `SportsbookKeys` and `updateBet1`–`updateBet4`. So: "Fix bet2 event-page parsing".
+- The books are their keys, `bet1` and so on, as in the book list `public/sportsbooks.json` and `SportsbookKeys`. So: "Fix bet2 event-page parsing". The comparison pages a book can be read from are "the comparison pages".
 - "the schedule feed" (`games.json`), "the pick-list feed" (`helper.json`), "the challenge".
 - Where data came from: "recovered closing lines", "an odds archive".
 

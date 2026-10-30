@@ -302,7 +302,7 @@ const NOT_CODE = [
 	/^\/[a-z-]+$/,
 	/\.md$/,
 	// Step 3 requires these as the app's own words for the books, so they belong in prose.
-	/^bet[1-4](?:[–-]bet4)?$/,
+	/^bet\d+(?:[–-]bet\d+)?$/,
 	/^[A-Z][a-z]+\/[A-Z][A-Za-z_]+$/,
 	/^(?:data|players|history)\/[A-Za-z0-9_<>.…\s-]*$/,
 	/^[a-z][a-z0-9]*(?:\.\.[a-z0-9]+)?\.json$/,
