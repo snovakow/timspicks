@@ -11,10 +11,10 @@ export interface PairLifts {
 }
 
 export const pairLifts: PairLifts = {
-    "teammates": 1.018195675410149,
-    "opponents": 1.0162660823647902,
+    "teammates": 1.017288439023561,
+    "opponents": 1.0096136618396478,
     "from": "2026-04-09",
-    "through": "2026-10-29",
-    "days": 82,
-    "playerDays": 4755
+    "through": "2026-10-31",
+    "days": 84,
+    "playerDays": 4857
 };
