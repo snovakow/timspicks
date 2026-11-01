@@ -56,13 +56,18 @@ How to read the lists, based on a season of archived draws:
 
 Two different mechanisms, depending on the view.
 
-**Live.** The run-state file records when the data was last scraped. The app
-drops any game that started before that moment, then drops the players whose
-team no longer maps to a surviving game. That filter is the eligibility rule.
+**Live.** The app reads every game of the day and, at each game's start time,
+drops the game and its players from the tables and the stats. That filter is
+the eligibility rule. It goes by the clock rather than by when the data was last
+scraped, since a run can land after a start but before the feed redraws, and its
+lists still hold that game's players. With today's history turned on in the
+settings, the started games stay in the tables greyed out instead, still left
+out of the stats.
 
 **Historical.** For an archived day the app reads that day's schedule, reduces
 the distinct start times to a set of slot boundaries, and treats each one as a
-redraw, loading that slot's archived lists and odds.
+redraw, loading that slot's archived lists and odds. Today's history does the
+same for the slots that have already started today.
 
 One loose end worth knowing: the history feed states per-player redraw
 eligibility directly, and the app ignores it, reconstructing slots from game

@@ -239,16 +239,30 @@ light the banner every night until the first run after midnight.
 
 That window gets a state of its own instead. Once the day's last start has passed
 the app says every game has started, and clears the games table, the three pick
-lists and the stats view built from them — the lists it holds are the final draw,
-which can no longer be played, and leaving them up reads as picks still to make.
-It flips on the clock rather than on a fetch, so a page left open switches over
-by itself at the last puck drop; a long wait is re-armed from the clock each
-time, since a background tab throttles its timers and a sleeping device wakes
-with one already due. There is no re-fetch to go with it: the next day's lists
-arrive on the next load, by which time the post-midnight run has written them.
-Data stale enough to trip the over-a-day notice is likely holding an earlier
-day's schedule, whose last start is long past, so that notice takes precedence
-over calling the day locked.
+lists and the stats view built from them. Before that, each start takes its game
+out of the games table and its players out of the pick lists and the stats — a
+started game can no longer be played, and its players left in read as picks still
+to make. This runs on the clock rather than on a fetch, so a page left open drops
+each game by itself at its puck drop and locks at the last; a long wait is re-armed
+from the clock each time, since a background tab throttles its timers and a
+sleeping device wakes with one already due. There is no re-fetch to go with it: the
+next day's lists arrive on the next load, by which time the post-midnight run has
+written them. Data stale enough to trip the over-a-day notice is likely holding an
+earlier day's schedule, whose last start is long past, so that notice takes
+precedence over calling the day locked or dropping its games.
+
+The app reads every game of the day, started or not, and leaves the choice to the
+clock: a run can land after a start but before the feed redraws, and its lists
+still hold that game's players.
+
+Today's history is a setting. With it on, a started game and its players stay in
+the tables greyed out, never highlighted and still left out of the stats, and the
+locked day keeps its tables. Each started game's players come from its slot's
+snapshot folder, the last lists before it started, in place of any the current
+lists still hold, since a run after the start finds that game's prices changed,
+or gone. The stats view lists each passed slot with its top picks' Streak,
+opening to the slot's full stats from the books selected, and once the day's last
+start has passed it shows only those slots.
 
 ## The admin page
 
