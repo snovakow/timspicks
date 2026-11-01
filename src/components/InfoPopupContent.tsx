@@ -72,8 +72,15 @@ export default function InfoPopupContent() {
 					with sportsbook buttons to choose which sportsbooks are averaged.
 				</p>
 				<p>
-					Each sportsbook button toggles that sportsbook on or off. With none or all of them selected,
-					every sportsbook is averaged.
+					A sportsbook button toggles that sportsbook on or off and turns every other one off, so it shows that
+					sportsbook alone. Holding <strong>Shift</strong> while clicking, or pressing and holding the button on a touch
+					screen, toggles it without touching the others, to combine several.
+					With none or all of them selected, every sportsbook is averaged.
+				</p>
+				<p>
+					Once a game starts, it and its players leave the tables and the stats. With <strong>Show Today's History</strong> on
+					in the <strong>Settings</strong>, they stay in the tables greyed out, and each earlier slot is listed below the stats
+					with its top picks' Streak, opening to that slot's full stats.
 				</p>
 			</section>
 

@@ -2,7 +2,7 @@ import type { Team } from "./components/logo";
 import * as Picks from "./components/Table";
 import { pairLifts } from "./correlationData";
 import type { PairLifts } from "./correlationData";
-import { deVig, oddsNameCandidates, removeAccentsNormalize } from "./dataProcessor";
+import { deVig, oddsNameCandidates, removeAccentsNormalize, slotFolder } from "./dataProcessor";
 import type { LogStatsKey, SportsbookKey, Strategy, PoolSlots } from "./dataTypes";
 import {
 	SportsbookKeys, LogStatsKeys, StrategyLabels,
@@ -252,19 +252,7 @@ const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
 	for (const week of data.gameWeek) {
 		if (week.date !== date) continue;
 		for (const game of week.games) {
-			const utc = new Date(game.startTimeUTC);
-
-			const formatter = new Intl.DateTimeFormat('en-US', {
-				timeZone: 'America/New_York',
-				hour: '2-digit',
-				minute: '2-digit',
-				hour12: false
-			});
-			const parts = formatter.formatToParts(utc);
-			const dateMap = Object.fromEntries(parts.map(p => [p.type, p.value]));
-
-			const hhmm = `${dateMap.hour}${dateMap.minute}`;
-			timeGroups.add(hhmm);
+			timeGroups.add(slotFolder(new Date(game.startTimeUTC)));
 		}
 	}
 

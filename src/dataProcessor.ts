@@ -176,9 +176,53 @@ function isPlayerJson(val: unknown): val is RawPlayerJson {
 	return true;
 }
 
+// A snapshot folder's name: its slot's start as ET HHmm, as the cron names it
+export const slotFolder = (time: Date): string => {
+	const formatter = new Intl.DateTimeFormat('en-US', {
+		timeZone: 'America/New_York',
+		hour: '2-digit',
+		minute: '2-digit',
+		hour12: false
+	});
+	const parts = formatter.formatToParts(time);
+	const dateMap = Object.fromEntries(parts.map(p => [p.type, p.value]));
+	return `${dateMap.hour}${dateMap.minute}`;
+};
+
+const gameMapOf = (games: Picks.GameData[]): Map<Team, Picks.GameData> => {
+	const gameMap = new Map<Team, Picks.GameData>();
+	for (const game of games) {
+		gameMap.set(game.home.code, game);
+		gameMap.set(game.away.code, game);
+	}
+	return gameMap;
+};
+
+// Player files by id, so the snapshots of earlier slots reuse the ones already loaded
+const playerFiles = new Map<number, Promise<unknown>>();
+const loadPlayerFile = (playerId: number): Promise<unknown> => {
+	let file = playerFiles.get(playerId);
+	if (!file) {
+		file = loadData(`./players/${playerId}.json`);
+		playerFiles.set(playerId, file);
+	}
+	return file;
+};
+
+// The player set in his team's game, or null when his team has no game among them
+const makePlayer = (playerJson: RawPlayerJson, gameMap: Map<Team, Picks.GameData>): Picks.Player | null => {
+	const game = gameMap.get(playerJson.currentTeamAbbrev);
+	if (!game) return null;
+	const homeGame = game.home.code === playerJson.currentTeamAbbrev;
+	const [team, opponent] = homeGame ? [game.home, game.away] : [game.away, game.home];
+	return new Picks.Player(playerJson, team, opponent, homeGame, game.time);
+};
+
 type GamesAndPlayers = {
 	playersListing: Picks.Player[];
 	gamesListing: Picks.GameData[];
+	// The schedule's ET date, which names the day's snapshot folder
+	scheduleDate: string | null;
 	dataStatus: DataStatus | null;
 	processed: Date | null;
 	lastGameStart: Date | null;
@@ -249,36 +293,26 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 		throw new Error('Invalid games structure');
 	}
 
-	const gamesList: Picks.GameData[] = [];
-	const gameTimes: Date[] = [];
-	for (const gameData of games) {
-		const game = new Picks.GameData(gameData);
-		gameTimes.push(game.time);
-		if (!cutoff || cutoff < game.time) gamesList.push(game);
-	}
-
-	const gameMap = new Map<Team, Picks.GameData>();
-	for (const game of gamesList) {
-		isGamesListingItem(game); // Type guard for game structure
-		gameMap.set(game.home.code, game);
-		gameMap.set(game.away.code, game);
-	}
+	/*
+		Every game stays, started or not, and the page sorts them out on the clock: a started game
+		and its players leave the tables, or stay greyed while today's history is on. A run can
+		land after a start but before the feed redraws, so its lists can still hold that game's
+		players, and the clock rather than the run decides whether they're still current.
+	*/
+	const gamesList: Picks.GameData[] = games.map((gameData) => new Picks.GameData(gameData));
+	const gameTimes: Date[] = gamesList.map((game) => game.time);
+	const gameMap = gameMapOf(gamesList);
 
 	const promises = [];
 	for (const pick of [...playerData['1'], ...playerData['2'], ...playerData['3']]) {
-		const playerId = pick.playerId;
-		const promise = loadData(`./players/${playerId}.json`);
-		promises.push(promise);
+		promises.push(loadPlayerFile(pick.playerId));
 	}
 	const playersData = await Promise.all(promises);
 	const playersList: Picks.Player[] = [];
 	for (const playerJson of playersData.flat()) {
 		if (!isPlayerJson(playerJson)) throw new Error(`Invalid player data: ${playerJson}`);
-		const game = gameMap.get(playerJson.currentTeamAbbrev);
-		if (!game) continue;
-		const homeGame = game.home.code === playerJson.currentTeamAbbrev;
-		const [team, opponent] = homeGame ? [game.home, game.away] : [game.away, game.home];
-		playersList.push(new Picks.Player(playerJson, team, opponent, homeGame, game.time));
+		const player = makePlayer(playerJson, gameMap);
+		if (player) playersList.push(player);
 	}
 
 	gamesList.sort((a: Picks.GameData, b: Picks.GameData): number => {
@@ -301,6 +335,7 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 	return {
 		playersListing: playersList,
 		gamesListing: gamesList,
+		scheduleDate: typeof scheduleDate === 'string' ? scheduleDate : null,
 		dataStatus,
 		processed: cutoff,
 		lastGameStart: getLastGameStart(gameTimes),
@@ -311,6 +346,7 @@ interface InitialData {
 	playerData: PlayerDataByPick;
 	playersListing: Picks.Player[];
 	gamesListing: Picks.GameData[];
+	scheduleDate: string | null;
 	dataStatus: DataStatus | null;
 	processed: Date | null;
 	lastGameStart: Date | null;
@@ -318,8 +354,9 @@ interface InitialData {
 	playerOdds: Partial<Record<SportsbookKey, SportsbookOddsItem[]>>;
 }
 
+const isOddsList = (value: unknown): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem);
+
 export const loadInitialData = async (): Promise<InitialData> => {
-	const isOddsList = (value: unknown): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem);
 	const [playerData, gamesAndPlayers, bookOdds] = await Promise.all([
 		loadAndValidate('./data/helper.json', isPlayerDataByPick, 'Helper data'),
 		loadGamesAndPlayers('./data/process.json', './data/helper.json', './data/games.json'),
@@ -523,6 +560,45 @@ export const compilePlayerList = (
 			player[key] = player.raw[key];
 		});
 	}
+};
+
+export interface PickLists {
+	playerList: Picks.Player[];
+	table1Rows: Picks.PickOdds[];
+	table2Rows: Picks.PickOdds[];
+	table3Rows: Picks.PickOdds[];
+}
+
+/*
+	A passed slot's lists and odds as its snapshot folder holds them, from the last run before
+	its start, or null when the folder has no lists. A book without a file there prices no one,
+	as in the archive replays, and a player whose file won't load is left out rather than the slot.
+*/
+export const loadSlot = async (date: string, start: Date, games: Picks.GameData[]): Promise<PickLists | null> => {
+	const folder = `./data/${date}/${slotFolder(start)}`;
+	const loadOptional = async (src: string): Promise<unknown> => {
+		try { return await (await fetchData(src)).json(); }
+		catch { return null; }
+	};
+	const [helper, ...bookOdds] = await Promise.all([
+		loadOptional(`${folder}/helper.json`),
+		...SportsbookKeys.map((key) => loadOptional(`${folder}/${key}.json`)),
+	]);
+	if (!isPlayerDataByPick(helper)) return null;
+
+	const gameMap = gameMapOf(games);
+	const playerIds = new Set([...helper['1'], ...helper['2'], ...helper['3']].map((pick) => pick.playerId));
+	const files = await Promise.allSettled([...playerIds].map(loadPlayerFile));
+	const playerList: Picks.Player[] = [];
+	for (const file of files) {
+		if (file.status !== 'fulfilled' || !isPlayerJson(file.value)) continue;
+		const player = makePlayer(file.value, gameMap);
+		if (player) playerList.push(player);
+	}
+
+	const rows = mapPlayers(playerList, helper, buildNormalizedNameMap(playerList));
+	compilePlayerList(playerList, Object.fromEntries(SportsbookKeys.map((key, index) => [key, isOddsList(bookOdds[index]) ? bookOdds[index] : []])));
+	return { playerList, ...rows };
 };
 
 // De-vig: correct each sportsbook's bias AND compression toward the

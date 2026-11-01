@@ -1,6 +1,7 @@
 import { AllStrategyModes, LogStatsKeys, StrategyLabels, type LogStatsKey, type SportsbookKey, type StrategyMode } from "../dataTypes";
 import type { Team } from "./logo";
 import * as Feature from '../features';
+import { timeFormat } from '../utility';
 
 import "./Table.css";
 import "./sportsbook.css";
@@ -61,16 +62,22 @@ export class GameData {
 	}
 }
 
-const timeFormat: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
-
 const includeLinks = false;
+
+// A row's classes: its stripe, and greyed once its game has started, since it can no longer be picked
+const rowClass = (index: number, time: Date, passed: number | null): string => {
+	const stripe = index % 2 === 0 ? 'row-color' : 'row-color-alt';
+	return passed !== null && time.getTime() <= passed ? `${stripe} row-started` : stripe;
+};
 
 export function Basic(props: {
 	games: GameData[],
+	// The latest start the clock has passed, in ms, or null when nothing is greyed
+	passed: number | null,
 	darkTheme: boolean,
 	xgMap?: Map<string, number> | null
 }) {
-	const { games, darkTheme, xgMap } = props;
+	const { games, passed, darkTheme, xgMap } = props;
 	const formatXG = (val: number): string => `xG: ${val.toFixed(2)}`;
 	return (
 		<table>
@@ -80,7 +87,7 @@ export function Basic(props: {
 					const xgAway = xgMap?.get(game.away.code) ?? null;
 					const xgGame = xgHome !== null && xgAway !== null ? xgHome + xgAway : null;
 					return (
-						<tr key={game.link} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
+						<tr key={game.link} className={rowClass(idx, game.time, passed)}>
 							<td>
 								<span className='cell-container right-align'>
 									<span className="team-name-stack">
@@ -226,9 +233,10 @@ export function Table(props: {
 	requestSort: RequestSort,
 	sortConfig: SortConfig,
 	darkTheme: boolean,
-	enabledStrategies: Record<StrategyMode, boolean>
+	enabledStrategies: Record<StrategyMode, boolean>,
+	passed: number | null
 }) {
-	const { columns, sortedRows, requestSort, sortConfig, darkTheme, enabledStrategies } = props;
+	const { columns, sortedRows, requestSort, sortConfig, darkTheme, enabledStrategies, passed } = props;
 	const enabledModes = AllStrategyModes.filter((mode) => enabledStrategies[mode]);
 	const strategyLabel = (mode: StrategyMode): string => StrategyLabels[mode];
 	const strategyTitle = (strategy: Set<StrategyMode>): string => {
@@ -303,7 +311,7 @@ export function Table(props: {
 					const player = picks ? row.player : row;
 					const rowKey = picks ? row.player.playerId : row.playerId;
 					return (
-						<tr key={rowKey} className={idx % 2 === 0 ? 'row-color' : 'row-color-alt'}>
+						<tr key={rowKey} className={rowClass(idx, player.gameTime, passed)}>
 							<td>
 								<span className='cell-container'>
 									<img className='td-name-logo' src={darkTheme ? player.logoDark : player.logoLight} alt="" />

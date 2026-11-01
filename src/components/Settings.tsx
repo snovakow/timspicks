@@ -13,6 +13,8 @@ interface SettingsPanelProps {
 	onStrategyEnabledChange: (strategy: StrategyMode, value: boolean) => void;
 	xgEnabled: boolean;
 	onXgEnabledChange: (value: boolean) => void;
+	historyEnabled: boolean;
+	onHistoryEnabledChange: (value: boolean) => void;
 }
 
 export default function SettingsPanel(props: SettingsPanelProps) {
@@ -27,6 +29,8 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 		onStrategyEnabledChange,
 		xgEnabled,
 		onXgEnabledChange,
+		historyEnabled,
+		onHistoryEnabledChange,
 	} = props;
 
 	const labelClassNames = "settings-checkbox-item settings-checkbox settings-strategy-checkbox settings-label-single settings-checkbox-hoverable";
@@ -92,6 +96,19 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 				</label>
 				<div className="settings-description">
 					Include expected team goals in the Games table.
+				</div>
+			</div>
+			<div className="settings-group">
+				<label className={labelClassNames}>
+					<input
+						type="checkbox"
+						checked={historyEnabled}
+						onChange={(e) => onHistoryEnabledChange(e.target.checked)}
+					/>
+					<span>Show Today's History</span>
+				</label>
+				<div className="settings-description">
+					Keep the games that have started and their players in the tables, greyed out, and list each earlier slot's stats in the Stats.
 				</div>
 			</div>
 

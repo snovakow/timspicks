@@ -67,6 +67,11 @@ tr {
 	background-color: light-dark(transparent, #181b20);
 }
 
+/* A started game's row, which can no longer be picked */
+.row-started {
+	opacity: 0.4;
+}
+
 td {
 	padding: 0.5em;
 }

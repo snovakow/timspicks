@@ -5,7 +5,7 @@ import type {
 	LogStatsKey, LogLines, LogLine, LogStatAlign, SportsbookLog, SportsbookKey,
 	Strategy, StrategyMode, ComboPattern
 } from './dataTypes';
-import { AllCombos, LogStatsKeys, Sportsbooks, StrategyLabels, strategyTitle } from './dataTypes';
+import { AllCombos, LogStatsKeys, SportsbookKeys, Sportsbooks, StrategyLabels, strategyTitle } from './dataTypes';
 import type { MergedSelection, SelectionCandidate } from './strategySelection';
 import { ComboGroup, getStrategy } from './strategySelection';
 import * as Feature from './features';
@@ -47,9 +47,13 @@ class LogHandler {
 	}
 }
 
-// mark is the table column whose highlights and strategy dots the picks set, or null to leave the tables alone
+// A ticket's Streak line, as the stats print it
+export const streakLine = (value: number): string => `${StrategyLabels.least1}: ${roundToPercent(value, comboPrecision)}`;
+
+// mark is the table column whose highlights and strategy dots the picks set, or null to leave the tables alone,
+// and a null header leaves out the title. Returns the top ticket's Streak, or null when no ticket can be made
 const calculateStats = (
-	header: string,
+	header: string | null,
 	price: (player: Picks.Player) => number | null,
 	mark: LogStatsKey | null,
 	minSportsbooks: number,
@@ -58,7 +62,7 @@ const calculateStats = (
 	table3Rows: Picks.PickOdds[],
 	stats: LogLines,
 	factor: number = 1
-): void => {
+): number | null => {
 	const logHandler = new LogHandler(stats);
 
 	const addPlayersToHighlight = (players: Set<Picks.PickOdds>) => {
@@ -156,7 +160,7 @@ const calculateStats = (
 	const printStrategy = (strategy: Strategy, value: number): string => {
 		const label = StrategyLabels[strategy];
 		switch (strategy) {
-			case 'least1': return `${label}: ${roundToPercent(value, comboPrecision)}`;
+			case 'least1': return streakLine(value);
 			case 'points': return `${label}: ${value.toFixed(comboPrecision)}`;
 			case 'hits': return `${label}: ${roundToPercent(value / 3, comboPrecision)}`;
 		}
@@ -243,13 +247,13 @@ const calculateStats = (
 	}
 
 	const gameCount = gamesCount(table1Rows, table2Rows, table3Rows);
-	if (gameCount === 0) return;
+	if (gameCount === 0) return null;
 
 	const candidates = calcCandidates();
 	const top = new ComboGroup<Picks.PickOdds>();
 	for (const candidate of candidates) top.add(candidate);
 	const topSelection = top.merge();
-	if (topSelection === null) return;
+	if (topSelection === null) return null;
 	const topResult = new Result(topSelection, 0);
 
 	type strategyGroup = {
@@ -307,7 +311,7 @@ const calculateStats = (
 	const points = processSameGroup('points');
 	const hits = processSameGroup('hits');
 
-	logHandler.addTitle(header + " Top Picks");
+	if (header !== null) logHandler.addTitle(header + " Top Picks");
 	logTopPicks(topResult);
 	logHighlights(topResult);
 	addStrategyHighlights(topResult, 'top');
@@ -382,6 +386,8 @@ const calculateStats = (
 			}
 		}
 	}
+
+	return calcAny(topResult.prob1, topResult.prob2, topResult.prob3);
 };
 
 export const precalculateLogStats = (
@@ -403,6 +409,20 @@ export const precalculateLogStats = (
 	return cloneLogStats(cache);
 };
 
+const booksHeader = (books: readonly SportsbookKey[]): string => books.map((key) => Sportsbooks[key].title).join(" + ");
+
+const booksPrice = (books: readonly SportsbookKey[]) => (player: Picks.Player): number | null => {
+	let sum = 0;
+	let count = 0;
+	for (const key of books) {
+		const value = player[key];
+		if (value === null || value === undefined) continue;
+		sum += value;
+		count++;
+	}
+	return count > 0 ? sum / count : null;
+};
+
 // The top picks from the average of the given books, each player priced by the books that list him
 export const calculateBooksStats = (
 	books: readonly SportsbookKey[],
@@ -412,19 +432,36 @@ export const calculateBooksStats = (
 	table3Rows: Picks.PickOdds[],
 	correlationFactor: number
 ): LogLines => {
-	const header = books.map((key) => Sportsbooks[key].title).join(" + ");
-	const price = (player: Picks.Player): number | null => {
-		let sum = 0;
-		let count = 0;
-		for (const key of books) {
-			const value = player[key];
-			if (value === null || value === undefined) continue;
-			sum += value;
-			count++;
-		}
-		return count > 0 ? sum / count : null;
-	};
 	const stats: LogLines = [];
-	calculateStats(header, price, null, minSportsbooks, table1Rows, table2Rows, table3Rows, stats, correlationFactor);
+	calculateStats(booksHeader(books), booksPrice(books), null, minSportsbooks, table1Rows, table2Rows, table3Rows, stats, correlationFactor);
 	return stats;
+};
+
+export interface SelectedStats {
+	stats: LogLines;
+	// The top ticket's Streak, or null when no ticket can be made
+	streak: number | null;
+}
+
+// The top picks from the books the stats view has selected: one book alone, the Avg for none or all of
+// them, or the average of the ones chosen. They leave the tables alone, and their title out, since the
+// slot each one belongs to heads it already
+export const calculateSelectedStats = (
+	books: readonly SportsbookKey[],
+	minSportsbooks: number,
+	table1Rows: Picks.PickOdds[],
+	table2Rows: Picks.PickOdds[],
+	table3Rows: Picks.PickOdds[],
+	correlationFactor: number
+): SelectedStats => {
+	let price = (player: Picks.Player): number | null => player.betAvg;
+	if (books.length === 1) {
+		const key = books[0];
+		price = (player) => player[key];
+	} else if (books.length > 1 && books.length < SportsbookKeys.length) {
+		price = booksPrice(books);
+	}
+	const stats: LogLines = [];
+	const streak = calculateStats(null, price, null, minSportsbooks, table1Rows, table2Rows, table3Rows, stats, correlationFactor);
+	return { stats, streak };
 };

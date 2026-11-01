@@ -31,6 +31,38 @@
 	text-align: center;
 }
 
+/* Each passed slot is a section of its own, its heading centered on the view by itself, so opening
+   one moves neither its own heading nor any other slot's */
+.stats-slot {
+	text-align: center;
+}
+
+.stats-slot:not(:last-child) {
+	margin-bottom: 0.7em;
+}
+
+/* Plain text rather than the page's button look, so the row reads as one of the stats lines */
+.stats-slot-toggle {
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: none;
+	border-radius: 0;
+	padding: 0;
+	gap: 0.6em;
+	white-space: nowrap;
+}
+
+/* A slot still loading, or with nothing to open */
+.stats-slot-toggle:disabled {
+	cursor: default;
+	opacity: 0.5;
+}
+
+.stats-slot-toggle + .stats-section {
+	margin-top: 0.7em;
+}
+
 /* Pinned above the stats, the badges share one row, narrowing on small screens instead of wrapping.
    The label shrinks with the screen and with the number of books, so the longest title still fits its
    badge at 320px however many books the row holds. */
@@ -41,4 +73,25 @@
 	padding-left: 0;
 	padding-right: 0;
 	font-size: clamp(calc(2.64rem / var(--book-count, 4)), calc(13.2vw / var(--book-count, 4)), 0.74rem);
+}
+
+/* A press held on a badge adds its book, so the press mustn't select the label or open the
+   phone's callout menu on the logo */
+.stats-sportsbook-list .sportsbook-item {
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+/* The nudge that shows a held press added or removed its book */
+@media (prefers-reduced-motion: no-preference) {
+	.stats-sportsbook-list .sportsbook-pulse {
+		animation: sportsbook-pulse 0.3s ease-out;
+	}
+}
+
+@keyframes sportsbook-pulse {
+	50% {
+		transform: scale(0.9);
+	}
 }

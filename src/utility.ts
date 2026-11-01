@@ -13,3 +13,6 @@ export const probabilityToAmerican = (chance: number | null): string => {
 
 type Entries<T> = { [K in keyof T]: [K, T[K]] }[keyof T][];
 export const getEntries = <T extends object>(obj: T) => Object.entries(obj) as Entries<T>;
+
+// How the page shows a start time
+export const timeFormat: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
