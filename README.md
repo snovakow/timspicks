@@ -85,7 +85,9 @@ Shows the stats from the average of all the sportsbooks or any combination of th
 
 Shows a notice when the data is over a day old, an update didn't finish, a game has started since the last update, today's pick lists haven't posted yet, or the last update had warnings
 
-Clears the games, the pick lists and their stats once the day's last game has started, since nothing is left to play until the next day's lists post
+Drops each game and its players from the tables and the stats once it starts, and clears the tables once the day's last game has started, since nothing is left to play until the next day's lists post
+
+Shows today's history when turned on in the settings: the started games and their players greyed out, each game's players from the last lists before it started, and each earlier slot's stats
 
 # React + TypeScript + Vite
 
