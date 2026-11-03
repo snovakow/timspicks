@@ -799,9 +799,9 @@ function fetchBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $s
 			}
 		}
 
-		// From 2026-10-12 each player has a market of their own, "<Player> to Score 1 or more Goals", priced on its Yes option
+		// Or each player has a market of their own, priced on its Yes option, worded "<Player> to score 1+ goals" or "<Player> to Score 1 or more Goals"
 		foreach ($json_data->fixture->optionMarkets ?? [] as $market) {
-			if (!preg_match('/^(.+) to Score 1 or more Goals$/', $market->name->value, $match)) continue;
+			if (!preg_match('/^(.+) to (?:score 1\+ goals|Score 1 or more Goals)$/', $market->name->value, $match)) continue;
 
 			if ($savesrc) $items[] = [$market];
 
