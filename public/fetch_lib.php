@@ -716,7 +716,9 @@ function fetchBet3(DateTime $endOfDay, CurlHandle $ch, string $basePath, bool $s
 	foreach ($json_data->fixtures as $fixture) {
 		if ($fixture->competition->name->value !== 'NHL') continue;
 
-		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:se', $fixture->startDate);
+		// The start time comes with or without fractional seconds
+		$closingTime = DateTime::createFromFormat('Y-m-d\TH:i:se', $fixture->startDate)
+			?: DateTime::createFromFormat('Y-m-d\TH:i:s.ue', $fixture->startDate);
 		if (!$closingTime) {
 			$output['error'] = "Invalid date format in response: " . $fixture->startDate;
 			return $output;
