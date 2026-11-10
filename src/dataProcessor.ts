@@ -499,8 +499,8 @@ export const mapPlayers = (
 // Each book's spellings for the two Elias Petterssons, by player id, since the plain name can't tell them apart. A
 // book that changed its spelling keeps the old one after the new, since older snapshots still carry it
 const eliasPettersson: Record<number, Partial<Record<SportsbookKey, string[]>>> = {
-	8480012: { bet1: ["Elias Pettersson"], bet2: ["Elias Pettersson #40"], bet4: ["Elias Pettersson (1998)"], bet5: ["Elias Pettersson"], bet6: ["Elias Pettersson"] },
-	8483678: { bet1: ["Elias-Nils Pettersson"], bet2: ["Elias Nils Pettersson #25", "Elias Pettersson #25"], bet4: ["Elias Pettersson (2004)"] },
+	8480012: { bet1: ["Elias Pettersson"], bet2: ["Elias Pettersson #40"], bet3: ["Elias Pettersson", "Elias Pettersson (1998)"], bet4: ["Elias Pettersson (1998)"], bet5: ["Elias Pettersson"], bet6: ["Elias Pettersson"] },
+	8483678: { bet1: ["Elias-Nils Pettersson"], bet2: ["Elias Nils Pettersson #25", "Elias Pettersson #25"], bet3: ["Elias Nils Pettersson"], bet4: ["Elias Pettersson (2004)"] },
 };
 
 export const compilePlayerList = (
