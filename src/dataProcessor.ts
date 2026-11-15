@@ -386,22 +386,42 @@ const loadRoster = async (): Promise<RawPlayerJson[]> => {
 
 /*
 	The roster's players in the games given, outside the lists, whom at least one book prices: the player
-	table's players who could still come up in a later draw
+	table's players who could still come up in a later draw. The lists are their own entries, so a listed
+	player whose file didn't load is still listed, and a player the roster holds twice counts once. The
+	books price by name alone, so an unlisted player who shares his name with another of the day's players
+	would take that player's prices, and he is left out, unless the id-keyed spellings tell the two apart.
 */
 export const unlistedPlayers = (
 	roster: RawPlayerJson[],
 	games: Picks.GameData[],
-	listed: Picks.Player[],
+	listed: Picks.OddsItem[],
 	playerOdds: Partial<Record<SportsbookKey, SportsbookOddsItem[]>>
 ): Picks.Player[] => {
 	const gameMap = gameMapOf(games);
-	const listedIds = new Set(listed.map((player) => player.playerId));
-	const players: Picks.Player[] = [];
+	const listedIds = new Set(listed.map((pick) => pick.playerId));
+
+	// Each of the day's names, folded as the odds lookup folds them, with the players who carry it
+	const nameIds = new Map<string, Set<number>>();
+	const addName = (fullName: string, playerId: number) => {
+		const name = removeAccentsNormalize(fullName);
+		const ids = nameIds.get(name) ?? new Set<number>();
+		ids.add(playerId);
+		nameIds.set(name, ids);
+	};
+	for (const pick of listed) addName(`${pick.firstName} ${pick.lastName}`, pick.playerId);
+
+	const seen = new Set<number>();
+	const candidates: Picks.Player[] = [];
 	for (const playerJson of roster) {
-		if (listedIds.has(playerJson.playerId)) continue;
+		if (seen.has(playerJson.playerId)) continue;
+		seen.add(playerJson.playerId);
 		const player = makePlayer(playerJson, gameMap);
-		if (player) players.push(player);
+		if (!player) continue;
+		addName(player.fullName, player.playerId);
+		if (!listedIds.has(player.playerId)) candidates.push(player);
 	}
+
+	const players = candidates.filter((player) => idKeyedName(player.fullName) || nameIds.get(removeAccentsNormalize(player.fullName))!.size === 1);
 	compilePlayerList(players, playerOdds);
 	return players.filter((player) => SportsbookKeys.some((key) => player.raw[key] != null));
 };
@@ -542,6 +562,8 @@ const eliasPettersson: Record<number, Partial<Record<SportsbookKey, string[]>>> 
 	8480012: { bet1: ["Elias Pettersson"], bet2: ["Elias Pettersson #40"], bet3: ["Elias Pettersson", "Elias Pettersson (1998)"], bet4: ["Elias Pettersson (1998)"], bet5: ["Elias Pettersson"], bet6: ["Elias Pettersson"] },
 	8483678: { bet1: ["Elias-Nils Pettersson"], bet2: ["Elias Nils Pettersson #25", "Elias Pettersson #25"], bet3: ["Elias Nils Pettersson"], bet4: ["Elias Pettersson (2004)"] },
 };
+// The name whose players are priced by the table above rather than by name
+const idKeyedName = (fullName: string): boolean => fullName === "Elias Pettersson";
 
 export const compilePlayerList = (
 	playerList: Picks.Player[],
@@ -558,7 +580,7 @@ export const compilePlayerList = (
 			return true;
 		};
 
-		if (player.fullName === "Elias Pettersson") {
+		if (idKeyedName(player.fullName)) {
 			for (const name of eliasPettersson[player.playerId]?.[key] ?? []) if (process(name)) return;
 			return;
 		}
@@ -630,7 +652,11 @@ export const loadSlot = async (date: string, start: Date, games: Picks.GameData[
 	if (!isPlayerDataByPick(helper)) return null;
 
 	const gameMap = gameMapOf(games);
-	const playerIds = new Set([...helper['1'], ...helper['2'], ...helper['3']].map((pick) => pick.playerId));
+	const picks = [...helper['1'], ...helper['2'], ...helper['3']];
+	const playerOdds = Object.fromEntries(SportsbookKeys.map((key, index) => [key, isOddsList(bookOdds[index]) ? bookOdds[index] : []]));
+	// Taken before the rows are mapped, since mapping can rewrite an entry's id
+	const unlisted = unlistedPlayers(roster, games, picks, playerOdds);
+	const playerIds = new Set(picks.map((pick) => pick.playerId));
 	const files = await Promise.allSettled([...playerIds].map(loadPlayerFile));
 	const playerList: Picks.Player[] = [];
 	for (const file of files) {
@@ -640,9 +666,8 @@ export const loadSlot = async (date: string, start: Date, games: Picks.GameData[
 	}
 
 	const rows = mapPlayers(playerList, helper, buildNormalizedNameMap(playerList));
-	const playerOdds = Object.fromEntries(SportsbookKeys.map((key, index) => [key, isOddsList(bookOdds[index]) ? bookOdds[index] : []]));
 	compilePlayerList(playerList, playerOdds);
-	return { playerList, unlistedPlayers: unlistedPlayers(roster, games, playerList, playerOdds), ...rows };
+	return { playerList, unlistedPlayers: unlisted, ...rows };
 };
 
 // De-vig: correct each sportsbook's bias AND compression toward the

@@ -248,6 +248,9 @@ function App() {
 				const playerList = initialData.playersListing;
 				const gamesList = initialData.gamesListing;
 				const normalizedNameMap = DataProcessor.buildNormalizedNameMap(playerList);
+				// Taken before the rows are mapped, since mapping can rewrite an entry's id
+				const { playerData, roster, playerOdds } = initialData;
+				const unlistedPlayers = DataProcessor.unlistedPlayers(roster, gamesList, [...playerData['1'], ...playerData['2'], ...playerData['3']], playerOdds);
 
 				const { table1Rows, table2Rows, table3Rows } = DataProcessor.mapPlayers(
 					playerList,
@@ -260,10 +263,10 @@ function App() {
 				setData({
 					gamesList,
 					scheduleDate: initialData.scheduleDate,
-					roster: initialData.roster,
+					roster,
 					fetched,
 					playerList,
-					unlistedPlayers: DataProcessor.unlistedPlayers(initialData.roster, gamesList, playerList, initialData.playerOdds),
+					unlistedPlayers,
 					table1Rows,
 					table2Rows,
 					table3Rows,
@@ -452,13 +455,25 @@ function App() {
 		/*
 			The player table holds every priced player in today's games, listed or not, to judge who could
 			come up in a later draw, so a player a redraw dropped stays live there. A shown slot's started
-			games take their players from its snapshot, as the pick tables do.
+			games take their players from its snapshot, as the pick tables do. A player shows once: the lists
+			and the rosters can set him in different games, and a list's entry, which carries his pick, wins.
 		*/
-		const allPlayers = (lists: DataProcessor.PickLists) => [...lists.playerList, ...lists.unlistedPlayers];
-		const playerList = allPlayers(current).filter((player) => !slots.has(player.gameTime.getTime()));
+		const players = new Map<number, { player: Picks.Player; listed: boolean }>();
+		const addPlayers = (list: Picks.Player[], listed: boolean) => {
+			for (const player of list) {
+				const held = players.get(player.playerId);
+				if (!held || (listed && !held.listed)) players.set(player.playerId, { player, listed });
+			}
+		};
+		const ofSlot = (start: number) => (player: Picks.Player) => player.gameTime.getTime() === start;
+		const unstarted = (player: Picks.Player) => !slots.has(player.gameTime.getTime());
+		addPlayers(current.playerList.filter(unstarted), true);
+		addPlayers(current.unlistedPlayers.filter(unstarted), false);
 		for (const [start, slot] of slots) {
-			playerList.push(...allPlayers(slot).filter((player) => player.gameTime.getTime() === start));
+			addPlayers(slot.playerList.filter(ofSlot(start)), true);
+			addPlayers(slot.unlistedPlayers.filter(ofSlot(start)), false);
 		}
+		const playerList = [...players.values()].map(({ player }) => player);
 
 		// Derived highlight/strategy state is recomputed every memo run.
 		clearDerivedPickState(table1Rows);
@@ -879,7 +894,11 @@ function App() {
 				{playersTableEnabled && (
 					<CollapsibleSection title="Players">
 						<div className="scrollable-table-wrapper section-container">
-							<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} />
+							{lockedOut ? (
+								<div className="no-games-message">Today's games have all started</div>
+							) : (
+								<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} />
+							)}
 						</div>
 					</CollapsibleSection>
 				)}

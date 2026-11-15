@@ -9,6 +9,9 @@ import "./sportsbook.css";
 export const precision = 1;
 export const comboPrecision = 2;
 
+// Every start time cell's text
+const startTime = new Intl.DateTimeFormat([], timeFormat);
+
 export interface LocalizedText {
 	default: string;
 	[key: string]: string;
@@ -125,7 +128,7 @@ export function Basic(props: {
 								</span>
 							</td>
 							<td className="cell-container">
-								{game.time.toLocaleTimeString([], timeFormat)}
+								{startTime.format(game.time)}
 							</td>
 							{includeLinks && (
 								<td><a href={game.link} target="_blank" rel="noopener noreferrer">🔗</a></td>
@@ -328,7 +331,7 @@ export function Table(props: {
 
 							{LogStatsKeys.map((key) => renderBetCell(key, player.display[key] ?? '-', picks ? row.highlight.has(key) : undefined, picks ? visibleStrategyFor(row, key) : undefined))}
 							{!picks && (<td>{(row.pick === 0 ? "-" : row.pick)}</td>)}
-							{!picks && (<td className="cell-container">{row.gameTime?.toLocaleTimeString([], timeFormat)}</td>)}
+							{!picks && (<td className="cell-container">{startTime.format(row.gameTime)}</td>)}
 						</tr>
 					)
 				})}
