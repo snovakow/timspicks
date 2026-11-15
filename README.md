@@ -83,7 +83,7 @@ Reacts adaptively to light-dark scheme
 
 Shows the stats from the average of all the sportsbooks or any combination of them, or from one sportsbook alone
 
-Lists every player the sportsbooks price in today's games in a Players table when turned on in the settings, with each one's list, if any, and game start time, to help judge whether to lock picks early or wait for a player who could come up in a later draw
+Lists every player on today's teams that the sportsbooks price in a Players table when turned on in the settings, with each one's list, if any, and game start time, to help judge whether to lock picks early or wait for a player who could come up in a later draw
 
 Shows a notice when the data is over a day old, an update didn't finish, a game has started since the last update, today's pick lists haven't posted yet, or the last update had warnings
 
