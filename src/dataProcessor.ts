@@ -2,8 +2,8 @@ import { isTeam, type Team } from './components/logo';
 import * as Picks from './components/Table';
 import { SportsbookKeys, Sportsbooks, type SportsbookKey } from './dataTypes';
 
-// Raw player structure from playerId.json
-type RawPlayerJson = {
+// Raw player structure from playerId.json, and of each player in rosters.json
+export type RawPlayerJson = {
 	playerId: number;
 	firstName: Picks.LocalizedText;
 	lastName: Picks.LocalizedText;
@@ -352,26 +352,63 @@ interface InitialData {
 	lastGameStart: Date | null;
 	// Each shown book's odds file, by key
 	playerOdds: Partial<Record<SportsbookKey, SportsbookOddsItem[]>>;
+	roster: RawPlayerJson[];
 }
 
 const isOddsList = (value: unknown): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem);
 
 export const loadInitialData = async (): Promise<InitialData> => {
-	const [playerData, gamesAndPlayers, bookOdds] = await Promise.all([
+	const [playerData, gamesAndPlayers, bookOdds, roster] = await Promise.all([
 		loadAndValidate('./data/helper.json', isPlayerDataByPick, 'Helper data'),
 		loadGamesAndPlayers('./data/process.json', './data/helper.json', './data/games.json'),
 		Promise.all(SportsbookKeys.map((key) => loadAndValidate(`./data/${key}.json`, isOddsList, `${Sportsbooks[key].title} odds data`))),
+		loadRoster(),
 	]);
 
 	return {
 		playerData,
 		...gamesAndPlayers,
 		playerOdds: Object.fromEntries(SportsbookKeys.map((key, index) => [key, bookOdds[index]])),
+		roster,
 	};
+};
+
+// Every skater on the teams in rosters.json, or none when it's missing or malformed, since only the player table reads it
+const loadRoster = async (): Promise<RawPlayerJson[]> => {
+	try {
+		const value: unknown = await (await fetchData('./data/rosters.json')).json();
+		if (!isRecord(value) || !isRecord(value.teams)) return [];
+		return Object.values(value.teams).flatMap((team) => Array.isArray(team) ? team.filter(isPlayerJson) : []);
+	} catch {
+		return [];
+	}
+};
+
+/*
+	The roster's players in the games given, outside the lists, whom at least one book prices: the player
+	table's players who could still come up in a later draw
+*/
+export const unlistedPlayers = (
+	roster: RawPlayerJson[],
+	games: Picks.GameData[],
+	listed: Picks.Player[],
+	playerOdds: Partial<Record<SportsbookKey, SportsbookOddsItem[]>>
+): Picks.Player[] => {
+	const gameMap = gameMapOf(games);
+	const listedIds = new Set(listed.map((player) => player.playerId));
+	const players: Picks.Player[] = [];
+	for (const playerJson of roster) {
+		if (listedIds.has(playerJson.playerId)) continue;
+		const player = makePlayer(playerJson, gameMap);
+		if (player) players.push(player);
+	}
+	compilePlayerList(players, playerOdds);
+	return players.filter((player) => SportsbookKeys.some((key) => player.raw[key] != null));
 };
 
 export const oddsNameMap = new Map<string, string>();
 oddsNameMap.set("Aatu Räty", "Aatu Raty");
+oddsNameMap.set("Aleksanteri Kaskimaki", "Alexander Kaskimäki"); // bet4
 oddsNameMap.set("Alex DeBrincat", "Alex Debrincat"); // BetMGM
 oddsNameMap.set("Alex Kerfoot", "Alexander Kerfoot"); // bet1 bet2 bet4 bet5 bet6
 oddsNameMap.set("Alexander Wennberg", "Alex Wennberg"); // FanDuel
@@ -385,7 +422,9 @@ oddsNameMap.set("Ben Kindel", "Benjamin Kindel"); // BetRivers
 oddsNameMap.set("Bo Groulx", "Benoit-Olivier Groulx"); // BetMGM
 oddsNameMap.set("Carl Grundstrom", "Carl Grundström"); // BetRivers (lang)
 oddsNameMap.set("Charle-Edouard D'Astous", "Charles-Edouard D'Astous"); // BetRivers
+oddsNameMap.set("Connor Murphy", "Connor Murphy (EDM)"); // bet2
 oddsNameMap.set("Danila Yurov", "Yurov Danila"); // BetMGM
+oddsNameMap.set("Dmitri Simashev", "Dimitri Simashev"); // bet4
 oddsNameMap.set("Dmitry Orlov", "Dimitri Orlov"); // BetRivers
 oddsNameMap.set("Egor Chinakhov", "Yegor Chinakhov"); // DraftKings BetRivers
 oddsNameMap.set("Ethan Del Mastro", "Ethan del Mastro"); // FanDuel
@@ -411,6 +450,7 @@ oddsNameMap.set("Martin Pospisil", "Martin Pospíšil"); // BetRivers (lang)
 oddsNameMap.set("Matt Boldy", "Matthew Boldy"); // BetRivers
 oddsNameMap.set("Matt Coronato", "Matthew Coronato"); // BetRivers
 oddsNameMap.set("Matt Savoie", "Matthew Savoie"); // BetRivers
+oddsNameMap.set("Max Crozier", "Maxwell Crozier"); // bet4
 oddsNameMap.set("Maxim Tsyplakov", "Maksim Tsyplakov"); // bet1
 oddsNameMap.set("Michael McCarron", "Mike McCarron"); // bet3
 oddsNameMap.set("Mike Matheson", "Michael Matheson"); // BetRivers
@@ -565,6 +605,8 @@ export const compilePlayerList = (
 
 export interface PickLists {
 	playerList: Picks.Player[];
+	// The priced players outside the lists, which only the player table shows
+	unlistedPlayers: Picks.Player[];
 	table1Rows: Picks.PickOdds[];
 	table2Rows: Picks.PickOdds[];
 	table3Rows: Picks.PickOdds[];
@@ -575,7 +617,7 @@ export interface PickLists {
 	its start, or null when the folder has no lists. A book without a file there prices no one,
 	as in the archive replays, and a player whose file won't load is left out rather than the slot.
 */
-export const loadSlot = async (date: string, start: Date, games: Picks.GameData[]): Promise<PickLists | null> => {
+export const loadSlot = async (date: string, start: Date, games: Picks.GameData[], roster: RawPlayerJson[]): Promise<PickLists | null> => {
 	const folder = `./data/${date}/${slotFolder(start)}`;
 	const loadOptional = async (src: string): Promise<unknown> => {
 		try { return await (await fetchData(src)).json(); }
@@ -598,8 +640,9 @@ export const loadSlot = async (date: string, start: Date, games: Picks.GameData[
 	}
 
 	const rows = mapPlayers(playerList, helper, buildNormalizedNameMap(playerList));
-	compilePlayerList(playerList, Object.fromEntries(SportsbookKeys.map((key, index) => [key, isOddsList(bookOdds[index]) ? bookOdds[index] : []])));
-	return { playerList, ...rows };
+	const playerOdds = Object.fromEntries(SportsbookKeys.map((key, index) => [key, isOddsList(bookOdds[index]) ? bookOdds[index] : []]));
+	compilePlayerList(playerList, playerOdds);
+	return { playerList, unlistedPlayers: unlistedPlayers(roster, games, playerList, playerOdds), ...rows };
 };
 
 // De-vig: correct each sportsbook's bias AND compression toward the

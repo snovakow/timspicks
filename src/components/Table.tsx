@@ -163,8 +163,6 @@ export class Player {
 	betCount: number = 0;
 
 	pick: 0 | 1 | 2 | 3 = 0;
-	// Kept from an earlier slot's list after a later redraw dropped him from it, so no longer pickable
-	dropped = false;
 
 	constructor(data: PlayerInput, team: TeamData, opponent: TeamData, homeGame: boolean, gameTime: Date) {
 		this.playerId = data.playerId;
@@ -220,6 +218,8 @@ export class PickOdds {
 	// The books, and the Avg, whose top ticket holds this player, and the strategies each one picks him for
 	highlight: Set<LogStatsKey> = new Set();
 	strategy: Map<LogStatsKey, Set<StrategyMode>> = new Map();
+	// Kept from an earlier slot's list after a later redraw dropped him from it, so no longer pickable
+	dropped = false;
 	constructor(player: Player) {
 		this.player = player;
 	}
@@ -315,7 +315,7 @@ export function Table(props: {
 					const player = picks ? row.player : row;
 					const rowKey = picks ? row.player.playerId : row.playerId;
 					return (
-						<tr key={rowKey} className={rowClass(idx, started(player.gameTime, passed) || player.dropped)}>
+						<tr key={rowKey} className={rowClass(idx, started(player.gameTime, passed) || (picks && row.dropped))}>
 							<td>
 								<span className='cell-container'>
 									<img className='td-name-logo' src={darkTheme ? player.logoDark : player.logoLight} alt="" />

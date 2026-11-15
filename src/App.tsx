@@ -131,6 +131,7 @@ const clonePickLists = (lists: DataProcessor.PickLists): DataProcessor.PickLists
 	// Create fresh object graphs so display mutations do not leak back into source data.
 	return {
 		playerList,
+		unlistedPlayers: lists.unlistedPlayers.map(clonePlayer),
 		table1Rows: cloneRows(lists.table1Rows),
 		table2Rows: cloneRows(lists.table2Rows),
 		table3Rows: cloneRows(lists.table3Rows),
@@ -183,6 +184,8 @@ const latestStart = (startTimes: readonly number[], now: number): number | null 
 interface InitializedData extends DataProcessor.PickLists {
 	gamesList: Picks.GameData[];
 	scheduleDate: string | null;
+	// Today's teams' skaters, which the slots' player tables are built from too
+	roster: DataProcessor.RawPlayerJson[];
 }
 
 let xgMapCachePromise: Promise<Map<Team, number>> | null = null;
@@ -253,7 +256,9 @@ function App() {
 				setData({
 					gamesList,
 					scheduleDate: initialData.scheduleDate,
+					roster: initialData.roster,
 					playerList,
+					unlistedPlayers: DataProcessor.unlistedPlayers(initialData.roster, gamesList, playerList, initialData.playerOdds),
 					table1Rows,
 					table2Rows,
 					table3Rows,
@@ -274,7 +279,9 @@ function App() {
 				setData({
 					gamesList: [],
 					scheduleDate: null,
+					roster: [],
 					playerList: [],
+					unlistedPlayers: [],
 					table1Rows: [],
 					table2Rows: [],
 					table3Rows: [],
@@ -348,7 +355,7 @@ function App() {
 		for (const start of shownSlots) {
 			if (slotLoads.current.has(start)) continue;
 			slotLoads.current.add(start);
-			DataProcessor.loadSlot(date, new Date(start), games)
+			DataProcessor.loadSlot(date, new Date(start), games, data.roster)
 				.catch(() => null)
 				.then((slot) => setSlotSnapshots((prev) => new Map(prev).set(start, slot)));
 		}
@@ -374,6 +381,7 @@ function App() {
 		const { gamesList } = data;
 		const current = clonePickLists(data);
 		fillDisplay(current.playerList, showPercentage, deVigEnabled);
+		fillDisplay(current.unlistedPlayers, showPercentage, deVigEnabled);
 
 		// Each slot gets copies of its own, with any de-vig fitted to the odds it had
 		const slots = new Map<number, DataProcessor.PickLists>();
@@ -382,6 +390,7 @@ function App() {
 			if (!snapshot) continue;
 			const slot = clonePickLists(snapshot);
 			fillDisplay(slot.playerList, showPercentage, deVigEnabled);
+			fillDisplay(slot.unlistedPlayers, showPercentage, deVigEnabled);
 			slots.set(start, slot);
 		}
 
@@ -405,7 +414,7 @@ function App() {
 				for (const row of slotRows(slot)) {
 					if (listed.has(row.player.playerId)) continue;
 					listed.add(row.player.playerId);
-					row.player.dropped = true;
+					row.dropped = true;
 					merged.push(row);
 				}
 			}
@@ -416,19 +425,15 @@ function App() {
 		const table3Rows = withHistory(current.table3Rows, (slot) => slot.table3Rows);
 
 		/*
-			The player table holds the pick tables' players by the same rules, once each: from the list
-			that still holds him when one does, so a player a redraw moved to another list stays live
+			The player table holds every priced player in today's games, listed or not, to judge who could
+			come up in a later draw, so a player a redraw dropped stays live there. A shown slot's started
+			games take their players from its snapshot, as the pick tables do.
 		*/
-		const players = new Map<number, Picks.Player>();
-		if (slots.size === 0) {
-			for (const player of current.playerList) players.set(player.playerId, player);
-		} else {
-			for (const row of [...table1Rows, ...table2Rows, ...table3Rows]) {
-				const held = players.get(row.player.playerId);
-				if (!held || (held.dropped && !row.player.dropped)) players.set(row.player.playerId, row.player);
-			}
+		const allPlayers = (lists: DataProcessor.PickLists) => [...lists.playerList, ...lists.unlistedPlayers];
+		const playerList = allPlayers(current).filter((player) => !slots.has(player.gameTime.getTime()));
+		for (const [start, slot] of slots) {
+			playerList.push(...allPlayers(slot).filter((player) => player.gameTime.getTime() === start));
 		}
-		const playerList = [...players.values()];
 
 		// Derived highlight/strategy state is recomputed every memo run.
 		clearDerivedPickState(table1Rows);
@@ -491,7 +496,7 @@ function App() {
 	// The rows still in their list whose game hasn't started, the only ones left to pick, so the only ones the stats count and mark
 	const liveRows = useMemo(() => {
 		if (!memoizedDisplayData) return null;
-		const live = (rows: Picks.PickOdds[]) => rows.filter((row) => !row.player.dropped && (passed === null || row.player.gameTime.getTime() > passed));
+		const live = (rows: Picks.PickOdds[]) => rows.filter((row) => !row.dropped && (passed === null || row.player.gameTime.getTime() > passed));
 		return {
 			table1Rows: live(memoizedDisplayData.table1Rows),
 			table2Rows: live(memoizedDisplayData.table2Rows),
