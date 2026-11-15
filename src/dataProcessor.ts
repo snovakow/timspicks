@@ -435,6 +435,7 @@ oddsNameMap.set("Alexander Wennberg", "Alex Wennberg"); // FanDuel
 oddsNameMap.set("Alexei Toropchenko", "Alexey Toropchenko"); // bet1 bet2 bet3 bet5 bet6
 oddsNameMap.set("Alexis Lafrenière", "Alexis Lafreniere"); // DraftKings FanDuel
 oddsNameMap.set("Aliaksei Protas", "Alexei Protas"); // BetRivers (lang)
+oddsNameMap.set("Anton Silaev", "Anton Silayev"); // bet2 bet4
 oddsNameMap.set("Arseny Gritsyuk", "Arseni Gritsyuk"); // BetRivers
 oddsNameMap.set("Artem Zub", "Artyom Zub"); // BetRivers
 oddsNameMap.set("Axel Sandin-Pellikka", "Axel Sandin Pellikka"); // DraftKings
@@ -485,6 +486,7 @@ oddsNameMap.set("Oskar Bäck", "Oskar Back"); // DraftKings FanDuel
 oddsNameMap.set("Sebastian Aho", "Sebastian Aho (CAR)"); // FanDuel, BetRivers
 oddsNameMap.set("Shea Theodore", "Shea Théodore"); // BetRivers
 oddsNameMap.set("Simon Holmstrom", "Simon Holmström"); // BetRivers (lang)
+oddsNameMap.set("T.J. Hughes", "T.J Hughes"); // bet4
 oddsNameMap.set("Teuvo Teravainen", "Teuvo Teräväinen"); // BetRivers (lang)
 oddsNameMap.set("Tim Stützle", "Tim Stuetzle"); // DraftKings
 oddsNameMap.set("Tommy Novak", "Thomas Novak"); // BetRivers (lang)
