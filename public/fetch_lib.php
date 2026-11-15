@@ -66,7 +66,68 @@ function updateGames(DateTime $now, string $basePath)
 		return $output;
 	}
 	$output['content'] = "Data has been written to $local_file";
+
+	$warnings = updateRosters($response, $basePath);
+	if ($warnings) $output['warning'] = $warnings;
 	return $output;
+}
+
+/*
+	The skaters on each of today's teams, for the page's player table: the books price players by name
+	alone, and a roster gives each name its team, so the table can show players outside the pick lists.
+	Rosters barely change within a day, so a team the file already holds for today isn't fetched again,
+	and a team whose fetch fails is left out and retried on the next run. Returns the run's warnings.
+*/
+function updateRosters(string $schedule, string $basePath)
+{
+	$day = json_decode($schedule, true)['gameWeek'][0] ?? null;
+	if (!is_array($day) || !is_string($day['date'] ?? null)) return ['Rosters: no date in the schedule'];
+
+	$seasons = [];
+	foreach ($day['games'] ?? [] as $game) {
+		foreach (['homeTeam', 'awayTeam'] as $side) {
+			$team = $game[$side]['abbrev'] ?? null;
+			if (is_string($team) && isset($game['season'])) $seasons[$team] = (int)$game['season'];
+		}
+	}
+
+	$local_file = "$basePath/rosters.json";
+	$saved = file_exists($local_file) ? json_decode((string)file_get_contents($local_file), true) : null;
+	$teams = is_array($saved) && ($saved['date'] ?? null) === $day['date'] && is_array($saved['teams'] ?? null) ? $saved['teams'] : [];
+	$teams = array_intersect_key($teams, $seasons);
+
+	$urls = [];
+	foreach ($seasons as $team => $season) {
+		if (!isset($teams[$team])) $urls[$team] = "https://api-web.nhle.com/v1/roster/$team/$season";
+	}
+	if (!$urls) return [];
+
+	$warnings = [];
+	$options = [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 20];
+	foreach (fetchParallel($urls, $options) as $team => $fetched) {
+		$roster = $fetched['error'] === null ? json_decode($fetched['body'], true) : null;
+		if (!is_array($roster)) {
+			$warnings[] = "Roster for $team: " . ($fetched['error'] ?? 'Error decoding JSON');
+			continue;
+		}
+		$players = [];
+		foreach (['forwards', 'defensemen'] as $group) {
+			foreach ($roster[$group] ?? [] as $player) {
+				if (!isset($player['id'], $player['firstName']['default'], $player['lastName']['default'])) continue;
+				$players[] = [
+					'playerId' => (int)$player['id'],
+					'firstName' => $player['firstName'],
+					'lastName' => $player['lastName'],
+					'currentTeamAbbrev' => $team,
+				];
+			}
+		}
+		$teams[$team] = $players;
+	}
+
+	$json = json_encode(['date' => $day['date'], 'teams' => $teams], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+	if ($json === false || file_put_contents($local_file, $json, LOCK_EX) === false) $warnings[] = "Error saving local JSON file: $local_file";
+	return $warnings;
 }
 
 /* Cached player data is refreshed when missing or when the player changes teams */
