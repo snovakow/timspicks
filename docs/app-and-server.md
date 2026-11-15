@@ -101,12 +101,18 @@ at ET midnight.
 | the schedule feed | `games.json` | only the first game-week entry, i.e. today |
 | the pick-list feed | `helper.json` | keyed by the feed's own list ids |
 | the player feed | `players/<id>.json` | one file per player |
+| the roster feed | `rosters.json` | the skaters on each of today's teams, fetched once a day |
 | each book | `data/bet1.json`, `bet2.json` and on | flat arrays of player names and odds |
 
 Player files are refreshed only when missing or when the player has changed
 teams, so their season stats go stale over a season unless the player is traded;
 current games and goals come from the pick-list feed instead. An override table
 covers pick-list entries that arrive with a missing or wrong player id.
+
+The books price players by name alone, so the rosters give the page each name's
+team, which lets the player table show players outside the lists. The schedule
+step fetches them, once a day per team, and a team whose roster fails is left out
+with a warning and fetched again on the next run.
 
 ### The books
 
@@ -180,6 +186,7 @@ one of the release gates.
 data/
   games.json         today's schedule
   helper.json        today's three pick lists
+  rosters.json       today's teams' skaters, for the player table
   bet1.json ...      today's odds, one file per book the list shows
   process.json       run state
   <Y-m-d>/
@@ -262,7 +269,10 @@ snapshot folder, the last lists before it started, in place of any the current
 lists still hold, since a run after the start finds that game's prices changed,
 or gone. A player an earlier slot held in a list, and a later redraw dropped from
 it, stays in that table too, greyed and out of the stats like a started game's,
-with his prices from the latest slot that still held him. The stats view lists
+with his prices from the latest slot that still held him. The player table,
+which holds every priced player in today's games to judge who could come up in a
+later draw, takes a started game's players from its slot's snapshot the same way,
+and keeps a player a redraw dropped live, with no list. The stats view lists
 each passed slot with its top picks' Streak, opening to the slot's full stats
 from the books selected, and once the day's last start has passed it shows only
 those slots.
