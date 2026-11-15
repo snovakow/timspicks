@@ -87,7 +87,7 @@ Shows a notice when the data is over a day old, an update didn't finish, a game 
 
 Drops each game and its players from the tables and the stats once it starts, and clears the tables once the day's last game has started, since nothing is left to play until the next day's lists post
 
-Shows today's history when turned on in the settings: the started games and their players greyed out, each game's players from the last lists before it started, and each earlier slot's stats
+Shows today's history when turned on in the settings: the started games and their players greyed out, each game's players from the last lists before it started, the players a redraw dropped from a list greyed out in it, and each earlier slot's stats
 
 # React + TypeScript + Vite
 
