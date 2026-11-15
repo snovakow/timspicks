@@ -260,9 +260,12 @@ the tables greyed out, never highlighted and still left out of the stats, and th
 locked day keeps its tables. Each started game's players come from its slot's
 snapshot folder, the last lists before it started, in place of any the current
 lists still hold, since a run after the start finds that game's prices changed,
-or gone. The stats view lists each passed slot with its top picks' Streak,
-opening to the slot's full stats from the books selected, and once the day's last
-start has passed it shows only those slots.
+or gone. A player an earlier slot held in a list, and a later redraw dropped from
+it, stays in that table too, greyed and out of the stats like a started game's,
+with his prices from the latest slot that still held him. The stats view lists
+each passed slot with its top picks' Streak, opening to the slot's full stats
+from the books selected, and once the day's last start has passed it shows only
+those slots.
 
 ## The admin page
 
