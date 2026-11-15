@@ -77,8 +77,8 @@ export default function InfoPopupContent() {
 				</p>
 				<p>
 					Once a game starts, it and its players leave the tables and the stats. With <strong>Show Today's History</strong> on
-					in the <strong>Settings</strong>, they stay in the tables greyed out, and each earlier slot is listed below the stats
-					with its top picks' Streak, opening to that slot's full stats.
+					in the <strong>Settings</strong>, they stay in the tables greyed out, as do the players a redraw dropped from a list,
+					and each earlier slot is listed below the stats with its top picks' Streak, opening to that slot's full stats.
 				</p>
 			</section>
 

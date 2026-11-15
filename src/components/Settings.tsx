@@ -112,7 +112,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					<span>Show Players Table</span>
 				</label>
 				<div className="settings-description">
-					Add a Players table of every player the sportsbooks price in today's games, with each one's pick list and start time.
+					Add a Players table of every player on today's teams that the sportsbooks price, with each one's pick list and start time.
 				</div>
 			</div>
 			<div className="settings-group">
@@ -125,7 +125,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					<span>Show Today's History</span>
 				</label>
 				<div className="settings-description">
-					Keep the games that have started and their players in the tables, greyed out, and list each earlier slot's stats in the Stats.
+					Keep the games that have started and their players in the tables, greyed out, along with the players a redraw dropped from a list, and list each earlier slot's stats in the Stats.
 				</div>
 			</div>
 
