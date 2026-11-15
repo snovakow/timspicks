@@ -373,8 +373,7 @@ function App() {
 
 		const { gamesList } = data;
 		const current = clonePickLists(data);
-		const playerList = current.playerList;
-		fillDisplay(playerList, showPercentage, deVigEnabled);
+		fillDisplay(current.playerList, showPercentage, deVigEnabled);
 
 		// Each slot gets copies of its own, with any de-vig fitted to the odds it had
 		const slots = new Map<number, DataProcessor.PickLists>();
@@ -399,11 +398,37 @@ function App() {
 			for (const [start, slot] of slots) {
 				merged.push(...slotRows(slot).filter((row) => row.player.gameTime.getTime() === start));
 			}
+			// A player a shown slot offered in this list, and a later redraw dropped from it, stays too,
+			// from the latest slot that still held him
+			const listed = new Set(merged.map((row) => row.player.playerId));
+			for (const slot of [...slots.values()].reverse()) {
+				for (const row of slotRows(slot)) {
+					if (listed.has(row.player.playerId)) continue;
+					listed.add(row.player.playerId);
+					row.player.dropped = true;
+					merged.push(row);
+				}
+			}
 			return merged;
 		};
 		const table1Rows = withHistory(current.table1Rows, (slot) => slot.table1Rows);
 		const table2Rows = withHistory(current.table2Rows, (slot) => slot.table2Rows);
 		const table3Rows = withHistory(current.table3Rows, (slot) => slot.table3Rows);
+
+		/*
+			The player table holds the pick tables' players by the same rules, once each: from the list
+			that still holds him when one does, so a player a redraw moved to another list stays live
+		*/
+		const players = new Map<number, Picks.Player>();
+		if (slots.size === 0) {
+			for (const player of current.playerList) players.set(player.playerId, player);
+		} else {
+			for (const row of [...table1Rows, ...table2Rows, ...table3Rows]) {
+				const held = players.get(row.player.playerId);
+				if (!held || (held.dropped && !row.player.dropped)) players.set(row.player.playerId, row.player);
+			}
+		}
+		const playerList = [...players.values()];
 
 		// Derived highlight/strategy state is recomputed every memo run.
 		clearDerivedPickState(table1Rows);
@@ -463,10 +488,10 @@ function App() {
 		setShowPopup({ ...showPopup, visible: false });
 	};
 
-	// The rows whose game hasn't started, the only ones left to pick, so the only ones the stats count and mark
+	// The rows still in their list whose game hasn't started, the only ones left to pick, so the only ones the stats count and mark
 	const liveRows = useMemo(() => {
 		if (!memoizedDisplayData) return null;
-		const live = (rows: Picks.PickOdds[]) => passed === null ? rows : rows.filter((row) => row.player.gameTime.getTime() > passed);
+		const live = (rows: Picks.PickOdds[]) => rows.filter((row) => !row.player.dropped && (passed === null || row.player.gameTime.getTime() > passed));
 		return {
 			table1Rows: live(memoizedDisplayData.table1Rows),
 			table2Rows: live(memoizedDisplayData.table2Rows),

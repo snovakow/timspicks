@@ -64,11 +64,13 @@ export class GameData {
 
 const includeLinks = false;
 
-// A row's classes: its stripe, and greyed once its game has started, since it can no longer be picked
-const rowClass = (index: number, time: Date, passed: number | null): string => {
+// A row's classes: its stripe, and greyed once it can no longer be picked
+const rowClass = (index: number, greyed: boolean): string => {
 	const stripe = index % 2 === 0 ? 'row-color' : 'row-color-alt';
-	return passed !== null && time.getTime() <= passed ? `${stripe} row-started` : stripe;
+	return greyed ? `${stripe} row-started` : stripe;
 };
+
+const started = (time: Date, passed: number | null): boolean => passed !== null && time.getTime() <= passed;
 
 export function Basic(props: {
 	games: GameData[],
@@ -87,7 +89,7 @@ export function Basic(props: {
 					const xgAway = xgMap?.get(game.away.code) ?? null;
 					const xgGame = xgHome !== null && xgAway !== null ? xgHome + xgAway : null;
 					return (
-						<tr key={game.link} className={rowClass(idx, game.time, passed)}>
+						<tr key={game.link} className={rowClass(idx, started(game.time, passed))}>
 							<td>
 								<span className='cell-container right-align'>
 									<span className="team-name-stack">
@@ -161,6 +163,8 @@ export class Player {
 	betCount: number = 0;
 
 	pick: 0 | 1 | 2 | 3 = 0;
+	// Kept from an earlier slot's list after a later redraw dropped him from it, so no longer pickable
+	dropped = false;
 
 	constructor(data: PlayerInput, team: TeamData, opponent: TeamData, homeGame: boolean, gameTime: Date) {
 		this.playerId = data.playerId;
@@ -311,7 +315,7 @@ export function Table(props: {
 					const player = picks ? row.player : row;
 					const rowKey = picks ? row.player.playerId : row.playerId;
 					return (
-						<tr key={rowKey} className={rowClass(idx, player.gameTime, passed)}>
+						<tr key={rowKey} className={rowClass(idx, started(player.gameTime, passed) || player.dropped)}>
 							<td>
 								<span className='cell-container'>
 									<img className='td-name-logo' src={darkTheme ? player.logoDark : player.logoLight} alt="" />
