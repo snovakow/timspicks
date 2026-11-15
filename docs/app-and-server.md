@@ -101,7 +101,7 @@ at ET midnight.
 | the schedule feed | `games.json` | only the first game-week entry, i.e. today |
 | the pick-list feed | `helper.json` | keyed by the feed's own list ids |
 | the player feed | `players/<id>.json` | one file per player |
-| the roster feed | `rosters.json` | the skaters on each of today's teams, fetched once a day |
+| the roster feed | `rosters.json` | the skaters on each of today's teams, fetched once a day per team; a reply with no skaters counts as failed |
 | each book | `data/bet1.json`, `bet2.json` and on | flat arrays of player names and odds |
 
 Player files are refreshed only when missing or when the player has changed
@@ -110,9 +110,21 @@ current games and goals come from the pick-list feed instead. An override table
 covers pick-list entries that arrive with a missing or wrong player id.
 
 The books price players by name alone, so the rosters give the page each name's
-team, which lets the player table show players outside the lists. The schedule
-step fetches them, once a day per team, and a team whose roster fails is left out
-with a warning and fetched again on the next run.
+team, which lets the player table show every player on today's teams that the
+books price, outside the lists as well. The schedule step fetches them, once a day
+per team. A team whose roster fails, by an error, a reply that doesn't decode or
+one that lists no skaters, is left out and fetched again on the next run, so an
+empty roster is never kept for the day. Every missing team is fetched at once
+under a short time limit: the step runs ahead of the lists and the books on every
+run, and a roster feed that hangs mustn't hold the run up. A run's roster
+failures, a failed save included, make one warning, with the teams grouped by
+reason, so an outage is one line in the banner rather than one per team, and like
+every warning it leaves out the addresses the errors held.
+
+Since the books go by name, a player outside the lists who shares his name with
+another of the day's players is left out of the player table, as a book's price
+for that name could be either's. Players a table of the books' spellings by player
+id tells apart are the exception.
 
 ### The books
 
@@ -246,17 +258,20 @@ light the banner every night until the first run after midnight.
 
 That window gets a state of its own instead. Once the day's last start has passed
 the app says every game has started, and clears the games table, the three pick
-lists and the stats view built from them. Before that, each start takes its game
-out of the games table and its players out of the pick lists and the stats — a
-started game can no longer be played, and its players left in read as picks still
-to make. This runs on the clock rather than on a fetch, so a page left open drops
-each game by itself at its puck drop and locks at the last; a long wait is re-armed
-from the clock each time, since a background tab throttles its timers and a
-sleeping device wakes with one already due. There is no re-fetch to go with it: the
-next day's lists arrive on the next load, by which time the post-midnight run has
-written them. Data stale enough to trip the over-a-day notice is likely holding an
-earlier day's schedule, whose last start is long past, so that notice takes
-precedence over calling the day locked or dropping its games.
+lists, the player table and the stats view built from them. Before that, each
+start takes its game out of the games table and its players out of the pick lists
+and the stats — a started game can no longer be played, and its players left in
+read as picks still to make. This runs on the clock rather than on a fetch, so a
+page left open drops each game by itself at its puck drop and locks at the last; a
+long wait is re-armed from the clock each time, since a background tab throttles
+its timers and a sleeping device wakes with one already due. There is no re-fetch
+to go with it: the next day's lists arrive on the next load, by which time the
+post-midnight run has written them. So a page left open keeps the lists it loaded
+with, while with today's history on a passed slot's snapshot is fetched when the
+clock passes it, and can hold a newer draw than the page's lists; today's history,
+below, says what the page does then. Data stale enough to trip the over-a-day
+notice is likely holding an earlier day's schedule, whose last start is long past,
+so that notice takes precedence over calling the day locked or dropping its games.
 
 The app reads every game of the day, started or not, and leaves the choice to the
 clock: a run can land after a start but before the feed redraws, and its lists
@@ -269,10 +284,23 @@ snapshot folder, the last lists before it started, in place of any the current
 lists still hold, since a run after the start finds that game's prices changed,
 or gone. A player an earlier slot held in a list, and a later redraw dropped from
 it, stays in that table too, greyed and out of the stats like a started game's,
-with his prices from the latest slot that still held him. The player table,
-which holds every priced player in today's games to judge who could come up in a
-later draw, takes a started game's players from its slot's snapshot the same way,
-and keeps a player a redraw dropped live, with no list. The stats view lists
+with his prices from the latest slot that still held him.
+
+On a page left open, a slot that started after the load can hold a newer draw than
+the page's own lists, and the newest such slot is the latest draw the page knows.
+A player it holds in a list, whose game hasn't started, was not dropped, so no
+slot greys him there. He is left out of that table rather than shown live, as the
+page's own lists leave him out: a live row is one the stats count, so showing him
+would give the stats a player with the history on that they lack with it off. He
+appears on the next load, which fetches that draw. A slot that started after the
+load greys only players whose games have started, since against the page's older
+lists a player a later draw dropped looks the same as one it added.
+
+The player table, which holds every player on today's teams that the books price,
+to judge who could come up in a later draw, takes a started game's players from
+its slot's snapshot the same way, and keeps a player a redraw dropped live, with no
+list. It shows each player once, with his list where one holds him, even where the
+lists and the rosters set him in different games. The stats view lists
 each passed slot with its top picks' Streak, opening to the slot's full stats
 from the books selected, and once the day's last start has passed it shows only
 those slots.
