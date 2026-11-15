@@ -75,8 +75,13 @@ function updateGames(DateTime $now, string $basePath)
 /*
 	The skaters on each of today's teams, for the page's player table: the books price players by name
 	alone, and a roster gives each name its team, so the table can show players outside the pick lists.
-	Rosters barely change within a day, so a team the file already holds for today isn't fetched again,
-	and a team whose fetch fails is left out and retried on the next run. Returns the run's warnings.
+	Rosters barely change within a day, so a team the file already holds for today isn't fetched again.
+	A team whose reply fails, doesn't decode or lists no skaters isn't saved, so the next run fetches it
+	again. Every missing team is fetched at once under a short time limit, since this runs ahead of the
+	lists and the books on every run and a feed that hangs must not hold the run up. All of a run's
+	failures, a failed save included, come back as one warning with the teams grouped by reason. A reason
+	carries no address, and none of the counts in a timeout's text, which differ from one request to the
+	next, so one outage stays one group. Returns the run's warnings.
 */
 function updateRosters(string $schedule, string $basePath)
 {
@@ -92,7 +97,7 @@ function updateRosters(string $schedule, string $basePath)
 	}
 
 	$local_file = "$basePath/rosters.json";
-	$saved = file_exists($local_file) ? json_decode((string)file_get_contents($local_file), true) : null;
+	$saved = is_file($local_file) ? json_decode((string)@file_get_contents($local_file), true) : null;
 	$teams = is_array($saved) && ($saved['date'] ?? null) === $day['date'] && is_array($saved['teams'] ?? null) ? $saved['teams'] : [];
 	$teams = array_intersect_key($teams, $seasons);
 
@@ -102,17 +107,25 @@ function updateRosters(string $schedule, string $basePath)
 	}
 	if (!$urls) return [];
 
-	$warnings = [];
-	$options = [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 20];
-	foreach (fetchParallel($urls, $options) as $team => $fetched) {
+	$failed = [];
+	$fail = function (string $team, string $error) use (&$failed) {
+		$reason = withoutAddresses($error, 'the roster feed');
+		$reason = preg_replace('# after \d+ (?:milliseconds|ms)\b#', '', $reason);
+		$reason = preg_replace('# with \d+ (?:out of -?\d+ )?bytes received#', '', $reason);
+		$failed[$reason][] = $team;
+	};
+
+	$options = [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 5];
+	foreach (fetchParallel($urls, $options, count($urls)) as $team => $fetched) {
 		$roster = $fetched['error'] === null ? json_decode($fetched['body'], true) : null;
 		if (!is_array($roster)) {
-			$warnings[] = "Roster for $team: " . ($fetched['error'] ?? 'Error decoding JSON');
+			$fail($team, $fetched['error'] ?? 'Error decoding JSON');
 			continue;
 		}
 		$players = [];
 		foreach (['forwards', 'defensemen'] as $group) {
-			foreach ($roster[$group] ?? [] as $player) {
+			if (!is_array($roster[$group] ?? null)) continue;
+			foreach ($roster[$group] as $player) {
 				if (!isset($player['id'], $player['firstName']['default'], $player['lastName']['default'])) continue;
 				$players[] = [
 					'playerId' => (int)$player['id'],
@@ -122,12 +135,22 @@ function updateRosters(string $schedule, string $basePath)
 				];
 			}
 		}
+		if (!$players) {
+			$fail($team, 'No skaters listed');
+			continue;
+		}
 		$teams[$team] = $players;
 	}
 
+	$parts = [];
+	foreach ($failed as $reason => $names) {
+		sort($names);
+		$parts[] = 'failed for ' . implode(', ', $names) . ": $reason";
+	}
+	// Reported in the warning, not as a PHP warning, and without the path: the address filter keeps a relative one
 	$json = json_encode(['date' => $day['date'], 'teams' => $teams], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-	if ($json === false || file_put_contents($local_file, $json, LOCK_EX) === false) $warnings[] = "Error saving local JSON file: $local_file";
-	return $warnings;
+	if ($json === false || @file_put_contents($local_file, $json, LOCK_EX) === false) $parts[] = 'not saved to rosters.json';
+	return $parts ? ['Rosters ' . implode('; ', $parts)] : [];
 }
 
 /* Cached player data is refreshed when missing or when the player changes teams */
