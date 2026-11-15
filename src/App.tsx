@@ -221,6 +221,7 @@ function App() {
 	const [showPercentage, setShowPercentage] = useState(true);
 	const [deVigEnabled, setDeVigEnabled] = useState(false);
 	const [historyEnabled, setHistoryEnabled] = useState(false);
+	const [playersTableEnabled, setPlayersTableEnabled] = useState(false);
 	const [minSportsbooks, setMinSportsbooks] = useState(4);
 	const [correlationFactor, setCorrelationFactor] = useState(Feature.correlation ? 1 : 0);
 	const [showCorrelate, setShowCorrelate] = useState(false);
@@ -762,6 +763,8 @@ function App() {
 							onXgEnabledChange={setXgEnabled}
 							historyEnabled={historyEnabled}
 							onHistoryEnabledChange={setHistoryEnabled}
+							playersTableEnabled={playersTableEnabled}
+							onPlayersTableEnabledChange={setPlayersTableEnabled}
 						/>
 					) : (
 						<StatsPopupContent stats={booksStats ?? popupStats?.[statsBooks.length === 1 ? statsBooks[0] : 'betAvg'] ?? null} locked={dayLocked} slots={slotStats} />
@@ -849,7 +852,7 @@ function App() {
 						)}
 					</div>
 				</CollapsibleSection>
-				{Feature.allPlayersTable && (
+				{playersTableEnabled && (
 					<CollapsibleSection title="Players">
 						<div className="scrollable-table-wrapper section-container">
 							<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} />

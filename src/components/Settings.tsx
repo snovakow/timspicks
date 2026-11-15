@@ -15,6 +15,8 @@ interface SettingsPanelProps {
 	onXgEnabledChange: (value: boolean) => void;
 	historyEnabled: boolean;
 	onHistoryEnabledChange: (value: boolean) => void;
+	playersTableEnabled: boolean;
+	onPlayersTableEnabledChange: (value: boolean) => void;
 }
 
 export default function SettingsPanel(props: SettingsPanelProps) {
@@ -31,6 +33,8 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 		onXgEnabledChange,
 		historyEnabled,
 		onHistoryEnabledChange,
+		playersTableEnabled,
+		onPlayersTableEnabledChange,
 	} = props;
 
 	const labelClassNames = "settings-checkbox-item settings-checkbox settings-strategy-checkbox settings-label-single settings-checkbox-hoverable";
@@ -96,6 +100,19 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 				</label>
 				<div className="settings-description">
 					Include expected team goals in the Games table.
+				</div>
+			</div>
+			<div className="settings-group">
+				<label className={labelClassNames}>
+					<input
+						type="checkbox"
+						checked={playersTableEnabled}
+						onChange={(e) => onPlayersTableEnabledChange(e.target.checked)}
+					/>
+					<span>Show Players Table</span>
+				</label>
+				<div className="settings-description">
+					Add a Players table of every player the sportsbooks price in today's games, with each one's pick list and start time.
 				</div>
 			</div>
 			<div className="settings-group">

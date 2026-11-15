@@ -31,16 +31,14 @@ export default function InfoPopupContent() {
 				</div>
 			</section>
 
-			{Feature.allPlayersTable && (
-				<section className="info-popup-section">
-					<h3>Features</h3>
-					<p>
-						Once games start, available pick quality can shift.
-						Listing all players with game start times helps judge
-						whether to lock picks early or wait for later opportunities.
-					</p>
-				</section>
-			)}
+			<section className="info-popup-section">
+				<h3>Features</h3>
+				<p>
+					Once games start, available pick quality can shift.
+					The Players table, turned on in the settings, lists all players with game start times
+					to help judge whether to lock picks early or wait for later opportunities.
+				</p>
+			</section>
 
 			{Feature.normalizeSportsbooks && (
 				<section className="info-popup-section">
