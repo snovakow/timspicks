@@ -186,6 +186,8 @@ interface InitializedData extends DataProcessor.PickLists {
 	scheduleDate: string | null;
 	// Today's teams' skaters, which the slots' player tables are built from too
 	roster: DataProcessor.RawPlayerJson[];
+	// When the page fetched its lists, in ms. A slot that started after it can hold a newer draw than they do
+	fetched: number;
 }
 
 let xgMapCachePromise: Promise<Map<Team, number>> | null = null;
@@ -240,6 +242,7 @@ function App() {
 	// Load data on mount
 	useEffect(() => {
 		const initializeData = async () => {
+			const fetched = Date.now();
 			try {
 				const initialData = await DataProcessor.loadInitialData();
 				const playerList = initialData.playersListing;
@@ -258,6 +261,7 @@ function App() {
 					gamesList,
 					scheduleDate: initialData.scheduleDate,
 					roster: initialData.roster,
+					fetched,
 					playerList,
 					unlistedPlayers: DataProcessor.unlistedPlayers(initialData.roster, gamesList, playerList, initialData.playerOdds),
 					table1Rows,
@@ -281,6 +285,7 @@ function App() {
 					gamesList: [],
 					scheduleDate: null,
 					roster: [],
+					fetched,
 					playerList: [],
 					unlistedPlayers: [],
 					table1Rows: [],
@@ -379,7 +384,7 @@ function App() {
 	const memoizedDisplayData = useMemo(() => {
 		if (!data) return null;
 
-		const { gamesList } = data;
+		const { gamesList, fetched } = data;
 		const current = clonePickLists(data);
 		fillDisplay(current.playerList, showPercentage, deVigEnabled);
 		fillDisplay(current.unlistedPlayers, showPercentage, deVigEnabled);
@@ -401,19 +406,38 @@ function App() {
 			the redraw the snapshot is the same run the current lists come from, and
 			after a run the feed hadn't redrawn for, only the snapshot holds the game's prices from
 			before its start: a later run finds them changed, or gone.
+
+			A player a shown slot held in a list, and a later redraw dropped from it, stays too, greyed,
+			from the latest slot that still held him. The page fetches its lists once, at load, but a
+			slot's snapshot only once the clock passes it, so on a page left open a slot that started
+			after the load can hold a newer draw than the page's lists. The newest such slot is then the
+			latest draw the page knows: a player it holds in the list whose game hasn't started was not
+			dropped, so no slot greys him there. He is left out of the table, as the page's own lists
+			leave him out, rather than shown live, so the stats stay the same with the history on or
+			off. Any other slot after the load greys only players whose games have started, since the
+			page's older lists can't tell a player a later draw dropped from one it added. A slot that
+			started before the load greys whom the lists lack, as on a fresh load, where every shown
+			slot did.
 		*/
+		// A game has started once the clock has passed its start
+		const latestShown = shownSlots[shownSlots.length - 1];
+		const notStarted = (row: Picks.PickOdds) => row.player.gameTime.getTime() > latestShown;
 		const withHistory = (rows: Picks.PickOdds[], slotRows: (slot: DataProcessor.PickLists) => Picks.PickOdds[]): Picks.PickOdds[] => {
 			if (slots.size === 0) return rows;
 			const merged = rows.filter((row) => !slots.has(row.player.gameTime.getTime()));
 			for (const [start, slot] of slots) {
 				merged.push(...slotRows(slot).filter((row) => row.player.gameTime.getTime() === start));
 			}
-			// A player a shown slot offered in this list, and a later redraw dropped from it, stays too,
-			// from the latest slot that still held him
+			// Latest slot first, a player a slot held in this list and the table lacks is added greyed,
+			// unless the latest draw the page knows still holds him or a slot after the load can't tell
+			const latestFirst = [...slots].reverse();
+			const newest = latestFirst.find(([start]) => start > fetched)?.[1];
+			const held = new Set(newest ? slotRows(newest).filter(notStarted).map((row) => row.player.playerId) : []);
 			const listed = new Set(merged.map((row) => row.player.playerId));
-			for (const slot of [...slots.values()].reverse()) {
+			for (const [start, slot] of latestFirst) {
 				for (const row of slotRows(slot)) {
-					if (listed.has(row.player.playerId)) continue;
+					if (listed.has(row.player.playerId) || held.has(row.player.playerId)) continue;
+					if (start > fetched && notStarted(row)) continue;
 					listed.add(row.player.playerId);
 					row.dropped = true;
 					merged.push(row);
