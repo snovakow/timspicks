@@ -219,6 +219,8 @@ const makePlayer = (playerJson: RawPlayerJson, gameMap: Map<Team, Picks.GameData
 };
 
 type GamesAndPlayers = {
+	// The pick lists the players were loaded for, so the rows and the players come from one draw
+	playerData: PlayerDataByPick;
 	playersListing: Picks.Player[];
 	gamesListing: Picks.GameData[];
 	// The schedule's ET date, which names the day's snapshot folder
@@ -333,6 +335,7 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 	const dataStatus = cutoff ? getDataStatus(cutoff, started, warnings, gameTimes, earlierDraw) : null;
 
 	return {
+		playerData,
 		playersListing: playersList,
 		gamesListing: gamesList,
 		scheduleDate: typeof scheduleDate === 'string' ? scheduleDate : null,
@@ -358,15 +361,13 @@ interface InitialData {
 const isOddsList = (value: unknown): value is SportsbookOddsItem[] => Array.isArray(value) && value.every(isSportsbookOddsItem);
 
 export const loadInitialData = async (): Promise<InitialData> => {
-	const [playerData, gamesAndPlayers, bookOdds, roster] = await Promise.all([
-		loadAndValidate('./data/helper.json', isPlayerDataByPick, 'Helper data'),
+	const [gamesAndPlayers, bookOdds, roster] = await Promise.all([
 		loadGamesAndPlayers('./data/process.json', './data/helper.json', './data/games.json'),
 		Promise.all(SportsbookKeys.map((key) => loadAndValidate(`./data/${key}.json`, isOddsList, `${Sportsbooks[key].title} odds data`))),
 		loadRoster(),
 	]);
 
 	return {
-		playerData,
 		...gamesAndPlayers,
 		playerOdds: Object.fromEntries(SportsbookKeys.map((key, index) => [key, bookOdds[index]])),
 		roster,
