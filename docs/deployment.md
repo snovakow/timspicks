@@ -14,8 +14,8 @@ copying below is a step at all.
 
 1. **Finish the batch** with `/commit`. It reviews everything since the last
    version commit, commits it in groups, and ends with a `Version X.Y.Z` commit
-   on `development`. It never pushes, and it prints the copy list for step 4
-   and 5.
+   on `development`. It never pushes, and it prints the copy list, which is
+   what step 3 deploys.
 2. **Merge and push.** `main` is the branch a deploy is built from, so the batch
    has to land there:
 
@@ -29,38 +29,67 @@ copying below is a step at all.
    The merge is a fast-forward as long as nothing commits directly to `main`.
    `/commit` reports how far `main` is behind, and whether it holds anything
    `development` lacks, which is the signal that it won't be.
-3. **Build** in that same checkout: `npm install` only if dependencies changed,
-   then `npm run build`. Nothing needs pulling, since the merge happened right
-   here, and a fast-forward leaves `main` and `development` on the same commit,
-   so either one builds the batch you just merged.
-4. **Copy the front end** into the live folder, in this order: `dist/assets/*`
-   first, then `dist/index.html`. The index names the hashed asset files, so
-   putting it first means anyone loading the site in between asks for files that
-   aren't there yet.
-5. **Copy changed PHP**, in this order: `public/*` into the live folder first,
-   then `update.php` into the update folder. This is the step that's easy to
-   skip, because the build doesn't involve it — and until it happens the
+3. **Deploy** with `/deploy`, or from a terminal in the checkout:
+
+   ```
+   node .claude/skills/deploy/scripts/deploy.mjs
+   ```
+
+   It deploys `main`, whatever is checked out; `--branch <name>` deploys another
+   branch instead. It never switches branches or builds in the checkout. It takes
+   the branch's committed files into a temp folder and runs `npm ci` and
+   `npm run build` there, so the build has exactly the packages the lockfile
+   pins, and none of the checkout's uncommitted work or data can reach the live
+   site. A failed build copies nothing. `--dry-run` builds and lists what it
+   would copy without copying it.
+
+### What the deploy copies, and in what order
+
+The deploy finds the live and update folders from the cron line and the web
+server config, the same way `/health-server` does, and copies only files whose
+bytes differ. Each file is written beside its target and renamed over it, so
+nothing is ever served half-written. The order is what makes a deploy safe while
+the site and the cron keep running, and it's the same order to follow when
+copying by hand:
+
+1. **The front end:** `dist/assets/*` first, then `dist/index.html`. The index
+   names the hashed asset files, so putting it first means anyone loading the
+   site in between asks for files that aren't there yet. Asset files from older
+   builds are removed last, once everything else has landed and checked out,
+   since nothing loads them after the new index is in place. A file the live
+   page still loads is never removed. By hand, leaving them is harmless.
+2. **The scraping library, the book list and `update.php`, back to back:**
+   `public/fetch_lib.php` and `public/sportsbooks.json` into the live folder,
+   then `update.php` into the update folder. This is the step that's easy to skip
+   by hand, because the build doesn't involve it — and until it happens the
    scrapers haven't changed at all. The cron loads the scraping library out of
-   the live folder, not the checkout. The order matters because the library
-   gives every new parameter a default, so a new library still works under the
-   old update script, but nothing protects the reverse: a new update script that
+   the live folder, not the checkout. The order matters because the library gives
+   every new parameter a default, so a new library still works under the old
+   update script, but nothing protects the reverse: a new update script that
    calls a library function the old library doesn't have yet dies on every cron
    run until the library catches up. Dying that early also means no start stamp
    gets recorded, so the failed-run gate never engages and it retries every
    minute.
 
-   The book list, `public/sportsbooks.json`, travels with the PHP: the scraping
-   library reads it from the live folder on every run, and a list it can't read
-   stops every run at the books. A release that drops a library function the old
-   update script calls can't keep that order safe either way, so copy the library,
-   the list and `update.php` back to back: a cron run that lands between them
-   fails once and retries.
+   The book list travels with the PHP: the scraping library reads it from the
+   live folder on every run, and a list it can't read stops every run at the
+   books. A release that drops a library function the old update script calls
+   can't keep that order safe either way, which is why the three go back to back.
+   The deploy also waits, when it has to, for a part of the minute when the cron
+   isn't starting a run, so no run loads the library and the update script from
+   two different releases. By hand, a cron run that lands between them fails once
+   and retries.
+3. **The rest of the PHP and the static files** into the live folder, and the
+   update folder's other files where they're already deployed. The seeder files
+   are never added to it, since they stay local.
 
-**Never copy `dist/data`, `dist/history`, `dist/players` or `dist/auth.json`.**
-The build fills those from the checkout's own stale copies, while the server owns
-the live ones: cron writes the data and players folders, the History action builds
-the archive, and the credentials file is rewritten in place on rehash. Copying the
-build output wholesale overwrites the live history index.
+**Never copy `dist/data`, `dist/history`, `dist/players` or `dist/auth.json`,**
+and the deploy never does. A build made in the checkout fills those from its own
+stale copies, while the server owns the live ones: cron writes the data and
+players folders, the History action builds the archive, and the credentials file
+is rewritten in place on rehash. Copying the build output wholesale overwrites the
+live history index and rolls back the live data. The deploy's own build comes from
+the committed files alone, which don't include any of them.
 
 ## Changing a book's mode
 
@@ -70,8 +99,9 @@ and `comparison` touches only the scrapers, so copying the edited
 `public/sportsbooks.json` into the live folder is the whole deploy. Turning a book
 `off`, or back on, also changes what the page shows, and the front end is built
 from the list, so that one goes through the full flow above. Edit the list in the
-checkout and deploy it from there, never the live copy alone, or the next deploy
-undoes the change.
+checkout and bring it to `main` like any other change, never the live copy alone:
+a deploy copies `main`'s list, so a change made anywhere else is undone by the
+next one.
 
 ## Before the merge
 
@@ -94,7 +124,7 @@ three — this is the list it's checking against:
 - The cron log is append-only and a run emits at most one line, so the tail of
   it is the run history. `crontab -l` shows what's installed.
 - `/health-server` covers the server side in one pass. It compares the files in
-  the live and update folders with `main`, which says whether steps 4 and 5 are
+  the live and update folders with `main`, which says whether the deploy is
   complete. It reads the PHP error log, the web server's access log and cron
   mail along with the cron log, since a PHP fatal error, a cron that has stopped
   firing or a curl call that never reached the server leaves nothing in the cron
