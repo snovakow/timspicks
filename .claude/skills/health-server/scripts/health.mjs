@@ -16,7 +16,8 @@ import {
 	unlinkSync,
 } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { locate, validUpdate } from './folders.mjs';
 
 // --- Rules mirrored from the code they describe -------------------------------------------------
 
@@ -45,6 +46,9 @@ const LOW_DISK = 10e9;
 
 const ET = 'America/New_York';
 const NEVER_COPY = ['data', 'history', 'players', 'auth.json'];
+// docs/deployment.md: the scraping library and the book list it reads go out back to back with update.php,
+// ahead of the rest of the live folder
+const LIB_FIRST = ['fetch_lib.php', 'sportsbooks.json'];
 const LISTS = ['1', '2', '3'];
 
 // --- Options ------------------------------------------------------------------------------------
@@ -221,103 +225,10 @@ const guard = (name, check) => {
 
 process.chdir(git('rev-parse', '--show-toplevel') ?? process.cwd());
 const repoRoot = process.cwd();
-const processes = (tryRun('ps', ['-axww', '-o', 'command']) ?? '').split('\n');
-
-const cronJobs = (tryRun('crontab', ['-l']) ?? '').split('\n').map((line) => line.trim())
-	.filter((line) => line && !line.startsWith('#') && /\bupdate\.php\b/.test(line))
-	.map((line) => {
-		const macro = /^(@\w+)\s+(.*)$/.exec(line);
-		const fields = line.split(/\s+/);
-		const schedule = macro ? macro[1] : fields.slice(0, 5).join(' ');
-		const command = macro ? macro[2] : fields.slice(5).join(' ');
-		const url = /\bhttps?:\/\/[^\s"'<>]+/.exec(command)?.[0] ?? null;
-		let lib = null;
-		let urlPath = '/update.php';
-		try {
-			const parsed = new URL(url);
-			lib = parsed.searchParams.get('lib');
-			urlPath = parsed.pathname;
-		} catch { /* no usable URL */ }
-		const target = /(?:^|\s)>>?\s*("?)([^\s"]+)\1/.exec(command)?.[2] ?? null;
-		return {
-			line,
-			schedule,
-			// update.php's own default when the URL has no lib
-			lib: lib ?? 'public',
-			urlPath,
-			// Cron runs from the home folder, so a relative log lands there
-			log: target ? (target.startsWith('~') ? expand(target) : resolve(home, target)) : null,
-		};
-	});
-
-// The web server's config names the folder each host serves
-const webServerRunning = processes.some((line) => /\/(?:httpd|apache2|nginx)(?:\s|$)/.test(line));
-const httpdLine = processes.find((line) => /\/(?:httpd|apache2)(?:\s|$)/.test(line)) ?? null;
-const httpdConf = httpdLine ? (/\s-f\s*(.+?\.conf)(?=\s+-|\s*$)/.exec(httpdLine)?.[1] ?? null) : null;
-const confFiles = httpdConf
-	? [...new Set([httpdConf, ...[dirname(httpdConf), join(dirname(httpdConf), 'extra')]
-		.flatMap((dir) => listDir(dir).filter((name) => name.endsWith('.conf')).map((name) => join(dir, name)))])]
-	: [];
-const confText = confFiles.map(readText).filter(Boolean).join('\n');
-const documentRoots = [...new Set([...confText.matchAll(/^\s*DocumentRoot\s+"?([^"\n]+?)"?\s*$/gm)].map((match) => match[1]))];
-const serverLogs = [...confText.matchAll(/^\s*ErrorLog\s+"?([^"\n|]+?)"?\s*$/gm)].map((match) => match[1]).filter((path) => path.startsWith('/'));
-// Every request that reaches the web server gets a line here, which makes it the record of every cron call
-const accessLogs = [...new Set([...confText.matchAll(/^\s*(?:CustomLog|TransferLog)\s+(?:"([^"\n]+)"|(\S+))/gm)].map((match) => match[1] ?? match[2]))]
-	.filter((path) => path.startsWith('/') && isFile(path));
-
-// The update folder holds update.php, and update.php loads fetch_lib.php from ../<lib>
-const validUpdate = (dir, lib) => isFile(join(dir, 'update.php')) && isFile(join(dir, '..', lib, 'fetch_lib.php'));
-// This checkout has its own timspicks_update/ beside public/, which is the source, not the deployed copy
-const insideRepo = (dir) => !relative(repoRoot, realOr(dir)).startsWith('..');
-const scanForUpdate = () => {
-	const found = [];
-	const queue = ['~/Sites', '~/public_html', '~/www', '/var/www', '/Library/WebServer/Documents'].map(expand).filter(isDir).map((dir) => [dir, 0]);
-	while (queue.length) {
-		const [dir, depth] = queue.shift();
-		if (isFile(join(dir, 'update.php'))) found.push(dir);
-		if (depth >= 3) continue;
-		for (const name of listDir(dir)) {
-			if (name.startsWith('.') || name === 'node_modules') continue;
-			if (isDir(join(dir, name))) queue.push([join(dir, name), depth + 1]);
-		}
-	}
-	return found;
-};
-
-let job = null;
-let updateDir = null;
-let updateHow = null;
-let updateOthers = [];
-// A line driving a local copy uses lib=public; prefer any other
-const preferred = [...cronJobs].sort((a, b) => (a.lib === 'public') - (b.lib === 'public'));
-if (options.update) {
-	updateDir = expand(options.update);
-	updateHow = '--update';
-	job = preferred.find((candidate) => validUpdate(updateDir, options.lib ?? candidate.lib)) ?? preferred[0] ?? null;
-} else {
-	let scanned = null;
-	for (const candidate of preferred.length ? preferred : [{ lib: options.lib, urlPath: '/update.php' }]) {
-		const lib = options.lib ?? candidate.lib;
-		if (!lib) continue;
-		const urlDir = dirname(candidate.urlPath);
-		let how = 'the web server config';
-		let found = documentRoots.map((root) => join(root, urlDir)).filter((dir) => !insideRepo(dir) && validUpdate(dir, lib));
-		if (!found.length) {
-			scanned ??= scanForUpdate();
-			found = scanned.filter((dir) => !insideRepo(dir) && validUpdate(dir, lib));
-			how = 'a scan of the usual web folders';
-		}
-		found = [...new Set(found.map(realOr))];
-		if (!found.length) continue;
-		job = candidate.line ? candidate : null;
-		[updateDir, ...updateOthers] = found;
-		updateHow = how;
-		break;
-	}
-	job ??= preferred[0] ?? null;
-}
-const lib = options.lib ?? job?.lib ?? null;
-const liveDir = updateDir && lib ? resolve(updateDir, '..', lib) : null;
+const {
+	processes, cronJobs, webServerRunning, httpdConf, serverLogs, accessLogs,
+	job, updateDir, updateHow, updateOthers, lib, liveDir,
+} = locate({ repoRoot, update: options.update, lib: options.lib });
 const dataDir = liveDir ? join(liveDir, 'data') : null;
 
 // The books the cron fetches: the book list beside the scraping library it loads, every book that isn't off. A
@@ -964,6 +875,19 @@ guard('deploy', () => {
 		if (built && lockKey(git('show', `${sha}:package-lock.json`)) !== lockKey(readText(join(repoRoot, 'package-lock.json')))) {
 			say(`    Note: the build used this checkout's node_modules, whose lockfile differs from ${ref}'s`);
 		}
+		// A deploy installs exactly what the lockfile pins, so an install that has drifted from it builds a
+		// different bundle from the same commit. Platform-only optional packages are never all installed
+		if (built) {
+			const drifted = Object.entries(parseJson(git('show', `${sha}:package-lock.json`))?.packages ?? {})
+				.filter(([path, info]) => path.startsWith('node_modules/') && !info.optional)
+				// Packages the page itself ships come first, ahead of the tooling
+				.sort(([, a], [, b]) => !!a.dev - !!b.dev)
+				.map(([path, info]) => [path.slice('node_modules/'.length), info.version, readJson(join(repoRoot, path, 'package.json'))?.version ?? 'missing'])
+				.filter(([, pinned, installed]) => pinned !== installed);
+			if (drifted.length) {
+				say(`    Note: this checkout's node_modules has ${plural(drifted.length, 'package')} other than ${ref}'s lockfile pins, such as ${few(drifted.map(([name, pinned, installed]) => `${name} ${installed} for ${pinned}`), 3)}. A deploy installs the lockfile's, so this build can differ from the deployed one; npm ci in the checkout brings it in line`);
+			}
+		}
 		const serverFiles = expected.filter((path) => !isFrontEnd(path) && states.get(path) !== 'same');
 		for (const path of serverFiles) {
 			const gone = states.get(path) === 'missing';
@@ -995,11 +919,15 @@ guard('deploy', () => {
 		const updateExtras = updateLive.filter((path) => !updateExpected.includes(path));
 		if (updateExtras.length) say(`    other files: ${few(updateExtras)}`);
 
-		// What to copy, in the order docs/deployment.md gives
+		// What to copy, in the order docs/deployment.md gives: the front end, then the library, the book list and
+		// update.php back to back, then the rest
 		const steps = [];
 		if (frontEndChanged) steps.push(`On a checkout of ${ref}: git pull, npm install if dependencies changed, then npm run build. Copy dist/assets/* into the live folder, and after that dist/index.html.`);
-		for (const path of serverFiles) steps.push(`Copy public/${path} into the live folder.`);
-		for (const path of updateChanged) steps.push(`Copy timspicks_update/${path} into the update folder${path === 'update.php' && serverFiles.length ? ', after the live folder\'s PHP' : ''}.`);
+		const libFiles = LIB_FIRST.filter((name) => serverFiles.includes(name));
+		for (const path of libFiles) steps.push(`Copy public/${path} into the live folder.`);
+		if (updateChanged.includes('update.php')) steps.push(`Copy timspicks_update/update.php into the update folder${libFiles.length ? `, straight after ${libFiles.join(' and ')}` : ''}.`);
+		for (const path of serverFiles.filter((name) => !LIB_FIRST.includes(name))) steps.push(`Copy public/${path} into the live folder.`);
+		for (const path of updateChanged.filter((name) => name !== 'update.php')) steps.push(`Copy timspicks_update/${path} into the update folder.`);
 		say(`Copy list:${steps.length ? '' : ` nothing; the live files match ${ref}`}`);
 		steps.forEach((step, index) => say(`    ${index + 1}. ${step}`));
 		say(`Never copy: ${NEVER_COPY.map((name) => `dist/${name}`).join(', ')}; the server owns them`);

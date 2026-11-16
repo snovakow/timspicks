@@ -47,7 +47,7 @@ The report starts with a verdict and an **Attention** list:
 Older history in the window is listed in the sections, but only flagged within the last 48 hours.
 
 **Cron.** The cron calls `update.php` every minute, and `update.php` throttles itself (docs/app-and-server.md, "Cadence"). So the log gets one line per run that did work: a snapshot path, a `Complete` line, or a step's error.
-- Errors are grouped by kind. A failure streak that retries every minute means the failed-run gate never engaged. That happens when a run dies before `startRun()` (docs/deployment.md, step 5).
+- Errors are grouped by kind. A failure streak that retries every minute means the failed-run gate never engaged. That happens when a run dies before `startRun()` (docs/deployment.md, "What the deploy copies, and in what order").
 - The per-day table lists gaps over 75 minutes between midnight and the day's last start. A game day with no runs at all is a day the cron was off. Gaps aren't flagged on their own, because an Update from the admin page resets the hourly clock without writing to the cron log. A gap is a real miss when the access log shows a silence across it, or the PHP log shows an error inside it.
 - **PHP error log.** PHP doesn't display errors on this server, so a fatal error in `update.php` or `fetch_lib.php` writes nothing to the cron log. It only shows up in PHP's own log. The survey keeps the entries that name the live or update folder. A "Failed opening required" fatal for `fetch_lib.php` around a deploy usually means the cron ran while files were being copied.
 - **Cron calls.** The web server's access log has a line for every cron call that reached it, so it is the record of every call. A silence over 15 minutes means cron itself didn't fire, because the machine slept or cron stopped, or that curl failed, which cron mail then shows. Cron can fire the job twice in one minute, though rarely; cron mail sometimes holds two copies of one call's message, which isn't a second call. The throttle absorbs an extra call, and "Minutes with two or more runs" in the cron log section flags the rare case where both got through.
@@ -67,7 +67,8 @@ Older history in the window is listed in the sections, but only flagged within t
 - The live folder is compared without `data/`, `history/`, `players/` and `auth.json`, which a deploy never copies.
 - The bundler names a script after the folder it was built in as well as its contents. So assets are matched by content, and `index.html` is compared with the live names swapped in.
 - Leftover assets from older builds are harmless.
-- The copy list follows the order in docs/deployment.md: the front-end assets, then `index.html`, then the PHP in the live folder, then `update.php`.
+- `/deploy` installs exactly what the lockfile pins, while the reference build here uses this checkout's `node_modules`. When those differ, the report notes it, and a "same version, different build" front end is that drift, not a different commit.
+- The copy list follows the order in docs/deployment.md: the front-end assets, then `index.html`, then the scraping library and the book list, then `update.php`, then the rest.
 
 **Server.** This covers free disk space, the size of the web server's log folder and the cron mail spool. With `-sS` in the cron line the spool only grows when curl fails.
 
@@ -83,7 +84,7 @@ Stay read-only. Useful moves:
 
 Keep it short. Lead with the verdict and the one or two facts behind it, then give:
 1. The issues, most severe first. For each, say what it means for the site and what fixes it.
-2. The copy list in deploy order, if there is one. Deploying is the user's call, so offer the steps and never run them.
+2. The copy list in deploy order, if there is one. Deploying is the user's call, so offer the steps, or `/deploy`, which does all of them, and never run either.
 3. Anything the survey couldn't check, such as a skipped build, a missing ref or a log it couldn't find.
 4. Informational notes last, in a line or two: disk, log sizes, older history.
 
