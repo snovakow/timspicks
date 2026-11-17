@@ -43,6 +43,12 @@ copying below is a step at all.
    site. A failed build copies nothing. `--dry-run` builds and lists what it
    would copy without copying it.
 
+   The deploy skill is shared between projects, so it is linked into the
+   checkout and not committed here. What is committed is this project's part of
+   it, a settings file that names the data the server owns, finds the live and
+   update folders, and adds the PHP steps below. In a fresh clone, neither
+   `/deploy` nor the command above works until the skill is linked.
+
 ### What the deploy copies, and in what order
 
 The deploy finds the live and update folders from the cron line and the web
@@ -56,8 +62,10 @@ copying by hand:
    names the hashed asset files, so putting it first means anyone loading the
    site in between asks for files that aren't there yet. Asset files from older
    builds are removed last, once everything else has landed and checked out,
-   since nothing loads them after the new index is in place. A file the live
-   page still loads is never removed. By hand, leaving them is harmless.
+   except those of the build the deploy replaces: they stay until the next
+   deploy, since a visitor who loaded the page before the switch can still ask
+   for them. A file the live page still loads is never removed. By hand,
+   leaving them is harmless.
 2. **The scraping library, the book list and `update.php`, back to back:**
    `public/fetch_lib.php` and `public/sportsbooks.json` into the live folder,
    then `update.php` into the update folder. This is the step that's easy to skip
