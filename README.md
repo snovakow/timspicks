@@ -24,10 +24,6 @@ Agent skills for working on the repo and the live server:
   thread: reviews and commits everything since the last version commit, brings
   the README and docs up to date, ends with a version commit, and lists what to
   copy to the live server, without pushing
-- `/deploy` — once a batch is merged and pushed: builds a clean copy of `main`
-  (or the branch `--branch` names) and copies it into the live and update
-  folders in the safe order, removes asset files older builds left behind, and
-  leaves the server's data alone; `--dry-run` lists what it would do
 - `/health-server` — when the live data looks stale, the cron may have stopped,
   or a deploy needs confirming: a read-only check of the cron log and the places
   cron failures hide, the live data and the banner visitors see, and whether the
