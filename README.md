@@ -91,6 +91,8 @@ Drops each game and its players from the tables and the stats once it starts, an
 
 Shows today's history when turned on in the settings: the started games and their players greyed out, each game's players from the last lists before it started, the players a redraw dropped from a list greyed out in it, and each earlier slot's stats
 
+Marks each player in today's history with a check once he has scored, or a cross once his game ends without a goal from him, updated each minute while games are on
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
