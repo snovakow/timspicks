@@ -94,6 +94,26 @@ added to local midnight lands past the shift either way, in both the spring and
 the autumn direction. The clock is Eastern throughout, and day folders roll over
 at ET midnight.
 
+### The scores step
+
+One step sits outside all of the above. Goals come in while no run is due, and
+after the day's last start no run comes at all, so the update script fetches the
+day's scores on every call, ahead of the gate, and only while a game is in play:
+from its start until the score feed calls it official. That comes some time after
+the game ends, so a goal credited to another player on review still lands. A game
+the feed never calls official is followed for a fixed time after its start and
+then dropped, and a game off its normal schedule isn't followed at all.
+
+The scores file names the day it holds, and that day is followed to its end, so
+games still going at midnight are seen through. The next day's file replaces it
+once one of that day's games has started.
+
+The step is no part of a run. It writes no log line and leaves the run state
+alone, and a failed fetch, or a reply that isn't the day asked for, leaves the
+file as it was, so a failure costs only that minute's scores. The file carries
+the time it was last written, which is the only trace of a feed that has stopped
+answering.
+
 ## The feeds
 
 | Feed | Lands in | Notes |
@@ -102,6 +122,7 @@ at ET midnight.
 | the pick-list feed | `helper.json` | keyed by the feed's own list ids |
 | the player feed | `players/<id>.json` | one file per player |
 | the roster feed | `rosters.json` | the skaters on each of today's teams, fetched once a day per team; a reply with no skaters counts as failed |
+| the score feed | `scores.json` | each of the day's games with its state and the players with a goal; see the scores step above |
 | each book | `data/bet1.json`, `bet2.json` and on | flat arrays of player names and odds |
 
 Player files are refreshed only when missing or when the player has changed
@@ -199,6 +220,7 @@ data/
   games.json         today's schedule
   helper.json        today's three pick lists
   rosters.json       today's teams' skaters, for the player table
+  scores.json        the day's game states and goal scorers, for the goal marks
   bet1.json ...      today's odds, one file per book the list shows
   process.json       run state
   <Y-m-d>/
@@ -304,6 +326,16 @@ lists and the rosters set him in different games. The stats view lists
 each passed slot with its top picks' Streak, opening to the slot's full stats
 from the books selected, and once the day's last start has passed it shows only
 those slots.
+
+Today's history also marks each player's result, at the end of his name: a check
+once he has scored, a cross once his game has ended without a goal from him, and
+nothing until then. The marks come from the scores file, which the page reads
+when the history is on and a game has started, and again as often as the cron
+rewrites it while the page is in view and a game is in play, so they follow the
+games without a reload. A scores file for another day is passed over: before the
+day's first fetch it still holds the day before. Only goals the contest counts
+are marked, so a shootout goal isn't one. The score feed lists a shootout's
+deciding goal with the rest, and the scores step leaves it out.
 
 ## The admin page
 
