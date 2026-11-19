@@ -386,6 +386,56 @@ const loadRoster = async (): Promise<RawPlayerJson[]> => {
 };
 
 /*
+	A day's goal scorers as scores.json holds them: who has scored, and the teams whose game is over, which
+	is what tells a player who didn't score from one who hasn't yet. The scorers are those with a goal the
+	contest counts, so none from a shootout.
+*/
+export interface DayScores {
+	// The ET day the scores are for, as the schedule dates it
+	date: string;
+	scorers: ReadonlySet<number>;
+	// The teams whose game has ended
+	over: ReadonlySet<string>;
+	// The teams whose game needs no further fetch: called official, or off its normal schedule
+	settled: ReadonlySet<string>;
+}
+
+// How long after its start a game is followed when it is never called official, as the cron follows it
+const SCORES_FOLLOW_MS = 8 * 60 * 60 * 1000;
+
+// The scores file, or null when it's missing or malformed: the tables are whole without it
+export const loadScores = async (): Promise<DayScores | null> => {
+	let value: unknown;
+	try { value = await (await fetchData('./data/scores.json')).json(); }
+	catch { return null; }
+	if (!isRecord(value) || typeof value.date !== 'string' || !Array.isArray(value.games)) return null;
+
+	const scorers = new Set<number>();
+	const over = new Set<string>();
+	const settled = new Set<string>();
+	for (const game of value.games) {
+		if (!isRecord(game) || typeof game.away !== 'string' || typeof game.home !== 'string') return null;
+		const official = game.state === 'OFF';
+		for (const team of [game.away, game.home]) {
+			if (official || game.state === 'FINAL') over.add(team);
+			if (official || game.schedule !== 'OK') settled.add(team);
+		}
+		if (!Array.isArray(game.scorers)) return null;
+		for (const playerId of game.scorers) if (typeof playerId === 'number') scorers.add(playerId);
+	}
+	return { date: value.date, scorers, over, settled };
+};
+
+// True while a game's scores can still change: started, not settled, and within the time a game is followed
+// for. Without the day's scores every started game counts
+export const scoresInPlay = (games: Picks.GameData[], scores: DayScores | null, now: number): boolean => {
+	return games.some((game) => {
+		const start = game.time.getTime();
+		return start <= now && now < start + SCORES_FOLLOW_MS && !scores?.settled.has(game.home.code);
+	});
+};
+
+/*
 	The roster's players in the games given, outside the lists, whom at least one book prices: the player
 	table's players who could still come up in a later draw. The lists are their own entries, so a listed
 	player whose file didn't load is still listed, and a player the roster holds twice counts once. The

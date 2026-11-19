@@ -80,6 +80,10 @@ export default function InfoPopupContent() {
 					in the <strong>Settings</strong>, they stay in the tables greyed out, as do the players a redraw dropped from a list,
 					and each earlier slot is listed below the stats with its top picks' Streak, opening to that slot's full stats.
 				</p>
+				<p>
+					With it on, a check marks each player who has scored, and a cross each player whose game ended without a goal.
+					A player with neither hasn't scored yet in a game that isn't over. The marks update each minute, and a shootout goal doesn't count.
+				</p>
 			</section>
 
 			{Feature.correlation && (

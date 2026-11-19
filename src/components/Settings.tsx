@@ -125,7 +125,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					<span>Show Today's History</span>
 				</label>
 				<div className="settings-description">
-					Keep the games that have started and their players in the tables, greyed out, along with the players a redraw dropped from a list, and list each earlier slot's stats in the Stats.
+					Keep the games that have started and their players in the tables, greyed out, along with the players a redraw dropped from a list, and list each earlier slot's stats in the Stats. A check marks a player who has scored, and a cross one whose game ended without a goal.
 				</div>
 			</div>
 

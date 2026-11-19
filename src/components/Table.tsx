@@ -1,5 +1,6 @@
 import { AllStrategyModes, LogStatsKeys, StrategyLabels, type LogStatsKey, type SportsbookKey, type StrategyMode } from "../dataTypes";
 import type { Team } from "./logo";
+import type { DayScores } from '../dataProcessor';
 import * as Feature from '../features';
 import { timeFormat } from '../utility';
 
@@ -228,6 +229,22 @@ export class PickOdds {
 	}
 }
 
+// A player's goal mark: a check once he has scored, a cross once his game ended without a goal from him,
+// and until then a space as wide, so the marks line up and the names don't shift as they come in
+function GoalMark(props: { scores: DayScores, player: Player }) {
+	const { scores, player } = props;
+	const scored = scores.scorers.has(player.playerId);
+	if (!scored && !scores.over.has(player.team.code)) return <span className='cell-goal' />;
+	const label = scored ? 'Scored' : 'No goal';
+	return (
+		<span className={`cell-goal ${scored ? 'cell-goal-scored' : 'cell-goal-missed'}`} role='img' aria-label={label} title={label}>
+			<svg viewBox='0 0 16 16' aria-hidden='true'>
+				<path d={scored ? 'M3 8.5l3.5 3.5L13 4.5' : 'M4 4l8 8M12 4l-8 8'} />
+			</svg>
+		</span>
+	);
+}
+
 export type RequestSort = (key: ColumnKeys) => void;
 
 export interface SortConfig {
@@ -241,9 +258,11 @@ export function Table(props: {
 	sortConfig: SortConfig,
 	darkTheme: boolean,
 	enabledStrategies: Record<StrategyMode, boolean>,
-	passed: number | null
+	passed: number | null,
+	// The day's goal scorers, or null when the rows carry no goal marks
+	scores: DayScores | null
 }) {
-	const { columns, sortedRows, requestSort, sortConfig, darkTheme, enabledStrategies, passed } = props;
+	const { columns, sortedRows, requestSort, sortConfig, darkTheme, enabledStrategies, passed, scores } = props;
 	const enabledModes = AllStrategyModes.filter((mode) => enabledStrategies[mode]);
 	const strategyLabel = (mode: StrategyMode): string => StrategyLabels[mode];
 	const strategyTitle = (strategy: Set<StrategyMode>): string => {
@@ -319,10 +338,13 @@ export function Table(props: {
 					const rowKey = picks ? row.player.playerId : row.playerId;
 					return (
 						<tr key={rowKey} className={rowClass(idx, started(player.gameTime, passed) || (picks && row.dropped))}>
-							<td>
+							<td className='cell-name'>
 								<span className='cell-container'>
-									<img className='td-name-logo' src={darkTheme ? player.logoDark : player.logoLight} alt="" />
-									{player.fullName}
+									<span className='cell-container cell-player'>
+										<img className='td-name-logo' src={darkTheme ? player.logoDark : player.logoLight} alt="" />
+										{player.fullName}
+									</span>
+									{scores && <GoalMark scores={scores} player={player} />}
 								</span>
 							</td>
 							{includeLinks && (

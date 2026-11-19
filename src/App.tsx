@@ -31,6 +31,9 @@ const precision = Picks.precision;
 // and short enough that a sleeping device re-checks the clock soon after it wakes
 const CLOCK_CHECK_MAX_MS = 4 * 60 * 60 * 1000;
 
+// How often the scores are read while a game is in play, which is as often as the cron rewrites them
+const SCORES_CHECK_MS = 60 * 1000;
+
 let SIMULATE = Feature.analyze === 'GENERATE';
 let ANALYZE = Feature.analyze === 'OUTPUT';
 
@@ -369,6 +372,48 @@ function App() {
 				.then((slot) => setSlotSnapshots((prev) => new Map(prev).set(start, slot)));
 		}
 	}, [shownSlots, data]);
+
+	/*
+		The day's goal scorers, which mark the started games' rows, so only the history asks for them. The
+		cron rewrites the file each minute while a game is in play, and the page reads it as often, while
+		it is in view and the scores can still change. A file for another day is passed over: before the
+		day's first fetch it still holds the day before, and on a page left open it moves on to the next.
+	*/
+	const [scores, setScores] = useState<DataProcessor.DayScores | null>(null);
+	useEffect(() => {
+		if (!historyEnabled || passed === null || !data?.scheduleDate) return;
+		const date = data.scheduleDate;
+		const games = data.gamesList;
+
+		let stopped = false;
+		let loading = false;
+		// The first check always reads, so a day whose games are all over still gets its marks
+		let first = true;
+		// The day's scores as this effect last read them
+		let latest: DataProcessor.DayScores | null = null;
+		const check = async () => {
+			if (loading || document.visibilityState !== 'visible') return;
+			if (!first && !DataProcessor.scoresInPlay(games, latest, Date.now())) return;
+			first = false;
+			loading = true;
+			const loaded = await DataProcessor.loadScores();
+			loading = false;
+			if (stopped || loaded?.date !== date) return;
+			latest = loaded;
+			setScores(loaded);
+		};
+		check();
+
+		const timer = window.setInterval(check, SCORES_CHECK_MS);
+		document.addEventListener('visibilitychange', check);
+		return () => {
+			stopped = true;
+			window.clearInterval(timer);
+			document.removeEventListener('visibilitychange', check);
+		};
+	}, [historyEnabled, passed, data]);
+	// The history's tables show the scores, and only for the day they hold
+	const shownScores = historyEnabled && passed !== null && scores?.date === data?.scheduleDate ? scores : null;
 
 	// Initialize sort configs - use ref to avoid recreating
 	const sortConfig1Ref = useRef<Picks.SortConfig>({ keyOrder: [] });
@@ -869,7 +914,7 @@ function App() {
 						{lockedOut ? (
 							<div className="no-games-message">Picks are locked</div>
 						) : (
-							<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} />
+							<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} />
 						)}
 					</div>
 				</CollapsibleSection>
@@ -878,7 +923,7 @@ function App() {
 						{lockedOut ? (
 							<div className="no-games-message">Picks are locked</div>
 						) : (
-							<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} />
+							<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} />
 						)}
 					</div>
 				</CollapsibleSection>
@@ -887,7 +932,7 @@ function App() {
 						{lockedOut ? (
 							<div className="no-games-message">Picks are locked</div>
 						) : (
-							<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} />
+							<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} />
 						)}
 					</div>
 				</CollapsibleSection>
@@ -897,7 +942,7 @@ function App() {
 							{lockedOut ? (
 								<div className="no-games-message">Today's games have all started</div>
 							) : (
-								<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} />
+								<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} />
 							)}
 						</div>
 					</CollapsibleSection>

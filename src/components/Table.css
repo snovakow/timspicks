@@ -67,9 +67,37 @@ tr {
 	background-color: light-dark(transparent, #181b20);
 }
 
-/* A started game's row, which can no longer be picked */
-.row-started {
+/* A started game's row, which can no longer be picked. Its cells are greyed rather than the row, so the
+   goal mark in the name's cell keeps its strength */
+.row-started > td:not(.cell-name),
+.row-started .cell-player {
 	opacity: 0.4;
+}
+
+/* A player's goal mark, at the end of his name's cell */
+.cell-goal {
+	flex: none;
+	width: 1em;
+	height: 1em;
+	margin-left: auto;
+	padding-left: 0.5em;
+}
+
+.cell-goal svg {
+	display: block;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.cell-goal-scored {
+	color: light-dark(rgb(31, 157, 85), rgb(63, 185, 80));
+}
+
+.cell-goal-missed {
+	color: light-dark(rgb(207, 34, 46), rgb(248, 81, 73));
 }
 
 td {
