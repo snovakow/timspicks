@@ -153,6 +153,116 @@ function updateRosters(string $schedule, string $basePath)
 	return $parts ? ['Rosters ' . implode('; ', $parts)] : [];
 }
 
+/* How long after its start a game is followed for goals when the feed never calls it official */
+const SCORES_FOLLOW = 8 * 60 * 60;
+
+/* True for a game in play: on a normal schedule, started, not yet official, and still within the time a game
+   is followed for. A game the feed hasn't been asked about has no state, and counts once it has started */
+function scoreInPlay(array $game, int $nowTime)
+{
+	if (($game['schedule'] ?? 'OK') !== 'OK') return false;
+
+	$start = strtotime((string)($game['start'] ?? ''));
+	if ($start === false || $start > $nowTime || $nowTime >= $start + SCORES_FOLLOW) return false;
+
+	return ($game['state'] ?? null) !== 'OFF';
+}
+
+/*
+	The day's goal scorers, for the page to mark who has scored: scores.json holds each of a day's games with
+	its state and the players credited with a goal in regulation or overtime. The contest doesn't count a
+	shootout goal, and the feed lists a shootout's deciding goal with the rest, so those are left out.
+
+	The cron calls this every minute, ahead of the gate that spaces its runs, since goals come in while no
+	run is due and after the day's last start no run comes at all. It fetches only while a game is in play,
+	from its start until the feed calls it official. That comes some time after the game ends, so a goal
+	credited to another player on review still lands. The day in the file is followed to its end, which
+	sees games still going at midnight through, and a new day's file replaces it once one of that day's
+	games has started. $force fetches with nothing in play, for the admin page.
+
+	A failed fetch, or a reply that isn't the day asked for, leaves the file as it was. The file is swapped
+	in whole, since the page reads it while games are on.
+*/
+function updateScores(DateTime $now, string $basePath, bool $force = false)
+{
+	$output = ['title' => 'Scores', 'content' => null, 'error' => null];
+	$nowTime = $now->getTimestamp();
+	$today = $now->format('Y-m-d');
+	$local_file = "$basePath/scores.json";
+
+	$inPlay = fn(array $games) => (bool)array_filter($games, fn($game) => is_array($game) && scoreInPlay($game, $nowTime));
+
+	$saved = is_file($local_file) ? json_decode((string)@file_get_contents($local_file), true) : null;
+	$savedDate = is_array($saved) && is_string($saved['date'] ?? null) && is_array($saved['games'] ?? null) ? $saved['date'] : null;
+
+	$date = null;
+	if ($savedDate !== null && $inPlay($saved['games'])) {
+		$date = $savedDate;
+	} else if ($force) {
+		$date = $today;
+	} else if ($savedDate !== $today) {
+		// Today's file starts from the schedule, whose games have no state yet
+		$week = json_decode((string)@file_get_contents("$basePath/games.json"), true)['gameWeek'][0] ?? null;
+		$scheduled = [];
+		if (is_array($week) && ($week['date'] ?? null) === $today && is_array($week['games'] ?? null)) {
+			foreach ($week['games'] as $game) {
+				$scheduled[] = ['start' => $game['startTimeUTC'] ?? null, 'schedule' => $game['gameScheduleState'] ?? 'OK'];
+			}
+		}
+		if ($inPlay($scheduled)) $date = $today;
+	}
+	if ($date === null) return $output;
+
+	$url = "https://api-web.nhle.com/v1/score/$date";
+	$ch = curl_init($url);
+	curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 5]);
+	$fetched = fetchCurl($ch, $url);
+	if ($fetched['error'] !== null) {
+		$output['error'] = $fetched['error'];
+		return $output;
+	}
+
+	$data = json_decode($fetched['body'], true);
+	if (!is_array($data) || ($data['currentDate'] ?? null) !== $date || !is_array($data['games'] ?? null) || !$data['games']) {
+		$output['error'] = "No games for $date in the response from $url";
+		return $output;
+	}
+
+	$games = [];
+	foreach ($data['games'] as $game) {
+		$away = $game['awayTeam']['abbrev'] ?? null;
+		$home = $game['homeTeam']['abbrev'] ?? null;
+		if (!is_string($away) || !is_string($home) || !is_string($game['startTimeUTC'] ?? null) || !is_string($game['gameState'] ?? null)) {
+			$output['error'] = "A game without its teams, start or state in the response from $url";
+			return $output;
+		}
+
+		$scorers = [];
+		foreach ($game['goals'] ?? [] as $goal) {
+			if (($goal['periodDescriptor']['periodType'] ?? null) === 'SO') continue;
+			if (isset($goal['playerId'])) $scorers[(int)$goal['playerId']] = true;
+		}
+
+		$games[] = [
+			'away' => $away,
+			'home' => $home,
+			'start' => $game['startTimeUTC'],
+			'schedule' => $game['gameScheduleState'] ?? 'OK',
+			'state' => $game['gameState'],
+			'scorers' => array_keys($scorers),
+		];
+	}
+
+	$json = json_encode(['date' => $date, 'updated' => $now->format(DateTime::ATOM), 'games' => $games], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+	$temp_file = "$local_file.tmp";
+	if ($json === false || @file_put_contents($temp_file, $json, LOCK_EX) === false || !@rename($temp_file, $local_file)) {
+		$output['error'] = 'Error saving local JSON file: ' . $local_file;
+		return $output;
+	}
+	$output['content'] = "Data has been written to $local_file";
+	return $output;
+}
+
 /* Cached player data is refreshed when missing or when the player changes teams */
 function playerFileCurrent(string $local_file, string $team)
 {

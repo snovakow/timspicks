@@ -181,6 +181,20 @@ $startOfDayTime = (new DateTime('today midnight', $timezone))->getTimestamp();
 $minOutput = true;
 
 /*
+    Scores, on every call and ahead of the gate: goals come in while no run is due, and after the
+    day's last start no run comes at all. The step fetches only while a game is in play, and it is
+    no part of a run: it writes no log line and leaves process.json alone, and a failure, even a
+    thrown one, costs only that minute's scores.
+*/
+try {
+    $output = updateScores($now, $basePath);
+    if (isset($output['error'])) $output['content'] = $output['error'];
+    if (!$minOutput && isset($output['content'])) logOutput($output);
+} catch (Throwable $e) {
+    if (!$minOutput) logOutput(['title' => 'Scores', 'content' => get_class($e) . ': ' . $e->getMessage()]);
+}
+
+/*
     a. Don't update between the last game and midnight.
     b. Update $period since the previous run, or as soon as a game start time has passed.
     c. Don't update within $updateBuffer seconds from a game start time or midnight.
