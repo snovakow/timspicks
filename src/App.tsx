@@ -201,6 +201,51 @@ const getXgMap = async (): Promise<Map<Team, number>> => {
 	return xgMapCachePromise;
 }
 
+/*
+	A day's goal scorers, read from its scores file while a date is given. The cron rewrites a day's file each
+	minute while one of its games is in play, and the page reads it as often, while it is in view and the
+	scores can still change. The loaded day is followed by its schedule, and an earlier one, given no games, by
+	its own file, which is all the page holds of that day.
+*/
+function useDayScores(date: string | null, games: Picks.GameData[] | null): DataProcessor.DayScores | null {
+	const [scores, setScores] = useState<DataProcessor.DayScores | null>(null);
+	useEffect(() => {
+		if (date === null) return;
+
+		let stopped = false;
+		let loading = false;
+		// The first check always reads, so a day whose games are all over still gets its marks
+		let first = true;
+		// The day's scores as this effect last read them
+		let latest: DataProcessor.DayScores | null = null;
+		const inPlay = (now: number): boolean => games
+			? DataProcessor.scoresInPlay(games, latest, now)
+			: latest !== null && DataProcessor.scoresFollowed(latest, now);
+		const check = async () => {
+			if (loading || document.visibilityState !== 'visible') return;
+			if (!first && !inPlay(Date.now())) return;
+			first = false;
+			loading = true;
+			const loaded = await DataProcessor.loadScores(date);
+			loading = false;
+			if (stopped || !loaded) return;
+			latest = loaded;
+			setScores(loaded);
+		};
+		check();
+
+		const timer = window.setInterval(check, SCORES_CHECK_MS);
+		document.addEventListener('visibilitychange', check);
+		return () => {
+			stopped = true;
+			window.clearInterval(timer);
+			document.removeEventListener('visibilitychange', check);
+		};
+	}, [date, games]);
+	// Another day's scores, kept until this one's are read, mark nothing
+	return scores?.date === date ? scores : null;
+}
+
 function App() {
 	// xG (expected goals) state
 	const [xgEnabled, setXgEnabled] = useState(false);
@@ -376,69 +421,26 @@ function App() {
 	}, [shownSlots, data]);
 
 	/*
-		The picks marked as entered in the contest's own app, whose results only the history marks. Once one
-		of the loaded day's games has started, the my-picks table shows that day's, and before that the latest
-		earlier day's: the next day's lists arrive on the first load after midnight, and a late game can end
-		well after that.
+		The picks marked as entered in the contest's own app, with the history on or off. The my-picks table
+		holds the latest day's, so an earlier day's until one of the loaded day's is marked, however many of its
+		games have started: the next day's lists arrive on the first load after midnight, and a late game can
+		end well after that.
 	*/
 	const [entered, setEntered] = useState<EnteredPicks.EnteredStore>(() => EnteredPicks.load());
+	// Show My Picks, which closing the my-picks table turns off too. Off, it leaves the lists unmarked and the
+	// my-picks table hidden for the page's life, and deletes nothing
+	const [myPicksEnabled, setMyPicksEnabled] = useState(true);
 	const scheduleDate = data?.scheduleDate ?? null;
-	const resultsToday = passed !== null && scheduleDate !== null;
-	const resultsDate = !historyEnabled || !data ? null : resultsToday ? scheduleDate : EnteredPicks.earlierDay(entered, scheduleDate);
+	const myPicksDate = myPicksEnabled && data ? EnteredPicks.latestDay(entered, scheduleDate) : null;
+	const myPicksToday = myPicksDate !== null && myPicksDate === scheduleDate;
+	const myPicksDay = myPicksDate !== null ? entered.days[myPicksDate] : undefined;
 
-	// Once one of the loaded day's games has started no earlier day's picks show again, so they go
-	useEffect(() => {
-		if (passed === null || !data?.scheduleDate) return;
-		setEntered(EnteredPicks.prune(data.scheduleDate));
-	}, [passed, data]);
-
-	/*
-		That same day's goal scorers, which mark the started games' rows and the my-picks table's picks, so
-		only the history asks for them. The cron rewrites a day's file each minute while one of its games is
-		in play, and the page reads it as often, while it is in view and the scores can still change. The
-		loaded day is followed by its schedule, and an earlier one by its own file, which is all the page
-		holds of that day.
-	*/
-	const [scores, setScores] = useState<DataProcessor.DayScores | null>(null);
-	useEffect(() => {
-		if (!resultsDate || !data) return;
-		const date = resultsDate;
-		const today = date === data.scheduleDate;
-		const games = data.gamesList;
-
-		let stopped = false;
-		let loading = false;
-		// The first check always reads, so a day whose games are all over still gets its marks
-		let first = true;
-		// The day's scores as this effect last read them
-		let latest: DataProcessor.DayScores | null = null;
-		const inPlay = (now: number): boolean => today
-			? DataProcessor.scoresInPlay(games, latest, now)
-			: latest !== null && DataProcessor.scoresFollowed(latest, now);
-		const check = async () => {
-			if (loading || document.visibilityState !== 'visible') return;
-			if (!first && !inPlay(Date.now())) return;
-			first = false;
-			loading = true;
-			const loaded = await DataProcessor.loadScores(date);
-			loading = false;
-			if (stopped || !loaded) return;
-			latest = loaded;
-			setScores(loaded);
-		};
-		check();
-
-		const timer = window.setInterval(check, SCORES_CHECK_MS);
-		document.addEventListener('visibilitychange', check);
-		return () => {
-			stopped = true;
-			window.clearInterval(timer);
-			document.removeEventListener('visibilitychange', check);
-		};
-	}, [resultsDate, data]);
-	// The history's tables show the loaded day's scores, and the my-picks table its own day's
-	const shownScores = historyEnabled && passed !== null && scores?.date === data?.scheduleDate ? scores : null;
-	const myPicksScores = resultsDate !== null && scores?.date === resultsDate ? scores : null;
+	// The loaded day's goal scorers once a game has started, which mark the history's started rows and the
+	// my-picks table's picks of that day, and an earlier day's while the my-picks table shows it
+	const loadedScores = useDayScores(passed !== null && (historyEnabled || myPicksToday) ? scheduleDate : null, data?.gamesList ?? null);
+	const shownScores = historyEnabled ? loadedScores : null;
+	const earlierScores = useDayScores(myPicksDate !== null && !myPicksToday ? myPicksDate : null, null);
+	const myPicksScores = myPicksToday ? loadedScores : earlierScores;
 
 	// Initialize sort configs - use ref to avoid recreating
 	const sortConfig1Ref = useRef<Picks.SortConfig>({ keyOrder: [] });
@@ -799,9 +801,10 @@ function App() {
 	const lockedOnly = dayLocked && !bannerProblem;
 
 	// The loaded day's marked picks, which mark their rows in the lists
-	const todaysPicks = historyEnabled && scheduleDate !== null ? entered.days[scheduleDate] : undefined;
-	// A name marks a pick only in the loaded day's own lists, not in an earlier day's left up until its first draw posts
-	const markable = historyEnabled && scheduleDate !== null && !dataStatus?.earlierDraw;
+	const todaysPicks = myPicksEnabled && scheduleDate !== null ? entered.days[scheduleDate] : undefined;
+	// A name marks a pick only in the loaded day's own lists, not in an earlier day's left up until its first draw
+	// posts. A started game's players are there to mark while the history keeps them, as a pick can be recorded late
+	const markable = myPicksEnabled && scheduleDate !== null && !dataStatus?.earlierDraw;
 	const enterPick = (table: EnteredPicks.PickTable) => !markable || scheduleDate === null ? undefined : (player: Picks.Player) => {
 		setEntered(EnteredPicks.toggle(scheduleDate, table, {
 			playerId: player.playerId,
@@ -810,15 +813,6 @@ function App() {
 			logoLight: player.logoLight,
 			logoDark: player.logoDark,
 		}));
-	};
-
-	// The my-picks table due now, which shows unless it's the one last closed, or null when its day has no picks
-	const myPicksDay = resultsDate !== null ? entered.days[resultsDate] : undefined;
-	const myPicksKey = resultsDate !== null ? EnteredPicks.tableKey(resultsDate, resultsToday) : null;
-	const myPicksShown = myPicksDay && myPicksKey !== null ? entered.closed !== myPicksKey : null;
-	const setMyPicksShown = (shown: boolean) => {
-		if (myPicksKey === null) return;
-		setEntered(EnteredPicks.setClosed(shown ? null : myPicksKey));
 	};
 
 	const includeCorrelationSlider = false;
@@ -895,8 +889,8 @@ function App() {
 							onXgEnabledChange={setXgEnabled}
 							historyEnabled={historyEnabled}
 							onHistoryEnabledChange={setHistoryEnabled}
-							myPicksShown={myPicksShown}
-							onMyPicksShownChange={setMyPicksShown}
+							myPicksEnabled={myPicksEnabled}
+							onMyPicksEnabledChange={setMyPicksEnabled}
 							playersTableEnabled={playersTableEnabled}
 							onPlayersTableEnabledChange={setPlayersTableEnabled}
 						/>
@@ -948,8 +942,8 @@ function App() {
 					</section>
 				)}
 
-				{myPicksShown && myPicksDay && resultsDate !== null && (
-					<MyPicks date={resultsDate} today={resultsToday} loadedDate={scheduleDate} picks={myPicksDay} scores={myPicksScores} darkTheme={darkTheme} onClose={() => setMyPicksShown(false)} />
+				{myPicksDay && myPicksDate !== null && (
+					<MyPicks date={myPicksDate} today={myPicksToday} loadedDate={scheduleDate} picks={myPicksDay} scores={myPicksScores} darkTheme={darkTheme} onClose={() => setMyPicksEnabled(false)} />
 				)}
 
 				<CollapsibleSection title="Games">

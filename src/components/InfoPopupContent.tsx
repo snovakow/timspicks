@@ -38,6 +38,14 @@ export default function InfoPopupContent() {
 					The Players table, turned on in the settings, lists all players with game start times
 					to help judge whether to lock picks early or wait for later opportunities.
 				</p>
+				<p>
+					With <strong>Show My Picks</strong> on in the <strong>Settings</strong>, tapping or clicking a player's name in a pick table
+					marks him as your pick, one in each table, and doing it again clears the mark. <strong>Show Today's History</strong> keeps
+					a started game's players in the tables to mark. Your picks are kept in this browser only.
+					The latest are listed above the tables with their results, as <strong>Today's Picks</strong> or <strong>Yesterday's Picks</strong>,
+					or under their date when older, until you mark the next day's, so a late game's result still shows after midnight.
+					Closing the list turns <strong>Show My Picks</strong> off, hiding the marks in the tables too, until it's turned back on.
+				</p>
 			</section>
 
 			{Feature.normalizeSportsbooks && (
@@ -83,12 +91,6 @@ export default function InfoPopupContent() {
 				<p>
 					With it on, a check marks each player who has scored, and a cross each player whose game ended without a goal.
 					A player with neither hasn't scored yet in a game that isn't over. The marks update each minute, and a shootout goal doesn't count.
-				</p>
-				<p>
-					Tapping or clicking a player's name in a pick table marks him as your pick, one in each table, and doing it again clears the mark.
-					Your picks are kept in this browser only. Once a game has started they are listed above the tables as <strong>Today's Picks</strong>,
-					and the next day, until its first game starts, as <strong>Yesterday's Picks</strong>, so a late game's result still shows after midnight.
-					Closing the list hides it, and <strong>Show My Picks</strong> in the <strong>Settings</strong> brings it back.
 				</p>
 			</section>
 

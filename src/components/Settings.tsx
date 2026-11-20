@@ -15,9 +15,9 @@ interface SettingsPanelProps {
 	onXgEnabledChange: (value: boolean) => void;
 	historyEnabled: boolean;
 	onHistoryEnabledChange: (value: boolean) => void;
-	// Whether the my-picks table shows, or null when it has nothing to show
-	myPicksShown: boolean | null;
-	onMyPicksShownChange: (value: boolean) => void;
+	// Show My Picks: the marked picks in the pick tables and the my-picks table
+	myPicksEnabled: boolean;
+	onMyPicksEnabledChange: (value: boolean) => void;
 	playersTableEnabled: boolean;
 	onPlayersTableEnabledChange: (value: boolean) => void;
 }
@@ -36,8 +36,8 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 		onXgEnabledChange,
 		historyEnabled,
 		onHistoryEnabledChange,
-		myPicksShown,
-		onMyPicksShownChange,
+		myPicksEnabled,
+		onMyPicksEnabledChange,
 		playersTableEnabled,
 		onPlayersTableEnabledChange,
 	} = props;
@@ -70,41 +70,13 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 				<label className={labelClassNames}>
 					<input
 						type="checkbox"
-						checked={showPercentage}
-						onChange={(e) => onShowPercentageChange(e.target.checked)}
+						checked={myPicksEnabled}
+						onChange={(e) => onMyPicksEnabledChange(e.target.checked)}
 					/>
-					<span>Show Probabilities</span>
+					<span>Show My Picks</span>
 				</label>
 				<div className="settings-description">
-					Show sportsbook odds as implied probability percentages, otherwise as American odds.
-				</div>
-			</div>
-			{Feature.normalizeSportsbooks && (
-				<div className="settings-group">
-					<label className={labelClassNames}>
-						<input
-							type="checkbox"
-							checked={deVigEnabled}
-							onChange={(e) => onDeVigEnabledChange(e.target.checked)}
-						/>
-						<span>Normalize Sportsbooks</span>
-					</label>
-					<div className="settings-description">
-						Remove sportsbook bias by adjusting odds to a consensus value.
-					</div>
-				</div>
-			)}
-			<div className="settings-group">
-				<label className={labelClassNames}>
-					<input
-						type="checkbox"
-						checked={xgEnabled}
-						onChange={(e) => onXgEnabledChange(e.target.checked)}
-					/>
-					<span>Expected Team Goals</span>
-				</label>
-				<div className="settings-description">
-					Include expected team goals in the Games table.
+					Tap or click a player's name in a pick table to mark him as your pick, and again to clear it. Show Today's History keeps a started game's players there to mark. Your latest picks are listed above the tables with their results until you mark the next day's, and closing that list turns this off.
 				</div>
 			</div>
 			<div className="settings-group">
@@ -130,24 +102,50 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					<span>Show Today's History</span>
 				</label>
 				<div className="settings-description">
-					Keep the games that have started and their players in the tables, greyed out, along with the players a redraw dropped from a list, and list each earlier slot's stats in the Stats. A check marks a player who has scored, and a cross one whose game ended without a goal. Tap or click a player's name in a pick table to mark him as your pick, and again to clear it.
+					Keep the games that have started and their players in the tables, greyed out, along with the players a redraw dropped from a list, and list each earlier slot's stats in the Stats. A check marks a player who has scored, and a cross one whose game ended without a goal.
 				</div>
 			</div>
 			<div className="settings-group">
-				<label className={`${labelClassNames}${myPicksShown === null ? ' settings-checkbox-disabled' : ''}`}>
+				<label className={labelClassNames}>
 					<input
 						type="checkbox"
-						checked={myPicksShown === true}
-						disabled={myPicksShown === null}
-						onChange={(e) => onMyPicksShownChange(e.target.checked)}
+						checked={xgEnabled}
+						onChange={(e) => onXgEnabledChange(e.target.checked)}
 					/>
-					<span>Show My Picks</span>
+					<span>Expected Team Goals</span>
 				</label>
 				<div className="settings-description">
-					List the picks you marked above the tables, with their results: today's once a game has started, and before that the previous game day's.
-					{myPicksShown === null && (historyEnabled ? ' There are none to show yet.' : " It needs Show Today's History, which is off.")}
+					Include expected team goals in the Games table.
 				</div>
 			</div>
+			<div className="settings-group">
+				<label className={labelClassNames}>
+					<input
+						type="checkbox"
+						checked={showPercentage}
+						onChange={(e) => onShowPercentageChange(e.target.checked)}
+					/>
+					<span>Show Probabilities</span>
+				</label>
+				<div className="settings-description">
+					Show sportsbook odds as implied probability percentages, otherwise as American odds.
+				</div>
+			</div>
+			{Feature.normalizeSportsbooks && (
+				<div className="settings-group">
+					<label className={labelClassNames}>
+						<input
+							type="checkbox"
+							checked={deVigEnabled}
+							onChange={(e) => onDeVigEnabledChange(e.target.checked)}
+						/>
+						<span>Normalize Sportsbooks</span>
+					</label>
+					<div className="settings-description">
+						Remove sportsbook bias by adjusting odds to a consensus value.
+					</div>
+				</div>
+			)}
 
 			{Feature.correlation && (
 				<div className="settings-group">

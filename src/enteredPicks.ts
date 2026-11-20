@@ -27,27 +27,18 @@ export type EnteredDay = Readonly<Partial<Record<PickTable, EnteredPick>>>;
 export interface EnteredStore {
 	// Only days with a pick
 	days: Readonly<Record<string, EnteredDay>>;
-	// The my-picks table last closed, by tableKey, which stays closed until it's shown again
-	closed: string | null;
 }
 
 const KEY = 'timspicks.entered';
-// The loaded day and the earlier one the my-picks table can show
+// The latest day, which the my-picks table shows, and the one before it, which it shows again once the
+// latest day's picks are all cleared
 const KEEP_DAYS = 2;
-const EMPTY: EnteredStore = { days: {}, closed: null };
-
-// The name of a my-picks table: its day, and whether it shows as the loaded day or an earlier one, since one
-// day's picks get a table of each kind
-export const tableKey = (date: string, today: boolean): string => `${date}/${today ? 'today' : 'earlier'}`;
+const EMPTY: EnteredStore = { days: {} };
 
 const isDay = (value: string): boolean => {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
 	const time = Date.parse(`${value}T00:00:00Z`);
 	return !isNaN(time) && new Date(time).toISOString().startsWith(value);
-};
-
-const isTableKey = (value: unknown): value is string => {
-	return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}\/(today|earlier)$/.test(value) && isDay(value.slice(0, 10));
 };
 
 const logoOf = (value: unknown): string | null => {
@@ -86,7 +77,7 @@ const storeOf = (raw: string): EnteredStore => {
 		}
 		if (Object.keys(day).length > 0) days[date] = day;
 	}
-	return latest({ days, closed: isTableKey(value.closed) ? value.closed : null });
+	return latest({ days });
 };
 
 // The store as last read or written, which is all there is once storage has failed
@@ -113,7 +104,7 @@ const write = (store: EnteredStore): EnteredStore => {
 	memory = store;
 	if (!usable) return store;
 	try {
-		const raw = Object.keys(store.days).length === 0 && store.closed === null ? null : JSON.stringify(store);
+		const raw = Object.keys(store.days).length === 0 ? null : JSON.stringify(store);
 		if (raw === null) window.localStorage.removeItem(KEY);
 		else window.localStorage.setItem(KEY, raw);
 		memoryRaw = raw;
@@ -138,24 +129,8 @@ export const toggle = (date: string, table: PickTable, pick: EnteredPick): Enter
 	return write(latest({ ...store, days }));
 };
 
-// Closes the my-picks table tableKey names, or with null shows whichever is due
-export const setClosed = (closed: string | null): EnteredStore => {
-	const store = read();
-	return store.closed === closed ? store : write({ ...store, closed });
-};
-
-// Drops the days before the one given, which no table shows again
-export const prune = (date: string): EnteredStore => {
-	const store = read();
-	const dates = Object.keys(store.days);
-	const kept = dates.filter((day) => day >= date);
-	const closed = store.closed !== null && store.closed.slice(0, 10) < date ? null : store.closed;
-	if (kept.length === dates.length && closed === store.closed) return store;
-	return write({ days: Object.fromEntries(kept.map((day) => [day, store.days[day]])), closed });
-};
-
-// The latest day with picks before the one given, or before none when the page has no day of its own
-export const earlierDay = (store: EnteredStore, date: string | null): string | null => {
-	const dates = Object.keys(store.days).filter((day) => date === null || day < date).sort();
+// The latest day with picks up to the one given, or of them all when the page has no day of its own
+export const latestDay = (store: EnteredStore, date: string | null): string | null => {
+	const dates = Object.keys(store.days).filter((day) => date === null || day <= date).sort();
 	return dates.length > 0 ? dates[dates.length - 1] : null;
 };

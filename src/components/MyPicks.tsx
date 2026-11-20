@@ -11,9 +11,9 @@ const dayLabel = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: '
 const dayBefore = (date: string): string => new Date(Date.parse(`${date}T00:00:00Z`) - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 /*
-	One day's picks marked as entered, one row a list, each with its goal mark: the loaded day's once one of its
-	games has started, and before that an earlier day's, whose late games can still be going after midnight. It
-	shows them and nothing more; a pick is marked in its list.
+	The latest day's picks marked as entered, one row a list, each with its goal mark: the loaded day's once one
+	is marked, and until then an earlier day's, whose late games can still be going after midnight. It shows
+	them and nothing more; a pick is marked in its list.
 */
 export default function MyPicks(props: {
 	date: string,
@@ -35,7 +35,7 @@ export default function MyPicks(props: {
 		<section className='my-picks' aria-labelledby='my-picks-title'>
 			<div className='my-picks-header'>
 				<h2 id='my-picks-title' className='my-picks-title'>{title}</h2>
-				<button type='button' className='my-picks-close' onClick={onClose} aria-label={`Hide ${title}`} title='Hide'>
+				<button type='button' className='my-picks-close' onClick={onClose} aria-label='Turn off Show My Picks' title='Turn off Show My Picks'>
 					&times;
 				</button>
 			</div>

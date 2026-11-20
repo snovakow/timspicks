@@ -162,21 +162,3 @@
 	width: fit-content;
 	white-space: nowrap;
 }
-
-/* A setting with nothing to act on */
-.settings-checkbox-item.settings-checkbox-disabled {
-	cursor: default;
-	opacity: 0.5;
-}
-
-.settings-checkbox-item.settings-checkbox-disabled input[type="checkbox"] {
-	cursor: default;
-}
-
-.settings-checkbox-item.settings-checkbox-disabled:hover {
-	background: none;
-}
-
-.settings-checkbox.settings-checkbox-hoverable.settings-checkbox-disabled:hover {
-	border-color: transparent;
-}
