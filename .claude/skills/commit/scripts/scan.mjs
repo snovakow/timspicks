@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Read-only survey for the commit skill. Prints the review baseline, the commits and files to
-// review, link and prose findings, release checks and the live update list. Changes nothing.
+// Read-only survey for the commit skill. Prints the review baseline, the versions the release
+// could take, where the changelog stands, the commits and files to review, link and prose
+// findings, release checks and the live update list. Changes nothing.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
@@ -8,6 +9,9 @@ const AUTHOR = 'snovakow';
 const VERSION_MESSAGE = /^Version (\d+\.\d+\.\d+)$/;
 const VERSION_LOOKALIKE = /^version\s+v?\d|^release\s+v?\d+\.\d|^v\d+\.\d|\bversion\b.*\d+\.\d+\.\d+/i;
 const VERSION_FILES = ['package-lock.json', 'package.json'];
+// The release notes. A version commit made once this file exists changes it too, and its newest
+// section at that commit is headed with the commit's version.
+const CHANGELOG = 'CHANGELOG.md';
 const FRONTEND_FILES = new Set(['index.html', 'vite.config.ts', 'package.json', 'package-lock.json']);
 const LIVE_FOLDER = 'the live folder';
 const UPDATE_FOLDER = 'the update folder';
@@ -63,6 +67,15 @@ const parseJson = (text) => {
 const jsonAt = (rev, path) => (rev ? parseJson(tryGit('show', `${rev}:${path}`)) : null);
 const jsonNow = (path) => parseJson(readText(path));
 const versionAt = (rev) => jsonAt(rev, 'package.json')?.version ?? null;
+const existsAt = (rev, path) => tryGit('cat-file', '-e', `${rev}:${path}`) !== null;
+// The version in the changelog's newest `## ` heading that carries one.
+const changelogVersion = (text) => {
+	for (const [, heading] of (text ?? '').matchAll(/^##\s+(.+)$/gm)) {
+		const match = /\bv?(\d+\.\d+\.\d+)\b/.exec(heading);
+		if (match) return match[1];
+	}
+	return null;
+};
 
 process.chdir(git('rev-parse', '--show-toplevel'));
 const out = [];
@@ -90,6 +103,8 @@ const pushedTip = lines(git('rev-list', '--first-parent', 'HEAD')).find((sha) =>
 
 // Official: the whole message is exactly `Version X.Y.Z` (no body, no trailer), the author is
 // snovakow, it changes exactly package.json and package-lock.json, and package.json holds X.Y.Z.
+// Where the changelog exists at the commit, it changes that too, and the changelog's newest
+// section there is headed X.Y.Z; a version commit older than the changelog is judged without it.
 // Anything else is an ordinary commit, however much it looks like a version commit.
 const candidates = git('log', '--full-history', '--format=%H%x1f%an%x1f%B%x1e', 'HEAD', '--', 'package.json')
 	.split('\x1e').map((record) => record.trim()).filter(Boolean)
@@ -101,7 +116,10 @@ const isOfficial = ({ sha, author, message }) => {
 	const match = VERSION_MESSAGE.exec(message);
 	if (!match || author !== AUTHOR) return false;
 	const files = lines(git('diff-tree', '--no-commit-id', '--name-only', '-r', '--root', sha)).sort();
-	if (files.join('\n') !== VERSION_FILES.join('\n')) return false;
+	const holdsChangelog = existsAt(sha, CHANGELOG);
+	const expected = holdsChangelog ? [CHANGELOG, ...VERSION_FILES].sort() : VERSION_FILES;
+	if (files.join('\n') !== expected.join('\n')) return false;
+	if (holdsChangelog && changelogVersion(tryGit('show', `${sha}:${CHANGELOG}`)) !== match[1]) return false;
 	return versionAt(sha) === match[1];
 };
 const official = candidates.find(isOfficial) ?? null;
@@ -113,7 +131,11 @@ const headVersion = versionAt('HEAD');
 const worktreeVersion = jsonNow('package.json')?.version ?? null;
 // Only /commit changes the version, so HEAD and the working tree should still hold the baseline's.
 const expectedVersion = officialVersion ?? (baseline ? versionAt(baseline) : null) ?? '0.0.0';
-const nextVersion = expectedVersion.replace(/\d+$/, (n) => String(Number(n) + 1));
+// The three versions the release could take, one per release level. The changelog section the
+// run writes says which.
+const [major, minor, patch] = expectedVersion.split('.').map(Number);
+const nextVersions = `${major}.${minor}.${patch + 1} for fixes and backend improvements, ${major}.${minor + 1}.0 for a feature, ${major + 1}.0.0 for a major release`;
+const changelogNow = changelogVersion(readText(CHANGELOG));
 
 // --- Range: commits after the baseline, plus the working tree ------------------------------------
 
@@ -127,6 +149,21 @@ const commits = rangeShas.map((sha) => {
 });
 const status = lines(git('status', '--short', '--untracked-files=all'));
 const untracked = lines(git('ls-files', '--others', '--exclude-standard'));
+
+// Changelog changes that sit outside a version commit: in the working tree, or in a range commit,
+// alone there or beside other files. The run moves each into its version commit.
+const changelogStatus = status.find((line) => line.slice(3) === CHANGELOG) ?? null;
+const changelogStray = [
+	...(changelogStatus
+		? [`the working tree (${changelogStatus.startsWith('??') ? 'untracked' : [changelogStatus[0] !== ' ' ? 'staged' : null, changelogStatus[1] !== ' ' ? 'unstaged' : null].filter(Boolean).join(' and ')})`]
+		: []),
+	...commits.flatMap((commit) => {
+		const files = lines(git('diff-tree', '--no-commit-id', '--name-only', '-r', '--root', commit.sha));
+		if (!files.includes(CHANGELOG)) return [];
+		const others = files.length - 1;
+		return [`${short(commit.sha)} (${commit.pushed ? 'pushed' : 'unpushed'}, ${others ? `with ${others} other file(s)` : 'nothing else in it'})`];
+	}),
+];
 
 // Added lines from a unified diff, with their line numbers in the new file.
 const addedLines = (diff) => {
@@ -406,6 +443,8 @@ const attention = [
 	...(userName === AUTHOR ? [] : [`git user.name is ${userName ?? 'unset'}, not ${AUTHOR}; the version commit would not count`]),
 	...(headVersion !== expectedVersion || worktreeVersion !== expectedVersion
 		? [`version changed outside /commit: HEAD ${headVersion}, working tree ${worktreeVersion}, expected ${expectedVersion} from ${official ? 'the last version commit' : 'the baseline'}`] : []),
+	...(official && changelogNow && changelogNow !== officialVersion
+		? [`${CHANGELOG} is headed with ${changelogNow}, not the last version commit's ${officialVersion}: a section written outside a version commit`] : []),
 	...(analyze === 'OFF' ? [] : [`src/features.ts analyze is '${analyze}', not 'OFF'`]),
 	...(savesrc === 'false' ? [] : [`public/fetch_service.php $savesrc is ${savesrc}`]),
 	...arity.map((item) => `call does not match its fetch_lib.php signature: ${item}`),
@@ -422,7 +461,11 @@ say(`Branch: ${branch ?? '(detached)'}${upstream ? `, upstream ${upstream} (ahea
 say(`Git user: ${userName ?? '(unset)'}`);
 say(`Baseline: ${official ? `${short(official.sha)} ${official.message} (${unpushed.has(official.sha) ? 'unpushed' : 'pushed'})` : `no version commit yet; newest pushed commit ${pushedTip ? `${short(pushedTip)} ${git('log', '-1', '--format=%s', pushedTip)}` : '(none)'}`}`);
 say(`Rewrite base: ${rewriteBase ? short(rewriteBase) : '(root)'}; only commits after it may be rewritten`);
-say(`Version: last version commit ${officialVersion ?? '(none)'}, HEAD ${headVersion}, working tree ${worktreeVersion}, next ${nextVersion}`);
+say(`Version: last version commit ${officialVersion ?? '(none)'}, HEAD ${headVersion}, working tree ${worktreeVersion}; next ${nextVersions}`);
+say(`Changelog: ${existsSync(CHANGELOG)
+	? `${CHANGELOG}, newest section ${changelogNow ?? '(none)'}`
+	: `${CHANGELOG}, not there yet: the run's version commit starts it with that release's section, and none for the releases before it`}`);
+say(`Changelog changes outside a version commit: ${changelogStray.length ? changelogStray.join('; ') : 'none'}`);
 const lookalikes = commits.filter((commit) => commit.touchesVersion);
 say(`Lookalikes (not baselines; reviewed like any range commit): ${lookalikes.length ? lookalikes.map((commit) => `${short(commit.sha)} ${commit.message.split('\n')[0]}`).join('; ') : 'none'}`);
 if (mainRef && branchOnly !== null) say(`origin/main: ${branchOnly} commit(s) behind ${branch}; ${mainOnly} commit(s) on main not in ${branch}`);

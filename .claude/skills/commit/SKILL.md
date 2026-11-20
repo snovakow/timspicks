@@ -1,18 +1,18 @@
 ---
 name: commit
-description: Review and finalize everything since the last version commit for pushing. Fixes messages and site mentions, updates the README and docs where needed, commits it all, ends with a version commit, and lists what to copy to the live server. Stops unless it is the first thing in its thread.
+description: Review and finalize everything since the last version commit for pushing. Fixes messages and site mentions, updates the README and docs where needed, commits it all, ends with a version commit that carries the release's changelog section, and lists what to copy to the live server. Stops unless it is the first thing in its thread.
 disable-model-invocation: true
 argument-hint: "[x.y.z]"
 model: opus
 effort: max
-allowed-tools: Read, Edit, Write, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git ls-files:*), Bash(git config user.name), Bash(git fetch:*), Bash(git add:*), Bash(git commit:*), Bash(git rebase:*), Bash(git stash:*), Bash(npm version:*), Bash(npm run lint:*), Bash(npm run build:*), Bash(php -l:*), Bash(node .claude/skills/commit/scripts/scan.mjs:*)
+allowed-tools: Read, Edit, Write, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git ls-files:*), Bash(git config user.name), Bash(git fetch:*), Bash(git add:*), Bash(git restore --staged:*), Bash(git commit:*), Bash(git rebase:*), Bash(git stash:*), Bash(npm version:*), Bash(npm run lint:*), Bash(npm run build:*), Bash(php -l:*), Bash(node .claude/skills/commit/scripts/scan.mjs:*)
 ---
 
 # Commit a reviewed, versioned batch
 
 Arguments: $ARGUMENTS
 
-This repo is public: whatever gets pushed (code, comments and commit messages) stays public. The user commits ad hoc while working and runs this skill when a batch is ready to go. Review everything since the last version commit, fix what can still be fixed, commit all of it, and finish with a version commit. The user pushes; never push.
+This repo is public: whatever gets pushed (code, comments and commit messages) stays public. The user commits ad hoc while working and runs this skill when a batch is ready to go. Review everything since the last version commit, fix what can still be fixed, commit all of it, and finish with a version commit. That commit carries the release's section of `CHANGELOG.md`, and what the section holds gives the version, unless the arguments name one. The user pushes; never push.
 
 Run in a fresh thread, as the first thing in it. A thread that made the changes remembers making them and cannot review them from the repository alone, and one that has already run this would run it again over the same work. So if anything precedes this command in the thread, an earlier message, work done here or a summary carried over from a longer context, stop before anything is read or run, and say to start a new thread with `/commit` as its first message.
 
@@ -21,12 +21,15 @@ Run in a fresh thread, as the first thing in it. A thread that made the changes 
 - **Baseline.** A version commit is the review checkpoint: everything before the newest one has been reviewed. Only a run of this skill writes version commits, and a run ends at its report (step 10). The scan counts a commit as one only if all of these hold:
   - its whole message is exactly `Version X.Y.Z`, with no body and no trailer
   - its author is snovakow
-  - it changes exactly `package.json` and `package-lock.json`, nothing more or less
+  - it changes exactly `package.json` and `package-lock.json`, and `CHANGELOG.md` as well wherever that file exists at the commit, nothing more or less
   - the version in `package.json` matches the message
+  - where `CHANGELOG.md` exists at the commit, its newest section is headed with that version
 
-  Everything after the newest such commit is under review, however much a commit looks like a version commit. A subject that mentions "version", a bump made by hand, or `Version X.Y.Z` with a trailer are all ordinary range commits. Before the first version commit exists, the baseline is the newest pushed commit.
+  A version commit made before the changelog began is judged without it. Everything after the newest such commit is under review, however much a commit looks like a version commit. A subject that mentions "version", a bump made by hand, or `Version X.Y.Z` with a trailer are all ordinary range commits. Before the first version commit exists, the baseline is the newest pushed commit.
 - **Rewriting.** A commit can be rewritten only if it comes after the baseline and isn't reachable from any remote branch, because rewriting a pushed commit would take a force push. The scan prints this rewrite base. Pushed commits in the range are still reviewed, and their problems reported.
-- **Order.** Plan the batch before staging anything. Fixes to existing commits come first, then new commits, then the prose commits — README and `docs/` — if any are needed. The version commit always comes last.
+- **Changelog.** `CHANGELOG.md`, at the root, is the release notes: one section for each version commit, newest first, written for the people who use the app rather than for whoever maintains it. A section sums up the whole release as short bullets under up to three headings: **Features**, what is new to do or see; **Fixes**, what was wrong and now works; **Backend improvements**, what changed behind the page, such as the server's fetches, the recorded history, the skills and the docs. Keep it high level, as an app store's release notes are: one plain line a bullet, nothing technical or detailed, no file names, identifiers or commit hashes, one bullet for several commits that made one change, and no heading with nothing under it. Step 3 applies to every line. A section is written in its version commit and nowhere else, and a changelog change found anywhere else in the range is moved there (step 8). The file starts with the run that creates it: releases made before it get no section.
+- **Release level.** A section says what kind of release it describes, and that gives the version. Nothing but fixes and backend improvements: the last number goes up, `x.x.#`. A feature among them: the middle number goes up and the last returns to 0, `x.#.0`. A major release, one that changes the app as a whole or marks a milestone, such as `1.0.0` when it is ready for the general public: the first number goes up and the others return to 0, `#.0.0`. A major is the user's to call: where the release reads as one, ask before writing the number. A version in the arguments overrides the level.
+- **Order.** Plan the batch before staging anything. Fixes to existing commits come first, then new commits, then the prose commits — README and `docs/` — if any are needed. The version commit, with the changelog section, always comes last.
 
 ## 1. Survey
 
@@ -41,6 +44,7 @@ The **Attention** section lists anything that needs the user. Stop and ask about
 - being on `main` (work normally lands on `development`)
 - a git user other than snovakow (the version commit wouldn't count)
 - a version changed outside this skill, where `package.json` no longer holds the baseline's version. Ask whether to undo that change or to pass the intended version as the argument.
+- a `CHANGELOG.md` section headed with a version that isn't the baseline's, written by hand or by a run that never finished. Keep its text as notes for this run's section and drop the heading. Unless the arguments give the version, ask whether that number is the one meant.
 
 The release-check items there are covered in step 2. If nothing is new since the baseline, say so and stop.
 
@@ -87,12 +91,13 @@ the output, so a hit shows the pattern and a masked line. Investigate by opening
 
 ## 3. No site names or links
 
-The user doesn't want outside websites named or linked in anything that becomes public prose. Prose means commit messages, plus comments, docs and explanatory UI text added in the range. The rule is strict: no websites, sportsbooks, leagues, data sources, tool sites or forums, and no URLs, domains or markdown links. Check each commit's own diff, not only the end result, because the history is public too.
+The user doesn't want outside websites named or linked in anything that becomes public prose. Prose means commit messages and the changelog section, plus comments, docs and explanatory UI text added in the range. The rule is strict: no websites, sportsbooks, leagues, data sources, tool sites or forums, and no URLs, domains or markdown links. Check each commit's own diff, not only the end result, because the history is public too.
 
 Describe things in the app's own terms:
 - The books are their keys, `bet1` and so on, as in the book list `public/sportsbooks.json` and `SportsbookKeys`. So: "Fix bet2 event-page parsing". The comparison pages a book can be read from are "the comparison pages".
 - "the schedule feed" (`games.json`), "the pick-list feed" (`helper.json`), "the challenge".
 - Where data came from: "recovered closing lines", "an odds archive".
+- In the changelog a book can simply be "a sportsbook" or "one of the books", since its readers know the books from the page and not by key.
 
 Code the app needs in order to work isn't prose. Endpoint URLs, the `Sportsbooks` titles, logo files and existing identifiers stay. List any new site or brand names the code introduces in the report, so the user sees them. SVG `xmlns` URIs and the attribution trailer aren't mentions.
 
@@ -119,14 +124,16 @@ Update README.md if the range adds or changes something it describes, or somethi
 
 Keep its voice, follow step 3 for anything you add, and leave the external link list and the
 template section as they are. The Documentation and Skills lists are part of what you maintain: keep
-the first pointing at whatever `docs/` holds, and the second naming every skill under
-`.claude/skills/`, each with when to use it. Never invent results. The README change is its own
+the first pointing at whatever `docs/` holds and at `CHANGELOG.md`, which the run's version commit
+creates if it isn't there yet, and the second naming every skill under `.claude/skills/`, each with
+when to use it. Never invent results. The README change is its own
 commit, after the code and before the version commit.
 
 ## 5a. The pages under `docs/`
 
 They are generated prose this skill maintains, the same as README.md. Update any page the range
-outdates, and hold every page to the rule below.
+outdates, and hold every page to the rule below. `CHANGELOG.md` isn't one of them: step 6 writes its
+newest section, and a section its version commit has closed is left as it stands.
 
 **A doc explains the idea, never the code.** A page that states what the code *is* goes wrong
 silently on the next rename, value change or flag flip, and nothing checks it. So a page carries
@@ -156,11 +163,36 @@ instead of repeating it. The scan holds the same two paths; a new runbook goes i
 The scan's **Docs** section is the worklist: the code references found per page, runbook pages
 counted separately, and dangling paths, where a page names a file that no longer exists.
 
-## 6. Version
+## 6. Changelog and version
 
-- **Number.** Add 1 to the last number of the last version commit's version (`0.0.1` → `0.0.2`). The first one goes from `package.json`'s `0.0.0` to `0.0.1`. If the arguments contain a version like `0.1.0`, use exactly that, and ask if it isn't higher than the current one. Treat any other words in the arguments as hints for the messages.
+The version commit holds the release's section of `CHANGELOG.md` and the number that section calls for.
+
+- **Section.** Write it as *How the pieces fit* describes, from the whole release: every range commit and everything this run commits. It goes at the top of the file, above the newest section, under a heading with the version and the date of the commit. If the file doesn't exist yet, create it in the shape below with this section alone, and write nothing for the releases before it. Notes kept from step 1 or taken out of a commit in step 8 go in where the release bears them out.
+- **Number.** If the arguments contain a version like `0.1.0`, use exactly that, and ask if it isn't higher than the current one. Otherwise the release level gives it from the last version commit's version: `0.4.9` becomes `0.4.10` for fixes and backend improvements, `0.5.0` for a feature, and `1.0.0` for a major release the user has confirmed. The scan prints all three. Treat any other words in the arguments as hints for the messages and the section.
 - **Set it** with `npm version <x.y.z> --no-git-tag-version`. That updates `package.json` and `package-lock.json` without tagging or committing.
-- **Commit** just those two files, with the message `Version X.Y.Z` and nothing else: no body, no trailer, author as configured. It's the last commit.
+- **Commit** just those two files and `CHANGELOG.md`, with the message `Version X.Y.Z` and nothing else: no body, no trailer, author as configured. It's the last commit.
+
+The changelog's shape. A heading with no bullets is left out:
+
+```markdown
+# Changelog
+
+What changed in each release, newest first.
+
+## 1.4.0 - 2027-03-09
+
+### Features
+
+- One short line for each thing there is now to do or see.
+
+### Fixes
+
+- One for each thing that was wrong and now works.
+
+### Backend improvements
+
+- One for each change behind the page.
+```
 
 ## 7. Plan the commits
 
@@ -176,6 +208,11 @@ path to a group, and give each group its subject. That plan is what step 8 execu
 - **Order so every commit stands on its own.** Code before the docs describing it, a helper before
   its caller, so no commit mid-batch leaves the build broken.
 - Reword-only and fix-only work isn't a group; it belongs to step 8.2.
+- `CHANGELOG.md` belongs to no group. It's committed in the version commit and nowhere else; unstage
+  it if it's staged.
+- Draft the changelog section with the plan, from the range commits and the groups together. Read
+  the release level off the draft, and say which version the run will write before staging
+  anything. If the draft reads as a major release and the arguments give no version, ask now.
 
 If the batch is a single concern, say so and make one commit. Don't split a coherent change to look
 tidy.
@@ -187,19 +224,20 @@ tidy.
    - **The tip:** stage the fixed files, then run `git commit --amend -F <message file>`. For a message-only change, use `git commit --amend --only -F <message file>`, which leaves the index alone.
    - **An older commit, content fix:** edit, stage only the fix, and run `git commit --fixup=<sha>`.
    - **An older commit, message fix:** write `amend! <sha>`, a blank line and the new message to a file, then run `git commit --allow-empty --only -F <file>`.
+   - **A `CHANGELOG.md` change in a rewritable commit** comes out of it, to go in the version commit; the scan lists these. Keep the text as notes for the section. Then undo that commit's change to the file, setting it back to what the commit's parent holds or removing it where the parent has none, stage that alone, and run `git commit --fixup=<sha>`, so the fold takes the change out. A commit with nothing else in it gets no fixup, since a fold can't empty a commit: ask, naming it by hash and subject, and on yes drop it before the fold with `git rebase --autostash --onto <its parent> <its hash>`. In a pushed commit the change stays where it is, the version commit rewrites the section in place, and the report says so.
    - **Then fold the fixups in:** `GIT_EDITOR=true git rebase --autosquash --autostash <rewrite base>`. Check afterwards that the `fixup!` commits are gone, because an older git (2.37, for one) ignores `--autosquash` unless the rebase is interactive: it reports success, rewrites nothing and leaves them sitting at the tip. If that happens, run `GIT_SEQUENCE_EDITOR=true GIT_EDITOR=true git rebase -i --autosquash --autostash <rewrite base>`, which honours it and still needs no editor.
    - If the rebase stops on a conflict, run `git rebase --abort` and ask. If a merge commit sits anywhere but the tip, report it and ask rather than flatten it. If a fix touches a file that also has uncommitted edits, `git stash push --include-untracked` first and `git stash pop` after.
    - Keep message files outside the repo (the thread's scratchpad if there is one), so they never get committed.
 3. Fix site mentions in the working-tree changes.
-4. Commit the groups from step 7, in the planned order. Stage explicit paths, never `-A` or `.`, and check `git diff --cached --stat` against the group's subject before committing: if something unrelated is staged, unstage it rather than widen the message. Commit untracked files that belong to the project and ask about the rest. Never delete the user's files or edit `.gitignore` without asking.
+4. Commit the groups from step 7, in the planned order. Stage explicit paths, never `-A` or `.`, and check `git diff --cached --stat` against the group's subject before committing: if something unrelated is staged, unstage it rather than widen the message. Commit untracked files that belong to the project and ask about the rest. `CHANGELOG.md` is staged with none of the groups. Never delete the user's files or edit `.gitignore` without asking.
 5. Make the prose commits, if steps 5 and 5a call for them: README and `docs/`, one concern each.
-6. Make the version commit.
+6. Write the changelog section and make the version commit (step 6).
 
 ## 9. Verify and report
 
 Run the scan again. Check that:
 - `git status` is clean
-- the new version commit shows as the baseline
+- the new version commit shows as the baseline, and the scan's Changelog line gives its version as the newest section
 - the only links left are code endpoints
 
 Reread the final messages.
@@ -207,7 +245,8 @@ Reread the final messages.
 Then report, briefly:
 - the commits made, and rewritten commits as old → new sha with what changed
 - problems in pushed commits that couldn't be fixed
-- the version change, and any feature-flag changes
+- the version change, the release level it was read as and what in the release made it that, and the changelog section
+- any feature-flag changes
 - new site or brand names in code, files left uncommitted, and the checks that ran
 - anything in `docs/` that step 5a couldn't settle, such as a claim only the user can confirm
 - the starting sha (the undo point, also in the reflog), and that nothing was pushed
@@ -221,4 +260,4 @@ Then report, briefly:
 
 ## 10. After the report
 
-The run ends with the report. This skill stays in context afterwards, but anything the user asks for next in the same thread is ordinary development, not part of the run: make and commit that work as usual, with the thread's attribution trailer, and stop there. These are ordinary commits, not this skill's: they carry no version bump, so the next run finds them above the newest version commit and reviews them. Don't bump the version or make a version commit, even when the follow-up commits come straight after one. The next batch gets its own `/commit`, which the user starts in a fresh thread so the review begins from a clean context. If the follow-up work leaves a batch ready to go, say so instead.
+The run ends with the report. This skill stays in context afterwards, but anything the user asks for next in the same thread is ordinary development, not part of the run: make and commit that work as usual, with the thread's attribution trailer, and stop there. These are ordinary commits, not this skill's: they carry no version bump, so the next run finds them above the newest version commit and reviews them. Don't bump the version, add to `CHANGELOG.md` or make a version commit, even when the follow-up commits come straight after one: the next run writes that work into its own section. The next batch gets its own `/commit`, which the user starts in a fresh thread so the review begins from a clean context. If the follow-up work leaves a batch ready to go, say so instead.
