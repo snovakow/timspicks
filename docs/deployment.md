@@ -91,13 +91,13 @@ copying by hand:
    update folder's other files where they're already deployed. The seeder files
    are never added to it, since they stay local.
 
-**Never copy `dist/data`, `dist/history`, `dist/players` or `dist/auth.json`,**
-and the deploy never does. A build made in the checkout fills those from its own
-stale copies, while the server owns the live ones: cron writes the data and
-players folders, the History action builds the archive, and the credentials file
-is rewritten in place on rehash. Copying the build output wholesale overwrites the
-live history index and rolls back the live data. The deploy's own build comes from
-the committed files alone, which don't include any of them.
+**Never copy `dist/data`, `dist/players` or `dist/auth.json`,** and the deploy
+never does. A build made in the checkout fills those from its own stale copies,
+while the server owns the live ones: cron writes the data and players folders,
+the archive among them, and the credentials file is rewritten in place on rehash.
+Copying the build output wholesale rolls back the live data, the archive with it.
+The deploy's own build comes from the committed files alone, which don't include
+any of them.
 
 ## Changing a book's mode
 
@@ -113,15 +113,13 @@ next one.
 
 ## Before the merge
 
-Three settings decide whether a build is safe to ship, and `/commit` checks all
-three — this is the list it's checking against:
+Two settings decide whether a build is safe to ship, and `/commit` checks both —
+this is the list it's checking against:
 
 - `analyze` in `src/features.ts` is `'OFF'`. The other values run generation or
   analysis in the app.
 - `$savesrc` in `public/fetch_service.php` is `false`, or the server starts
   writing raw feed dumps.
-- No history range's `end` date is today or later. See the season notes below for
-  why that one matters so much.
 
 ## After
 
@@ -140,10 +138,9 @@ three — this is the list it's checking against:
 
 ## Ending a season
 
-- Set the season's final `end` in the range table in `public/fetch_service.php`,
-  and only ever to a day that has finished.
-- Run the History action once the last day is complete, so the archive covers
-  the whole season before anything else changes.
+- Once the last day is complete, check that `/health-server` lists no day with
+  snapshots and no final scores, and run Update on the admin page for any it
+  does, so the archive covers the whole season before anything else changes.
 - Turn on `offseasonBanner` in `src/features.ts`, then rebuild and deploy as
   usual.
 - Leaving the cron running through the offseason costs nothing but log lines.
@@ -152,29 +149,20 @@ three — this is the list it's checking against:
 
 ## Beginning a season
 
-- Add the new season to the range table in `public/fetch_service.php`: a
-  regular-season row from the opener, and a playoff row once those dates exist.
-  Append them below the existing rows and leave finished seasons as they are:
-  the index is positional, so commenting out or reordering a row misaligns the
-  file lists it has stored. The rows already commented out are seasons from
-  before recording began, and they stay that way.
-- Keep the `end` at the last completed day, every time you bump it. The history
-  feed returns 404 for a day that isn't over, and the incremental index writes
-  that day down as done and never asks for it again.
+- Nothing needs adding for the new season's archive: each day's scores file takes
+  its season and format from the score feed.
 - Confirm the cron is running before the first game day, not after it.
   `/health-server` reports whether it is.
 - Turn `offseasonBanner` back off.
 - If days were missed, backfill them: one closing price per player in every slot
   from an odds archive into `public/data/<date>`, with the pick lists rebuilt
-  from the per-player available times the history feed reports. Then copy those
-  dated folders into the live folder's data folder, along with
-  `fetch_service.php`. That is a specific exception to the never-copy rule above
-  — dated folders by hand, never `dist/data` wholesale.
+  from the per-player available times the pick-list site's history feed reports
+  for that day. Then copy those dated folders into the live folder's data folder,
+  and run Update on the admin page, which fetches those days' scores and adds them
+  to the archive a few days at a time, so run it again while it reports earlier
+  days left. That is a specific exception to the never-copy rule above — dated
+  folders by hand, never `dist/data` wholesale.
 - Any backfill, of missed days or of a book added later, marks every book file it
   writes in that slot's `backfill.json` as `"closing"`, and never replaces a book
   file already there. A backfilled price looks like a captured one; the mark is
   the only way an analysis can tell them apart.
-- One trap when backfilling: the live `history.json` only ever extends forward
-  from the end it has stored. If it already holds an entry for the new season
-  that starts after the days you just backfilled, that entry has to be deleted,
-  or those earlier days are never fetched.

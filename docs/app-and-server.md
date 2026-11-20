@@ -110,8 +110,8 @@ well as today, so games still going at midnight are seen through, and no game is
 followed long enough to reach further back. Until a day's first fetch, whether
 its games are in play comes from its schedule: the schedule file while it holds
 that day, then the copy its snapshots saved. The admin page's Update fetches
-today's scores even with nothing in play, and yesterday's only while one of its
-games still is.
+today's scores even with nothing in play, yesterday's only while one of its
+games still is, and any earlier day the archive lacks (see the archive, below).
 
 The step is no part of a run. It writes no log line and leaves the run state
 alone, and a failed fetch, or a reply that isn't the day asked for, leaves that
@@ -127,7 +127,7 @@ stopped answering.
 | the pick-list feed | `helper.json` | keyed by the feed's own list ids |
 | the player feed | `players/<id>.json` | one file per player |
 | the roster feed | `rosters.json` | the skaters on each of today's teams, fetched once a day per team; a reply with no skaters counts as failed |
-| the score feed | `<Y-m-d>/scores.json` | each of that day's games with its state and the players with a goal; see the scores step above |
+| the score feed | `<Y-m-d>/scores.json` | the day's season and format, and each of its games with its state and the players with a goal; see the scores step above |
 | each book | `data/bet1.json`, `bet2.json` and on | flat arrays of player names and odds |
 
 Player files are refreshed only when missing or when the player has changed
@@ -209,11 +209,6 @@ book that needed it. The run still completes, so it waits the full period like
 any other, even inside the game window. The pick list, the schedule and the book
 list still stop the run, as does a book file that can't be written.
 
-The History fetch tolerates one status of its own: a 404 means the challenge
-didn't run that day, so it is skipped as before. Every other failure stops the
-range, because an error envelope parses as JSON and would otherwise be saved as
-that day's history, with the day recorded as fetched for good.
-
 A debug switch can dump each raw upstream response next to the parsed one. Cron
 never enables it and the service hard-codes it off; leaving it on in a deploy is
 one of the release gates.
@@ -227,18 +222,16 @@ data/
   rosters.json       today's teams' skaters, for the player table
   bet1.json ...      today's odds, one file per book the list shows
   process.json       run state
+  days.json          the archive's index: each day with a snapshot and final scores
   <Y-m-d>/
     games.json       that day's schedule
-    scores.json      that day's game states and goal scorers, for the goal marks
+    scores.json      that day's season and format, game states and goal scorers
     <HHmm>/
       bet1.json ...
       helper.json
       backfill.json  the books whose prices here were filled in later, if any
 players/
   <id>.json
-history/
-  history.json       the index
-  <season>_<date>_<format>.json
 ```
 
 The `<HHmm>` subfolder is named for **the next upcoming game's ET start time, not
@@ -375,40 +368,48 @@ nothing, and turning it back on shows the table again.
 ## The admin page
 
 An admin page sits in the site folder. It mints a CSRF token and posts
-credentials to the scraping service with one of two actions:
-
-- **Update** — the same sequence cron runs, with no throttling. A manual
-  force-refresh.
-- **History** — the only thing that ever writes the history folder.
+credentials to the scraping service to run **Update**: the same sequence cron
+runs, with no throttling. It is a manual force-refresh, and the way to fill in an
+archived day the cron missed (see the archive, below).
 
 Credentials live in a gitignored file holding a name and a bcrypt hash, and it is
 rewritten in place when the hash is upgraded. The seeder that writes it runs on a
 local dev server only and is never deployed.
 
-## The history archive
+## The archive
 
-The scraping service holds the season range table — one row per season and
-format, with a start and an end date. The 2026-27 regular season starts
-2026-09-29, the season opener.
+The archive is each day's slot snapshots and scores file, kept for good, and it is
+what the app's archive replays and `/analyze` measure. The scores file records the
+day's season and whether it was a regular-season or a playoff day, as the score
+feed gives them. The archive's index lists every day whose folder holds a snapshot
+and whose scores are final: every game called official, or off its normal
+schedule. A day only ever joins whole, so a replay never reads a game still in
+progress or a goal still under review.
 
-The history index is that table with a file list appended per range, and fetching
-is incremental:
+Nothing has to be run by hand to keep it current. The fetch that finds a day's
+last game official rebuilds the index, so a day joins as its games end. Every
+Update from the admin page rebuilds it too, from the day folders alone, so any
+rebuild puts right whatever an earlier one missed.
 
-- Ranges appended since the last run are processed in full.
-- Only the **last stored range** is checked for extension. If its stored end
-  differs from the table's, the fetch resumes from the day after the stored one.
-- File lists already fetched are carried forward untouched.
+The one gap the cron can't close is a day it missed while the games were on: the
+machine asleep, say, or the score feed down until the games were no longer
+followed. That day keeps its snapshots but has no final scores, so it stays out of
+the archive. The score feed keeps every past day, so Update fetches each earlier
+day like that again, a few at a time so that one Update stays inside the web
+server's time limit, and `/health-server` lists the days still missing.
 
-Two consequences worth knowing before editing that table:
+The replays score each listed player against that day's scorers by player id, and
+take his opponent from the day's games. So a list entry with a wrong id reads as a
+miss, as it does in the page's goal marks, and one whose team had no game on its
+schedule that day is left out. A snapshot whose lists were drawn on an earlier day,
+which happens when the day's first draw posts late, is left out too, since that
+day's results say nothing about those lists.
 
-- **Set the end to the last completed day, never to today.** The history feed
-  returns 404 for an unfinished day, and the index then records that day as done
-  and never refetches it. If a live index already holds a range that starts later
-  than the days you need, that entry has to be removed before the earlier days
-  can be fetched.
-- The scheme is append-only and positional. Inserting or reordering rows, or
-  editing a range that is not the last one, misaligns the carried-forward file
-  lists without refetching anything.
+Until 2026-11-20 the archive's results came from the pick-list site's own history,
+fetched by a separate admin action over a hand-kept table of season dates. Checked
+that day against all 103 of its days, the score feed gave the same result, team,
+opponent, season and format for every listed player, so the earlier days were
+fetched again from the score feed and the second source was retired.
 
 ## Getting a change live
 
@@ -420,12 +421,11 @@ and not the checkout itself. PHP is copied the same way and changes nothing
 until it is: cron loads the scraping library out of the live folder, never out
 of the checkout.
 
-A build made in the checkout also fills the data, players, history and
-credentials paths from its own stale copies, while the server owns the live
-ones — cron writes the data and players folders, the History action builds the
-archive, and the credentials file is rewritten in place on rehash. So those four
-are never copied, and copying the build output wholesale overwrites the live
-history index.
+A build made in the checkout also fills the data, players and credentials paths
+from its own stale copies, while the server owns the live ones — cron writes the
+data and players folders, the archive among them, and the credentials file is
+rewritten in place on rehash. So those three are never copied, and copying the
+build output wholesale rolls the live archive back to the checkout's.
 
 ## Feature flags and release checks
 

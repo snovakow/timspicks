@@ -1,4 +1,4 @@
-# History and the correlation lifts
+# The archive and the correlation lifts
 
 The correlation lifts the app ships are not written by hand. They are fitted to
 the day-by-day archive the server keeps, by a run inside the app. This is the
@@ -7,37 +7,54 @@ it worked when it did nothing.
 
 ## Two different kinds of generated data
 
-|  | the history archive | the fitted lifts |
+|  | the archive | the fitted lifts |
 | --- | --- | --- |
-| Holds | one JSON file per game day: pick lists, odds, who scored | two correlation lifts fitted to that archive, and what they were fitted on |
-| Written by | the **History** action on the admin page | pasted in by hand from a console dump |
+| Holds | per game day, the slot snapshots of the pick lists and odds, and the day's scores; an index of the days | two correlation lifts fitted to that archive, and what they were fitted on |
+| Written by | the cron, as each day's games end; Update on the admin page fills in a day it missed | pasted in by hand from a console dump |
 | Owned by | the server | the repo |
 | In git | no — the archive is gitignored | yes, it is committed source |
 
-So a regeneration has two halves that are easy to confuse: extending the
-**archive** (new game days), and refitting the **lifts** to whatever the archive
-already holds. Only the second one changes a committed file.
+So a regeneration has two halves that are easy to confuse: the **archive**
+gaining game days, and refitting the **lifts** to whatever the archive already
+holds. Only the second one changes a committed file.
 
-## Step 1 — extend the archive, if you want newer days
+## The seasons
 
-Skip this entirely when refitting to the days already on disk.
+Recording began on 2026-04-09, late in the 2025-26 regular season, so the
+archive holds nothing earlier. The earlier seasons are listed for reference
+only. Each archived day takes its season and format from the score feed, so this
+table is a record, not a setting.
 
-The season range table lives in the scraping service, and the **History** action
-on the admin page is the only thing that ever writes the archive. [The app and
-the server](app-and-server.md) covers the index mechanics and the two rules that
-matter most — set a range's end to the last completed day and never to today, and
-never edit a range that is not the last one. Both are append-only traps that
-silently poison the index rather than erroring.
+| season | format | dates | in the archive |
+| --- | --- | --- | --- |
+| 2023-24 | regular | 2023-10-10 to 2024-04-18 | no |
+| 2023-24 | playoff | 2024-04-20 to 2024-06-24 | no |
+| 2024-25 | regular | 2024-10-04 to 2025-04-17 | no |
+| 2024-25 | playoff | 2025-04-19 to 2025-06-17 | no |
+| 2025-26 | regular | 2025-10-07 to 2026-04-16 | from 2026-04-09 |
+| 2025-26 | playoff | 2026-04-18 to 2026-06-14 | yes |
+| 2026-27 | regular | 2026-09-29, the opener, scheduled to end 2027-04-10 | yes, so far |
 
-A local archive and the live one drift independently. The range table can list a
-range the local index has never fetched, so check what the index actually holds
-rather than what the table says is available:
+## Step 1 — check the archive is whole
+
+The archive grows by itself: a day joins once all its games are official, so
+there is nothing to fetch by hand before a refit. The one gap it can't close
+alone is a day the cron missed while its games were on. That day stays out until
+**Update** on the admin page fetches its scores, and `/health-server` lists every
+day like that.
+
+A local archive and the live one drift independently. A run on the development
+server reads the checkout's own data folder, whose index lists only the days
+whose snapshots and final scores the checkout holds, so check what that index
+actually holds:
 
 ```sh
 python3 -c "
-import json,io
-for e in json.load(io.open('public/history/history.json')):
-    print(e['season'], e['format'], e['start'], '->', e['end'], len(e.get('files', [])), 'files')
+import json, collections
+days = json.load(open('public/data/days.json'))
+print(len(days), 'days,', days[0]['date'], 'to', days[-1]['date'])
+for (season, fmt), n in sorted(collections.Counter((d['season'], d['format']) for d in days).items()):
+    print(season, fmt, n)
 "
 ```
 
@@ -76,9 +93,7 @@ Three choices decide what a run actually sees. None of them are obvious from the
 output:
 
 - **A hardcoded earliest date.** Archived days before it are skipped no matter
-  how far back the archive goes, and there is a second, independent copy of the
-  same cutoff in the historical audit path. Extending the archive backwards can
-  therefore change nothing at all.
+  how far back the archive goes, so adding older days can change nothing at all.
 - **The Books setting the page starts with.** A player counts only when enough
   books price them for an average, so changing that default changes which
   players the fit sees.
@@ -145,10 +160,8 @@ so the lifts need a refit once that book's backfill is in both archives.
 
 ## Checklist
 
-- [ ] Decided whether this run needs new archive days at all
-- [ ] If extending: the range end is a completed day, and only the last range was
-      touched
-- [ ] Confirmed what the local index holds, not just what the range table lists
+- [ ] `/health-server` lists no day with snapshots and no final scores
+- [ ] Confirmed what the local index holds
 - [ ] `analyze` set to `'GENERATE'`, page loaded, data visible before the dump
       appeared
 - [ ] The dump's last day and day count match the archive

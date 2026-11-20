@@ -71,10 +71,11 @@ the distinct start times to a set of slot boundaries, and treats each one as a
 redraw, loading that slot's archived lists and odds. Today's history does the
 same for the slots that have already started today.
 
-One loose end worth knowing: the history feed states per-player redraw
-eligibility directly, and the app ignores it, reconstructing slots from game
-start times instead. To rebuild a slot's list from the archive by hand, take the
-players whose available times include the last list time before that slot.
+One loose end worth knowing: the pick-list site's history feed states per-player
+redraw eligibility directly, and the app ignores it, reconstructing slots from
+game start times instead. To rebuild a missed slot's list by hand from that feed,
+take the players whose available times include the last list time before that
+slot.
 
 ## Scoring
 
