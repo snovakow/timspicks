@@ -93,6 +93,8 @@ Shows today's history, on by default and turned off in the settings: the started
 
 Marks each player in today's history with a check once he has scored, or a cross once his game ends without a goal from him, updated each minute while games are on
 
+Marks your pick in each of the three lists, by tapping or clicking a player's name with today's history on, kept in this browser, and lists your picks with their results above the tables: today's once a game has started, and before that the previous game day's, so a late game's result still shows after midnight
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
