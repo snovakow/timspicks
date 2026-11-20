@@ -362,8 +362,8 @@ when older, by its date. The next day's lists arrive on the first load after
 midnight and a late game can still be going then, so a day's results stay up
 until the next day's picks are made. An earlier day's results come from its own
 scores file, followed from the starts the file gives, as the page holds no
-schedule for that day. Closing the table turns the setting off, which deletes
-nothing, and turning it back on shows the table again.
+schedule for that day. The table is a section like the others, collapsed by its
+title, and the setting alone turns the marking and the table off.
 
 ## The admin page
 
