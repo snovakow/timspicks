@@ -168,50 +168,72 @@ function scoreInPlay(array $game, int $nowTime)
 	return ($game['state'] ?? null) !== 'OFF';
 }
 
+/* A day's games as its schedule lists them, which have no state yet: from the schedule file while it holds
+   that day, and after that from the copy saved with the day's snapshots */
+function scheduledScores(string $basePath, string $date)
+{
+	foreach (["$basePath/games.json", "$basePath/$date/games.json"] as $file) {
+		$week = json_decode((string)@file_get_contents($file), true)['gameWeek'][0] ?? null;
+		if (!is_array($week) || ($week['date'] ?? null) !== $date || !is_array($week['games'] ?? null)) continue;
+
+		$games = [];
+		foreach ($week['games'] as $game) {
+			if (is_array($game)) $games[] = ['start' => $game['startTimeUTC'] ?? null, 'schedule' => $game['gameScheduleState'] ?? 'OK'];
+		}
+		return $games;
+	}
+	return [];
+}
+
 /*
-	The day's goal scorers, for the page to mark who has scored: scores.json holds each of a day's games with
-	its state and the players credited with a goal in regulation or overtime. The contest doesn't count a
-	shootout goal, and the feed lists a shootout's deciding goal with the rest, so those are left out.
+	Each day's goal scorers, for the page to mark who has scored: <day>/scores.json holds each of that day's
+	games with its state and the players credited with a goal in regulation or overtime. The contest doesn't
+	count a shootout goal, and the feed lists a shootout's deciding goal with the rest, so those are left out.
 
 	The cron calls this every minute, ahead of the gate that spaces its runs, since goals come in while no
-	run is due and after the day's last start no run comes at all. It fetches only while a game is in play,
-	from its start until the feed calls it official. That comes some time after the game ends, so a goal
-	credited to another player on review still lands. The day in the file is followed to its end, which
-	sees games still going at midnight through, and a new day's file replaces it once one of that day's
-	games has started. $force fetches with nothing in play, for the admin page.
+	run is due and after the day's last start no run comes at all. A day is fetched only while one of its
+	games is in play, from its start until the feed calls it official. That comes some time after the game
+	ends, so a goal credited to another player on review still lands. Yesterday is looked at as well as
+	today, which sees games still going at midnight through, and no game is followed long enough to reach
+	further back. Each day's fetch writes only that day's file, so nothing a later day does can replace an
+	earlier day's scores. $force fetches today with nothing in play, for the admin page.
 
-	A failed fetch, or a reply that isn't the day asked for, leaves the file as it was. The file is swapped
-	in whole, since the page reads it while games are on.
+	A failed fetch, or a reply that isn't the day asked for, leaves that day's file as it was. A file is
+	swapped in whole, since the page reads it while games are on.
 */
 function updateScores(DateTime $now, string $basePath, bool $force = false)
 {
 	$output = ['title' => 'Scores', 'content' => null, 'error' => null];
 	$nowTime = $now->getTimestamp();
 	$today = $now->format('Y-m-d');
-	$local_file = "$basePath/scores.json";
+	$yesterday = (clone $now)->modify('-1 day')->format('Y-m-d');
 
 	$inPlay = fn(array $games) => (bool)array_filter($games, fn($game) => is_array($game) && scoreInPlay($game, $nowTime));
 
-	$saved = is_file($local_file) ? json_decode((string)@file_get_contents($local_file), true) : null;
-	$savedDate = is_array($saved) && is_string($saved['date'] ?? null) && is_array($saved['games'] ?? null) ? $saved['date'] : null;
+	$written = [];
+	$errors = [];
+	foreach ([$yesterday, $today] as $date) {
+		$local_file = "$basePath/$date/scores.json";
 
-	$date = null;
-	if ($savedDate !== null && $inPlay($saved['games'])) {
-		$date = $savedDate;
-	} else if ($force) {
-		$date = $today;
-	} else if ($savedDate !== $today) {
-		// Today's file starts from the schedule, whose games have no state yet
-		$week = json_decode((string)@file_get_contents("$basePath/games.json"), true)['gameWeek'][0] ?? null;
-		$scheduled = [];
-		if (is_array($week) && ($week['date'] ?? null) === $today && is_array($week['games'] ?? null)) {
-			foreach ($week['games'] as $game) {
-				$scheduled[] = ['start' => $game['startTimeUTC'] ?? null, 'schedule' => $game['gameScheduleState'] ?? 'OK'];
-			}
-		}
-		if ($inPlay($scheduled)) $date = $today;
+		// A day's file holds its games' states, and until its first fetch they come from its schedule
+		$saved = is_file($local_file) ? json_decode((string)@file_get_contents($local_file), true) : null;
+		$games = is_array($saved) && ($saved['date'] ?? null) === $date && is_array($saved['games'] ?? null) ? $saved['games'] : scheduledScores($basePath, $date);
+		if (!$inPlay($games) && !($force && $date === $today)) continue;
+
+		$result = fetchScores($now, $date, $local_file);
+		if ($result['error'] !== null) $errors[] = $result['error'];
+		else $written[] = $result['content'];
 	}
-	if ($date === null) return $output;
+
+	if ($written) $output['content'] = implode('; ', $written);
+	if ($errors) $output['error'] = implode('; ', $errors);
+	return $output;
+}
+
+/* One day's fetch from the score feed into that day's file, creating the day's folder when no snapshot has yet */
+function fetchScores(DateTime $now, string $date, string $local_file)
+{
+	$output = ['content' => null, 'error' => null];
 
 	$url = "https://api-web.nhle.com/v1/score/$date";
 	$ch = curl_init($url);
@@ -251,6 +273,12 @@ function updateScores(DateTime $now, string $basePath, bool $force = false)
 			'state' => $game['gameState'],
 			'scorers' => array_keys($scorers),
 		];
+	}
+
+	$folder = dirname($local_file);
+	if (!is_dir($folder) && !@mkdir($folder, 0755, true) && !is_dir($folder)) {
+		$output['error'] = 'Error creating the folder for ' . $local_file;
+		return $output;
 	}
 
 	$json = json_encode(['date' => $date, 'updated' => $now->format(DateTime::ATOM), 'games' => $games], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

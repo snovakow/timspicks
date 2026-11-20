@@ -258,13 +258,14 @@ if ($live) {
 	$warnings = array_merge($warnings, printOutput($output));
 }
 
-/* Scores, fetched whether or not a game is in play. A failure is shown here and stops nothing, and it stays
-   out of the run's warnings, as the cron's scores step is no part of a run */
+/* Scores: today's whether or not a game is in play, and yesterday's while one of its games still is. A failure
+   is shown here and stops nothing, and it stays out of the run's warnings, as the cron's scores step is no part
+   of a run */
 if ($live) {
 	$output = updateScores($now, $basePath, true);
 	echo '<h3>' . $output['title'] . '</h3>';
 	if (isset($output['error'])) echo '<p class="warning">Warning: ' . htmlspecialchars($output['error'], ENT_QUOTES, 'UTF-8') . '</p>';
-	else echo $output['content'];
+	if (isset($output['content'])) echo $output['content'];
 }
 
 $ch = curl_init();
