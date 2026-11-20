@@ -56,10 +56,9 @@ Read each range commit with `git show`, the working-tree diff (`git diff HEAD`),
 - files that shouldn't be tracked: data dumps, logs, build output, local settings
 - leftovers that look accidental, such as stray debug output
 
-The scan's release checks catch four mistakes that are easy to ship. Ask before committing if one trips:
+The scan's release checks catch three mistakes that are easy to ship. Ask before committing if one trips:
 - `analyze` in `src/features.ts` isn't `'OFF'`. `GENERATE` and `OUTPUT` run simulation and analysis in the app.
 - `$savesrc` in `public/fetch_service.php` is `true`, which writes raw feed dumps on the server.
-- A History `'end'` date in `public/fetch_service.php` is today or later. An unfinished day gets recorded as done and is never fetched again.
 - A call into `public/fetch_lib.php` passes the wrong number of arguments. `update.php` is the one that matters: it lives in its own tree, is deployed separately, and `php -l` can't see across files, so a mismatch reaches the server and fatals in whichever branch runs.
 
 Feature-flag changes in the range go in the report even when they're intended.
@@ -153,7 +152,7 @@ them. A threshold nobody calibrated earns a sentence saying exactly that; the nu
 grep away.
 
 **The two runbooks may name what a step needs.** They are `docs/deployment.md` and
-`docs/history-and-correlation.md`, the pages whose steps get executed. Their steps may name the one
+`docs/archive-and-correlation.md`, the pages whose steps get executed. Their steps may name the one
 setting or file a step would be unfollowable without, and the value a step tells you to set, since
 that value *is* the step. A value the prose merely describes — a period, a threshold, a limit —
 stays out either way, and their explanatory passages follow the rule above in full. Every other page
@@ -275,7 +274,7 @@ Then report, briefly:
   - the individual files to copy, and where
   - what needs no update
 
-  Mention that PHP changes reach the cron only once copied. `dist/data`, `dist/history`, `dist/players` and `dist/auth.json` are never copied, because the server writes the live copies.
+  Mention that PHP changes reach the cron only once copied. `dist/data`, `dist/players` and `dist/auth.json` are never copied, because the server writes the live copies.
 
 ## 10. After the report
 

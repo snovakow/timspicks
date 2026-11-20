@@ -15,7 +15,7 @@ const CHANGELOG = 'CHANGELOG.md';
 const FRONTEND_FILES = new Set(['index.html', 'vite.config.ts', 'package.json', 'package-lock.json']);
 const LIVE_FOLDER = 'the live folder';
 const UPDATE_FOLDER = 'the update folder';
-const NEVER_COPY = 'dist/data, dist/history, dist/players, dist/auth.json';
+const NEVER_COPY = 'dist/data, dist/players, dist/auth.json';
 
 const SCHEME_URL = /\b[a-z][a-z0-9+.-]*:\/\/[^\s'"`<>)\]]+/gi;
 const WWW_HOST = /\bwww\.[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi;
@@ -252,19 +252,10 @@ for (const path of untracked) {
 
 // --- Release checks ------------------------------------------------------------------------------
 
-const localDate = () => {
-	const now = new Date();
-	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-};
-const today = localDate();
 const features = readText('src/features.ts') ?? '';
 const analyze = /\banalyze\b[^=\n]*=\s*'(\w+)'/.exec(features)?.[1] ?? 'not found';
 const service = readText('public/fetch_service.php') ?? '';
 const savesrc = /^\s*\$savesrc\s*=\s*(\w+)\s*;/m.exec(service)?.[1] ?? 'not found';
-const lateEnds = service.split('\n').flatMap((text, index) => (text.trim().startsWith('//') ? []
-	: [...text.matchAll(/'end'\s*=>\s*'(\d{4}-\d{2}-\d{2})'/g)]
-		.filter((match) => match[1] >= today)
-		.map((match) => `public/fetch_service.php:${index + 1} end ${match[1]}`)));
 const flagChanges = baseline
 	? lines(git('diff', baseline, '--unified=0', '--no-color', '--', 'src/features.ts')).filter((line) => /^[+-](?![+-])/.test(line))
 	: [];
@@ -320,7 +311,7 @@ for (const file of [LIB, 'public/fetch_service.php', 'timspicks_update/update.ph
 
 // --- Docs: generated prose, so keep the code out of them ----------------------------------------
 
-// Repo paths a doc names. Build and runtime output (dist/, data/, players/, history/, auth.json)
+// Repo paths a doc names. Build and runtime output (dist/, data/, players/, auth.json)
 // is written on the server and absent here, so a missing one of those proves nothing.
 const DOC_PATH = /`((?:src|public|docs|timspicks_update|\.claude)\/[A-Za-z0-9_./-]*)`/g;
 
@@ -328,7 +319,7 @@ const DOC_PATH = /`((?:src|public|docs|timspicks_update|\.claude)\/[A-Za-z0-9_./
 // instead. The two runbooks are allowed to name what a step needs; they are reported separately
 // rather than silently, since the allowance covers steps and not prose. Step 5a of the skill is the
 // authority on this list.
-const RUNBOOKS = new Set(['docs/deployment.md', 'docs/history-and-correlation.md']);
+const RUNBOOKS = new Set(['docs/deployment.md', 'docs/archive-and-correlation.md']);
 const SPAN = /`([^`\n]+)`/g;
 // Commands, git refs, and the data files and folders the server writes: a rename in src/ can't
 // falsify any of them, so they aren't code references.
@@ -341,10 +332,9 @@ const NOT_CODE = [
 	// Step 3 requires these as the app's own words for the books, so they belong in prose.
 	/^bet\d+(?:[–-]bet\d+)?$/,
 	/^[A-Z][a-z]+\/[A-Z][A-Za-z_]+$/,
-	/^(?:data|players|history)\/[A-Za-z0-9_<>.…\s-]*$/,
+	/^(?:data|players)\/[A-Za-z0-9_<>.…\s-]*$/,
 	/^[a-z][a-z0-9]*(?:\.\.[a-z0-9]+)?\.json$/,
 	/^<[A-Za-z0-9_-]+>$/,
-	/^<season>_<date>_<format>\.json$/,
 ];
 const docFiles = [...lines(tryGit('ls-files', '--cached', '--others', '--exclude-standard', 'docs') ?? ''), 'README.md']
 	.filter((file) => PROSE_FILE.test(file));
@@ -448,7 +438,6 @@ const attention = [
 	...(analyze === 'OFF' ? [] : [`src/features.ts analyze is '${analyze}', not 'OFF'`]),
 	...(savesrc === 'false' ? [] : [`public/fetch_service.php $savesrc is ${savesrc}`]),
 	...arity.map((item) => `call does not match its fetch_lib.php signature: ${item}`),
-	...lateEnds.map((end) => `History end date is today or later (${today}): ${end}`),
 	...(secretHits.length ? [`${secretHits.length} line(s) add credentials or copied session data; see Secrets and session data`] : []),
 ];
 
@@ -492,7 +481,6 @@ for (const hit of secretHits.length ? secretHits : ['(none)']) say(`- ${hit}`);
 section('Release checks');
 say(`analyze: '${analyze}'`);
 say(`$savesrc: ${savesrc}`);
-say(`History end dates today or later: ${lateEnds.length ? lateEnds.join('; ') : 'none'}`);
 say(`Feature flag changes since the baseline: ${flagChanges.length ? '' : 'none'}`);
 for (const line of flagChanges) say(`    ${line}`);
 say(`Calls into fetch_lib.php (${signatures.size} function(s)): ${arity.length ? '' : 'all match'}`);
