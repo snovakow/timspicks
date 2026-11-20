@@ -15,6 +15,9 @@ interface SettingsPanelProps {
 	onXgEnabledChange: (value: boolean) => void;
 	historyEnabled: boolean;
 	onHistoryEnabledChange: (value: boolean) => void;
+	// Whether the my-picks table shows, or null when it has nothing to show
+	myPicksShown: boolean | null;
+	onMyPicksShownChange: (value: boolean) => void;
 	playersTableEnabled: boolean;
 	onPlayersTableEnabledChange: (value: boolean) => void;
 }
@@ -33,6 +36,8 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 		onXgEnabledChange,
 		historyEnabled,
 		onHistoryEnabledChange,
+		myPicksShown,
+		onMyPicksShownChange,
 		playersTableEnabled,
 		onPlayersTableEnabledChange,
 	} = props;
@@ -125,7 +130,22 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					<span>Show Today's History</span>
 				</label>
 				<div className="settings-description">
-					Keep the games that have started and their players in the tables, greyed out, along with the players a redraw dropped from a list, and list each earlier slot's stats in the Stats. A check marks a player who has scored, and a cross one whose game ended without a goal.
+					Keep the games that have started and their players in the tables, greyed out, along with the players a redraw dropped from a list, and list each earlier slot's stats in the Stats. A check marks a player who has scored, and a cross one whose game ended without a goal. Tap or click a player's name in a pick table to mark him as your pick, and again to clear it.
+				</div>
+			</div>
+			<div className="settings-group">
+				<label className={`${labelClassNames}${myPicksShown === null ? ' settings-checkbox-disabled' : ''}`}>
+					<input
+						type="checkbox"
+						checked={myPicksShown === true}
+						disabled={myPicksShown === null}
+						onChange={(e) => onMyPicksShownChange(e.target.checked)}
+					/>
+					<span>Show My Picks</span>
+				</label>
+				<div className="settings-description">
+					List the picks you marked above the tables, with their results: today's once a game has started, and before that the previous game day's.
+					{myPicksShown === null && (historyEnabled ? ' There are none to show yet.' : " It needs Show Today's History, which is off.")}
 				</div>
 			</div>
 

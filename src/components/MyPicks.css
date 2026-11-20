@@ -1,0 +1,74 @@
+/* The marked picks above the lists, framed in the colour that marks their rows there. The page's content is a
+   column of fixed height, which would shrink a box that clips its overflow to nothing once the page is longer */
+.my-picks {
+	flex: none;
+	align-self: center;
+	max-width: 100%;
+	box-sizing: border-box;
+	margin: 0 0 1rem;
+	border: 1px solid var(--entered-accent);
+	border-radius: 12px;
+	background: var(--entered-tint);
+	overflow: hidden;
+}
+
+.my-picks-header {
+	position: relative;
+	padding: 0.4rem 2.5rem;
+	border-bottom: 1px solid color-mix(in srgb, var(--entered-accent) 40%, transparent);
+}
+
+.my-picks-title {
+	margin: 0;
+	font-size: 1.02rem;
+	font-weight: 700;
+}
+
+.my-picks-close {
+	position: absolute;
+	top: 50%;
+	right: 0.4rem;
+	transform: translateY(-50%);
+	width: 1.75rem;
+	height: 1.75rem;
+	justify-content: center;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: none;
+	color: inherit;
+	font-size: 1.5rem;
+	font-weight: 400;
+	line-height: 1;
+	opacity: 0.7;
+}
+
+.my-picks-close:hover {
+	opacity: 1;
+}
+
+.my-picks-close:focus-visible {
+	outline: 2px solid var(--entered-accent);
+	outline-offset: 0;
+	opacity: 1;
+}
+
+.my-picks-table {
+	border: none;
+	margin: 0 auto;
+}
+
+.my-picks-table tr:last-child {
+	border-bottom: none;
+}
+
+.my-picks-list {
+	padding-right: 0;
+	font-weight: 700;
+	opacity: 0.7;
+}
+
+.my-picks-none {
+	opacity: 0.6;
+	font-style: italic;
+}

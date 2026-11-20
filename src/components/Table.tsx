@@ -68,10 +68,10 @@ export class GameData {
 
 const includeLinks = false;
 
-// A row's classes: its stripe, and greyed once it can no longer be picked
-const rowClass = (index: number, greyed: boolean): string => {
+// A row's classes: its stripe, greyed once it can no longer be picked, and marked as the pick entered
+const rowClass = (index: number, greyed: boolean, entered = false): string => {
 	const stripe = index % 2 === 0 ? 'row-color' : 'row-color-alt';
-	return greyed ? `${stripe} row-started` : stripe;
+	return `${stripe}${greyed ? ' row-started' : ''}${entered ? ' row-entered' : ''}`;
 };
 
 const started = (time: Date, passed: number | null): boolean => passed !== null && time.getTime() <= passed;
@@ -231,10 +231,10 @@ export class PickOdds {
 
 // A player's goal mark: a check once he has scored, a cross once his game ended without a goal from him,
 // and until then a space as wide, so the marks line up and the names don't shift as they come in
-function GoalMark(props: { scores: DayScores, player: Player }) {
-	const { scores, player } = props;
-	const scored = scores.scorers.has(player.playerId);
-	if (!scored && !scores.over.has(player.team.code)) return <span className='cell-goal' />;
+export function GoalMark(props: { scores: DayScores, playerId: number, team: string }) {
+	const { scores, playerId, team } = props;
+	const scored = scores.scorers.has(playerId);
+	if (!scored && !scores.over.has(team)) return <span className='cell-goal' />;
 	const label = scored ? 'Scored' : 'No goal';
 	return (
 		<span className={`cell-goal ${scored ? 'cell-goal-scored' : 'cell-goal-missed'}`} role='img' aria-label={label} title={label}>
@@ -260,9 +260,13 @@ export function Table(props: {
 	enabledStrategies: Record<StrategyMode, boolean>,
 	passed: number | null,
 	// The day's goal scorers, or null when the rows carry no goal marks
-	scores: DayScores | null
+	scores: DayScores | null,
+	// A pick table's player marked as the pick entered, by id
+	entered?: number | null,
+	// Marks or clears a pick table's player as the pick entered, by his name; without it the names mark nothing
+	onEnter?: (player: Player) => void
 }) {
-	const { columns, sortedRows, requestSort, sortConfig, darkTheme, enabledStrategies, passed, scores } = props;
+	const { columns, sortedRows, requestSort, sortConfig, darkTheme, enabledStrategies, passed, scores, entered, onEnter } = props;
 	const enabledModes = AllStrategyModes.filter((mode) => enabledStrategies[mode]);
 	const strategyLabel = (mode: StrategyMode): string => StrategyLabels[mode];
 	const strategyTitle = (strategy: Set<StrategyMode>): string => {
@@ -336,15 +340,22 @@ export function Table(props: {
 					const picks = row instanceof PickOdds;
 					const player = picks ? row.player : row;
 					const rowKey = picks ? row.player.playerId : row.playerId;
+					const marked = picks && entered === player.playerId;
 					return (
-						<tr key={rowKey} className={rowClass(idx, started(player.gameTime, passed) || (picks && row.dropped))}>
+						<tr key={rowKey} className={rowClass(idx, started(player.gameTime, passed) || (picks && row.dropped), marked)}>
 							<td className='cell-name'>
 								<span className='cell-container'>
 									<span className='cell-container cell-player'>
 										<img className='td-name-logo' src={darkTheme ? player.logoDark : player.logoLight} alt="" />
-										{player.fullName}
+										{picks && onEnter ? (
+											<button type='button' className='cell-enter' aria-pressed={marked}
+												title={marked ? 'Clear my pick' : 'Mark as my pick'}
+												onClick={() => onEnter(player)}>
+												{player.fullName}
+											</button>
+										) : player.fullName}
 									</span>
-									{scores && <GoalMark scores={scores} player={player} />}
+									{scores && <GoalMark scores={scores} playerId={player.playerId} team={player.team.code} />}
 								</span>
 							</td>
 							{includeLinks && (

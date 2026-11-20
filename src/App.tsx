@@ -12,6 +12,8 @@ import * as DataProcessor from './dataProcessor';
 import { precalculateLogStats, cloneLogStats, calculateBooksStats, calculateSelectedStats, streakLine } from './statsCalculations';
 import { bestPicks, logCorrelations, runSimulation } from './picksOptimizer';
 import CollapsibleSection from './components/CollapsibleSection';
+import MyPicks from './components/MyPicks';
+import * as EnteredPicks from './enteredPicks';
 import type { Team } from './components/logo';
 import { getTeamTotals } from './teamGoals';
 import * as Feature from './features';
@@ -374,15 +376,34 @@ function App() {
 	}, [shownSlots, data]);
 
 	/*
-		The day's goal scorers, which mark the started games' rows, so only the history asks for them. The
-		cron rewrites the file each minute while a game is in play, and the page reads it as often, while
-		it is in view and the scores can still change. A file for another day is passed over: before the
-		day's first fetch it still holds the day before, and on a page left open it moves on to the next.
+		The picks marked as entered in the contest's own app, whose results only the history marks. Once one
+		of the loaded day's games has started, the my-picks table shows that day's, and before that the latest
+		earlier day's: the next day's lists arrive on the first load after midnight, and a late game can end
+		well after that.
+	*/
+	const [entered, setEntered] = useState<EnteredPicks.EnteredStore>(() => EnteredPicks.load());
+	const scheduleDate = data?.scheduleDate ?? null;
+	const resultsToday = passed !== null && scheduleDate !== null;
+	const resultsDate = !historyEnabled || !data ? null : resultsToday ? scheduleDate : EnteredPicks.earlierDay(entered, scheduleDate);
+
+	// Once one of the loaded day's games has started no earlier day's picks show again, so they go
+	useEffect(() => {
+		if (passed === null || !data?.scheduleDate) return;
+		setEntered(EnteredPicks.prune(data.scheduleDate));
+	}, [passed, data]);
+
+	/*
+		That same day's goal scorers, which mark the started games' rows and the my-picks table's picks, so
+		only the history asks for them. The cron rewrites a day's file each minute while one of its games is
+		in play, and the page reads it as often, while it is in view and the scores can still change. The
+		loaded day is followed by its schedule, and an earlier one by its own file, which is all the page
+		holds of that day.
 	*/
 	const [scores, setScores] = useState<DataProcessor.DayScores | null>(null);
 	useEffect(() => {
-		if (!historyEnabled || passed === null || !data?.scheduleDate) return;
-		const date = data.scheduleDate;
+		if (!resultsDate || !data) return;
+		const date = resultsDate;
+		const today = date === data.scheduleDate;
 		const games = data.gamesList;
 
 		let stopped = false;
@@ -391,14 +412,17 @@ function App() {
 		let first = true;
 		// The day's scores as this effect last read them
 		let latest: DataProcessor.DayScores | null = null;
+		const inPlay = (now: number): boolean => today
+			? DataProcessor.scoresInPlay(games, latest, now)
+			: latest !== null && DataProcessor.scoresFollowed(latest, now);
 		const check = async () => {
 			if (loading || document.visibilityState !== 'visible') return;
-			if (!first && !DataProcessor.scoresInPlay(games, latest, Date.now())) return;
+			if (!first && !inPlay(Date.now())) return;
 			first = false;
 			loading = true;
-			const loaded = await DataProcessor.loadScores();
+			const loaded = await DataProcessor.loadScores(date);
 			loading = false;
-			if (stopped || loaded?.date !== date) return;
+			if (stopped || !loaded) return;
 			latest = loaded;
 			setScores(loaded);
 		};
@@ -411,9 +435,10 @@ function App() {
 			window.clearInterval(timer);
 			document.removeEventListener('visibilitychange', check);
 		};
-	}, [historyEnabled, passed, data]);
-	// The history's tables show the scores, and only for the day they hold
+	}, [resultsDate, data]);
+	// The history's tables show the loaded day's scores, and the my-picks table its own day's
 	const shownScores = historyEnabled && passed !== null && scores?.date === data?.scheduleDate ? scores : null;
+	const myPicksScores = resultsDate !== null && scores?.date === resultsDate ? scores : null;
 
 	// Initialize sort configs - use ref to avoid recreating
 	const sortConfig1Ref = useRef<Picks.SortConfig>({ keyOrder: [] });
@@ -773,6 +798,29 @@ function App() {
 	// worth showing as context for a problem
 	const lockedOnly = dayLocked && !bannerProblem;
 
+	// The loaded day's marked picks, which mark their rows in the lists
+	const todaysPicks = historyEnabled && scheduleDate !== null ? entered.days[scheduleDate] : undefined;
+	// A name marks a pick only in the loaded day's own lists, not in an earlier day's left up until its first draw posts
+	const markable = historyEnabled && scheduleDate !== null && !dataStatus?.earlierDraw;
+	const enterPick = (table: EnteredPicks.PickTable) => !markable || scheduleDate === null ? undefined : (player: Picks.Player) => {
+		setEntered(EnteredPicks.toggle(scheduleDate, table, {
+			playerId: player.playerId,
+			name: player.fullName,
+			team: player.team.code,
+			logoLight: player.logoLight,
+			logoDark: player.logoDark,
+		}));
+	};
+
+	// The my-picks table due now, which shows unless it's the one last closed, or null when its day has no picks
+	const myPicksDay = resultsDate !== null ? entered.days[resultsDate] : undefined;
+	const myPicksKey = resultsDate !== null ? EnteredPicks.tableKey(resultsDate, resultsToday) : null;
+	const myPicksShown = myPicksDay && myPicksKey !== null ? entered.closed !== myPicksKey : null;
+	const setMyPicksShown = (shown: boolean) => {
+		if (myPicksKey === null) return;
+		setEntered(EnteredPicks.setClosed(shown ? null : myPicksKey));
+	};
+
 	const includeCorrelationSlider = false;
 	return (
 		<>
@@ -847,6 +895,8 @@ function App() {
 							onXgEnabledChange={setXgEnabled}
 							historyEnabled={historyEnabled}
 							onHistoryEnabledChange={setHistoryEnabled}
+							myPicksShown={myPicksShown}
+							onMyPicksShownChange={setMyPicksShown}
 							playersTableEnabled={playersTableEnabled}
 							onPlayersTableEnabledChange={setPlayersTableEnabled}
 						/>
@@ -898,6 +948,10 @@ function App() {
 					</section>
 				)}
 
+				{myPicksShown && myPicksDay && resultsDate !== null && (
+					<MyPicks date={resultsDate} today={resultsToday} loadedDate={scheduleDate} picks={myPicksDay} scores={myPicksScores} darkTheme={darkTheme} onClose={() => setMyPicksShown(false)} />
+				)}
+
 				<CollapsibleSection title="Games">
 					<div className="scrollable-table-wrapper section-container">
 						{lockedOut ? (
@@ -914,7 +968,7 @@ function App() {
 						{lockedOut ? (
 							<div className="no-games-message">Picks are locked</div>
 						) : (
-							<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} />
+							<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} entered={todaysPicks?.[1]?.playerId ?? null} onEnter={enterPick(1)} />
 						)}
 					</div>
 				</CollapsibleSection>
@@ -923,7 +977,7 @@ function App() {
 						{lockedOut ? (
 							<div className="no-games-message">Picks are locked</div>
 						) : (
-							<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} />
+							<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} entered={todaysPicks?.[2]?.playerId ?? null} onEnter={enterPick(2)} />
 						)}
 					</div>
 				</CollapsibleSection>
@@ -932,7 +986,7 @@ function App() {
 						{lockedOut ? (
 							<div className="no-games-message">Picks are locked</div>
 						) : (
-							<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} />
+							<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} entered={todaysPicks?.[3]?.playerId ?? null} onEnter={enterPick(3)} />
 						)}
 					</div>
 				</CollapsibleSection>

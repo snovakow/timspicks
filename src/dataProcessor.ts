@@ -65,7 +65,7 @@ export interface SportsbookOddsItem {
 	odds: number;
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => {
+export const isRecord = (value: unknown): value is Record<string, unknown> => {
 	return typeof value === 'object' && value !== null;
 };
 
@@ -386,7 +386,7 @@ const loadRoster = async (): Promise<RawPlayerJson[]> => {
 };
 
 /*
-	A day's goal scorers as scores.json holds them: who has scored, and the teams whose game is over, which
+	A day's goal scorers as its scores file holds them: who has scored, and the teams whose game is over, which
 	is what tells a player who didn't score from one who hasn't yet. The scorers are those with a goal the
 	contest counts, so none from a shootout.
 */
@@ -398,21 +398,24 @@ export interface DayScores {
 	over: ReadonlySet<string>;
 	// The teams whose game needs no further fetch: called official, or off its normal schedule
 	settled: ReadonlySet<string>;
+	// The starts, in ms, of the games still to settle, which is how a day the page has no schedule for is followed
+	following: readonly number[];
 }
 
 // How long after its start a game is followed when it is never called official, as the cron follows it
 const SCORES_FOLLOW_MS = 8 * 60 * 60 * 1000;
 
-// The scores file, or null when it's missing or malformed: the tables are whole without it
-export const loadScores = async (): Promise<DayScores | null> => {
+// A day's scores file, or null when it's missing, malformed or for another day: the tables are whole without it
+export const loadScores = async (date: string): Promise<DayScores | null> => {
 	let value: unknown;
-	try { value = await (await fetchData('./data/scores.json')).json(); }
+	try { value = await (await fetchData(`./data/${date}/scores.json`)).json(); }
 	catch { return null; }
-	if (!isRecord(value) || typeof value.date !== 'string' || !Array.isArray(value.games)) return null;
+	if (!isRecord(value) || value.date !== date || !Array.isArray(value.games)) return null;
 
 	const scorers = new Set<number>();
 	const over = new Set<string>();
 	const settled = new Set<string>();
+	const following: number[] = [];
 	for (const game of value.games) {
 		if (!isRecord(game) || typeof game.away !== 'string' || typeof game.home !== 'string') return null;
 		const official = game.state === 'OFF';
@@ -420,10 +423,12 @@ export const loadScores = async (): Promise<DayScores | null> => {
 			if (official || game.state === 'FINAL') over.add(team);
 			if (official || game.schedule !== 'OK') settled.add(team);
 		}
+		const start = typeof game.start === 'string' ? Date.parse(game.start) : NaN;
+		if (!official && game.schedule === 'OK' && !isNaN(start)) following.push(start);
 		if (!Array.isArray(game.scorers)) return null;
 		for (const playerId of game.scorers) if (typeof playerId === 'number') scorers.add(playerId);
 	}
-	return { date: value.date, scorers, over, settled };
+	return { date, scorers, over, settled, following };
 };
 
 // True while a game's scores can still change: started, not settled, and within the time a game is followed
@@ -433,6 +438,12 @@ export const scoresInPlay = (games: Picks.GameData[], scores: DayScores | null, 
 		const start = game.time.getTime();
 		return start <= now && now < start + SCORES_FOLLOW_MS && !scores?.settled.has(game.home.code);
 	});
+};
+
+// The same for a day the page holds no schedule for, from the starts its own scores file gives, as the cron
+// follows it
+export const scoresFollowed = (scores: DayScores, now: number): boolean => {
+	return scores.following.some((start) => start <= now && now < start + SCORES_FOLLOW_MS);
 };
 
 /*

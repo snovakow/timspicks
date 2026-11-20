@@ -74,6 +74,47 @@ tr {
 	opacity: 0.4;
 }
 
+/* The pick entered in the contest's own app, marked by its name. The tint sits on the row and the bar on
+   the name's cell, which a greyed row leaves at full strength, and the name keeps its strength there too:
+   a started game's pick is the one whose result is watched */
+.row-entered {
+	background-color: var(--entered-tint);
+}
+
+.row-entered > .cell-name {
+	box-shadow: inset 0.25em 0 0 var(--entered-accent);
+}
+
+.row-started.row-entered .cell-player {
+	opacity: 1;
+}
+
+/* A name that marks its row: laid out as the plain name, with the row's full height to tap */
+.cell-enter {
+	margin: -0.5em -0.25em;
+	padding: 0.5em 0.25em;
+	border: none;
+	border-radius: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	letter-spacing: inherit;
+	text-align: inherit;
+	text-rendering: inherit;
+	white-space: nowrap;
+}
+
+@media (hover: hover) {
+	.cell-enter:hover {
+		text-decoration: underline;
+	}
+}
+
+.cell-enter:focus-visible {
+	outline: 2px solid var(--entered-accent);
+	outline-offset: -2px;
+}
+
 /* A player's goal mark, at the end of his name's cell */
 .cell-goal {
 	flex: none;
@@ -156,6 +197,9 @@ td {
 
 :root {
 	--highlight-top-bg: rgb(170, 235, 170);
+
+	--entered-accent: light-dark(rgb(37, 99, 235), rgb(96, 165, 250));
+	--entered-tint: light-dark(rgba(37, 99, 235, 0.12), rgba(96, 165, 250, 0.16));
 
 	--highlight-least1-dot: rgb(31, 157, 85);
 	--highlight-points-dot: rgb(74, 123, 192);

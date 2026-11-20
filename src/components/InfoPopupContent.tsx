@@ -84,6 +84,12 @@ export default function InfoPopupContent() {
 					With it on, a check marks each player who has scored, and a cross each player whose game ended without a goal.
 					A player with neither hasn't scored yet in a game that isn't over. The marks update each minute, and a shootout goal doesn't count.
 				</p>
+				<p>
+					Tapping or clicking a player's name in a pick table marks him as your pick, one in each table, and doing it again clears the mark.
+					Your picks are kept in this browser only. Once a game has started they are listed above the tables as <strong>Today's Picks</strong>,
+					and the next day, until its first game starts, as <strong>Yesterday's Picks</strong>, so a late game's result still shows after midnight.
+					Closing the list hides it, and <strong>Show My Picks</strong> in the <strong>Settings</strong> brings it back.
+				</p>
 			</section>
 
 			{Feature.correlation && (
