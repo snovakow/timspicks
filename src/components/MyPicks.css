@@ -1,21 +1,29 @@
-/* The marked picks above the lists, framed in the colour that marks their rows there. The page's content is a
-   column of fixed height, which would shrink a box that clips its overflow to nothing once the page is longer */
+/* The marked picks above the lists, framed and ruled in the colour that marks their rows there. The page's
+   content is a column of fixed height, which would shrink a box that clips its overflow to nothing once the
+   page is longer. Right under the header, it sits midway between the header and the first section's title,
+   whose own padding adds to the margin below */
 .my-picks {
 	flex: none;
 	align-self: center;
 	max-width: 100%;
 	box-sizing: border-box;
-	margin: 0 0 1rem;
+	margin: 2.75rem 0 1rem;
 	border: 1px solid var(--entered-accent);
 	border-radius: 12px;
 	background: var(--entered-tint);
 	overflow: hidden;
 }
 
+/* A banner above it already spaces it from the header */
+.status-banner + .my-picks,
+.offseason-banner + .my-picks {
+	margin-top: 0;
+}
+
 .my-picks-header {
 	position: relative;
 	padding: 0.4rem 2.5rem;
-	border-bottom: 1px solid color-mix(in srgb, var(--entered-accent) 40%, transparent);
+	border-bottom: 1px solid var(--entered-accent);
 }
 
 .my-picks-title {
@@ -56,6 +64,10 @@
 .my-picks-table {
 	border: none;
 	margin: 0 auto;
+}
+
+.my-picks-table tr {
+	border-bottom-color: var(--entered-accent);
 }
 
 .my-picks-table tr:last-child {
