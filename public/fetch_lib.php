@@ -168,6 +168,18 @@ function scoreInPlay(array $game, int $nowTime)
 	return ($game['state'] ?? null) !== 'OFF';
 }
 
+/* True for a day whose scores can't change any more: it has games, and each one was called official or is off its
+   normal schedule */
+function scoresSettled(array $games)
+{
+	if (!$games) return false;
+	foreach ($games as $game) {
+		if (!is_array($game)) return false;
+		if (($game['schedule'] ?? 'OK') === 'OK' && ($game['state'] ?? null) !== 'OFF') return false;
+	}
+	return true;
+}
+
 /* A day's games as its schedule lists them, which have no state yet: from the schedule file while it holds
    that day, and after that from the copy saved with the day's snapshots */
 function scheduledScores(string $basePath, string $date)
@@ -185,10 +197,51 @@ function scheduledScores(string $basePath, string $date)
 	return [];
 }
 
+/* A day's scores file, or null when it's missing, unreadable or for another day */
+function savedScores(string $basePath, string $date)
+{
+	$saved = json_decode((string)@file_get_contents("$basePath/$date/scores.json"), true);
+	return is_array($saved) && ($saved['date'] ?? null) === $date && is_array($saved['games'] ?? null) ? $saved : null;
+}
+
+/* True for a scores file the archive can keep: one that records the day's season and format, which files written
+   before the archive began to read them leave out, and whose games are all settled */
+function scoresFinal(?array $saved)
+{
+	return $saved !== null && array_key_exists('format', $saved) && scoresSettled($saved['games']);
+}
+
+/* The days whose folder holds at least one snapshot, oldest first */
+function snapshotDays(string $basePath)
+{
+	$days = [];
+	foreach (@scandir($basePath) ?: [] as $date) {
+		if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) continue;
+		foreach (@scandir("$basePath/$date") ?: [] as $slot) {
+			if (!preg_match('/^\d{4}$/', $slot) || !is_file("$basePath/$date/$slot/helper.json")) continue;
+			$days[] = $date;
+			break;
+		}
+	}
+	return $days;
+}
+
+/* Write a file whole: into a temporary file of this process's own, then renamed over it, so a reader never sees it
+   half written and two writers at once never share a temporary file */
+function swapInFile(string $local_file, string $contents)
+{
+	$temp_file = "$local_file." . getmypid() . '.tmp';
+	if (@file_put_contents($temp_file, $contents, LOCK_EX) === false) return false;
+	if (@rename($temp_file, $local_file)) return true;
+	@unlink($temp_file);
+	return false;
+}
+
 /*
-	Each day's goal scorers, for the page to mark who has scored: <day>/scores.json holds each of that day's
-	games with its state and the players credited with a goal in regulation or overtime. The contest doesn't
-	count a shootout goal, and the feed lists a shootout's deciding goal with the rest, so those are left out.
+	Each day's goal scorers, for the page to mark who has scored and for the archive's replays to score each
+	pick: <day>/scores.json holds the day's season and format, and each of its games with its state and the
+	players credited with a goal in regulation or overtime. The contest doesn't count a shootout goal, and the
+	feed lists a shootout's deciding goal with the rest, so those are left out.
 
 	The cron calls this every minute, ahead of the gate that spaces its runs, since goals come in while no
 	run is due and after the day's last start no run comes at all. A day is fetched only while one of its
@@ -196,7 +249,11 @@ function scheduledScores(string $basePath, string $date)
 	ends, so a goal credited to another player on review still lands. Yesterday is looked at as well as
 	today, which sees games still going at midnight through, and no game is followed long enough to reach
 	further back. Each day's fetch writes only that day's file, so nothing a later day does can replace an
-	earlier day's scores. $force fetches today with nothing in play, for the admin page.
+	earlier day's scores.
+
+	A day joins the archive through its index, days.json, which the fetch that finds the day's last game
+	official rebuilds. $force is the admin page's Update: it fetches today with nothing in play, fills in
+	earlier days whose scores aren't final, and rebuilds the index whatever happened.
 
 	A failed fetch, or a reply that isn't the day asked for, leaves that day's file as it was. A file is
 	swapped in whole, since the page reads it while games are on.
@@ -212,17 +269,31 @@ function updateScores(DateTime $now, string $basePath, bool $force = false)
 
 	$written = [];
 	$errors = [];
+	$settled = false;
 	foreach ([$yesterday, $today] as $date) {
-		$local_file = "$basePath/$date/scores.json";
-
 		// A day's file holds its games' states, and until its first fetch they come from its schedule
-		$saved = is_file($local_file) ? json_decode((string)@file_get_contents($local_file), true) : null;
-		$games = is_array($saved) && ($saved['date'] ?? null) === $date && is_array($saved['games'] ?? null) ? $saved['games'] : scheduledScores($basePath, $date);
+		$games = savedScores($basePath, $date)['games'] ?? scheduledScores($basePath, $date);
 		if (!$inPlay($games) && !($force && $date === $today)) continue;
 
-		$result = fetchScores($now, $date, $local_file);
-		if ($result['error'] !== null) $errors[] = $result['error'];
-		else $written[] = $result['content'];
+		$result = fetchScores($now, $date, "$basePath/$date/scores.json");
+		if ($result['error'] !== null) {
+			$errors[] = $result['error'];
+			continue;
+		}
+		$written[] = $result['content'];
+		if ($result['settled']) $settled = true;
+	}
+
+	if ($force) {
+		$filled = fillScores($now, $basePath);
+		if ($filled['written']) $written[] = 'Earlier days filled: ' . implode(', ', $filled['written']);
+		if ($filled['left']) $written[] = $filled['left'] . ($filled['left'] === 1 ? ' earlier day' : ' earlier days') . ' left for the next Update';
+		$errors = array_merge($errors, $filled['errors']);
+	}
+	if ($settled || $force) {
+		$indexed = writeScoreDays($basePath);
+		if ($indexed['error'] !== null) $errors[] = $indexed['error'];
+		else $written[] = $indexed['content'];
 	}
 
 	if ($written) $output['content'] = implode('; ', $written);
@@ -230,15 +301,17 @@ function updateScores(DateTime $now, string $basePath, bool $force = false)
 	return $output;
 }
 
-/* One day's fetch from the score feed into that day's file, creating the day's folder when no snapshot has yet */
+/* One day's fetch from the score feed into that day's file, creating the day's folder when no snapshot has yet.
+   The feed keeps every past day, so any day can be fetched again. settled says whether all its games are */
 function fetchScores(DateTime $now, string $date, string $local_file)
 {
-	$output = ['content' => null, 'error' => null];
+	$output = ['content' => null, 'error' => null, 'settled' => false, 'status' => null];
 
 	$url = "https://api-web.nhle.com/v1/score/$date";
 	$ch = curl_init($url);
 	curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 5]);
 	$fetched = fetchCurl($ch, $url);
+	$output['status'] = $fetched['status'];
 	if ($fetched['error'] !== null) {
 		$output['error'] = $fetched['error'];
 		return $output;
@@ -251,6 +324,8 @@ function fetchScores(DateTime $now, string $date, string $local_file)
 	}
 
 	$games = [];
+	$season = null;
+	$format = null;
 	foreach ($data['games'] as $game) {
 		$away = $game['awayTeam']['abbrev'] ?? null;
 		$home = $game['homeTeam']['abbrev'] ?? null;
@@ -273,6 +348,13 @@ function fetchScores(DateTime $now, string $date, string $local_file)
 			'state' => $game['gameState'],
 			'scorers' => array_keys($scorers),
 		];
+
+		// The day's season and format, from its first regular season or playoff game; a day of neither has none
+		$type = (int)($game['gameType'] ?? 0);
+		if ($format === null && ($type === 2 || $type === 3) && preg_match('/^(\d{4})(\d{4})$/', (string)($game['season'] ?? ''), $match)) {
+			$season = "{$match[1]}-{$match[2]}";
+			$format = $type === 2 ? 'regular' : 'playoff';
+		}
 	}
 
 	$folder = dirname($local_file);
@@ -281,14 +363,79 @@ function fetchScores(DateTime $now, string $date, string $local_file)
 		return $output;
 	}
 
-	$json = json_encode(['date' => $date, 'updated' => $now->format(DateTime::ATOM), 'games' => $games], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-	$temp_file = "$local_file.tmp";
-	if ($json === false || @file_put_contents($temp_file, $json, LOCK_EX) === false || !@rename($temp_file, $local_file)) {
+	$json = json_encode(['date' => $date, 'season' => $season, 'format' => $format, 'updated' => $now->format(DateTime::ATOM), 'games' => $games], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+	if ($json === false || !swapInFile($local_file, $json)) {
 		$output['error'] = 'Error saving local JSON file: ' . $local_file;
 		return $output;
 	}
 	$output['content'] = "Data has been written to $local_file";
+	$output['settled'] = scoresSettled($games);
 	return $output;
+}
+
+/* The pause between two of the fill's fetches, in seconds: the score feed answers a quick run of them with HTTP
+   429, and the cron's own fetches go to the same host */
+const SCORES_FILL_PAUSE = 0.25;
+
+/*
+	Each earlier day with a snapshot whose scores aren't final, fetched again: one the cron missed while its games
+	were on, or one written before scores files recorded their season and format. A day still in play is left to
+	the cron. Newest first, until $budget seconds have gone, so one call stays well inside the web server's
+	timeout, and what's left waits for the next call. A feed that is down or asking for a pause would answer every
+	day alike, so the first such reply leaves the rest for the next call too. A fetch that still finds a game
+	unsettled is reported, since that day stays out of the archive until one doesn't.
+*/
+function fillScores(DateTime $now, string $basePath, float $budget = 5.0)
+{
+	$began = microtime(true);
+	$nowTime = $now->getTimestamp();
+	$today = $now->format('Y-m-d');
+	$output = ['written' => [], 'errors' => [], 'left' => 0];
+
+	$fetches = 0;
+	$stopped = false;
+	foreach (array_reverse(snapshotDays($basePath)) as $date) {
+		if ($date >= $today) continue;
+		$saved = savedScores($basePath, $date);
+		if (scoresFinal($saved)) continue;
+		$games = $saved['games'] ?? scheduledScores($basePath, $date);
+		if (array_filter($games, fn($game) => is_array($game) && scoreInPlay($game, $nowTime))) continue;
+		if ($stopped || microtime(true) - $began >= $budget) {
+			$output['left']++;
+			continue;
+		}
+
+		if ($fetches++) usleep((int)(SCORES_FILL_PAUSE * 1000000));
+		$result = fetchScores($now, $date, "$basePath/$date/scores.json");
+		if ($result['error'] !== null) {
+			$output['errors'][] = $result['error'];
+			$status = $result['status'];
+			if ($status === null || $status === 429 || $status >= 500) {
+				$stopped = true;
+				$output['left']++;
+			}
+		} else if (!$result['settled']) $output['errors'][] = "A game on $date isn't official yet, so that day stays out of the archive";
+		else $output['written'][] = $date;
+	}
+	return $output;
+}
+
+/* The archive's index, days.json: every day with a snapshot and final scores from regular season or playoff games,
+   oldest first, with its season and format. It's rebuilt whole from the day folders each time, so one rebuild puts
+   right anything an earlier one missed */
+function writeScoreDays(string $basePath)
+{
+	$days = [];
+	foreach (snapshotDays($basePath) as $date) {
+		$saved = savedScores($basePath, $date);
+		if (!scoresFinal($saved) || !is_string($saved['season'] ?? null) || !in_array($saved['format'], ['regular', 'playoff'], true)) continue;
+		$days[] = ['date' => $date, 'season' => $saved['season'], 'format' => $saved['format']];
+	}
+
+	$local_file = "$basePath/days.json";
+	$json = json_encode($days, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+	if ($json === false || !swapInFile($local_file, $json)) return ['content' => null, 'error' => 'Error saving local JSON file: ' . $local_file];
+	return ['content' => 'Archive index written with ' . count($days) . (count($days) === 1 ? ' day' : ' days'), 'error' => null];
 }
 
 /* Cached player data is refreshed when missing or when the player changes teams */
@@ -389,27 +536,6 @@ function nhlPlayerId(CurlHandle $ch, string $firstName, string $lastName, string
 	$resolved = resolvePlayerId($ch, $firstName, $lastName, $team);
 	$note = $resolved['id'] ? "resolved missing player id to {$resolved['id']} ({$resolved['detail']})" : "missing player id, {$resolved['detail']}";
 	return ['id' => $resolved['id'], 'note' => $note];
-}
-
-/* Give a history file's players the ids the picks fetch uses, so history files match the helper.json backups */
-function fixHistoryPlayerIds(CurlHandle $ch, object $history)
-{
-	$result = ['changed' => 0, 'notes' => []];
-	foreach ($history->playerLists ?? [] as $list) {
-		foreach ($list->players ?? [] as $player) {
-			[$firstName, $lastName] = array_pad(explode(' ', trim((string)($player->fullName ?? '')), 2), 2, '');
-			$team = (string)($player->team ?? '');
-			$helperId = abs((int)($player->nhlPlayerId ?? 0));
-
-			$fixed = nhlPlayerId($ch, $firstName, $lastName, $team, $helperId);
-			if ($fixed['note']) $result['notes'][] = "$firstName $lastName ($team): {$fixed['note']}";
-			if ($fixed['id'] && $fixed['id'] !== $helperId) {
-				$player->nhlPlayerId = $fixed['id'];
-				$result['changed']++;
-			}
-		}
-	}
-	return $result;
 }
 
 /* Picks */

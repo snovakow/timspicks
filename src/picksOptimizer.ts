@@ -86,23 +86,23 @@ export const correlatedValue = (
 	return exactly1 * PointsByHits[1] + exactly2 * PointsByHits[2] + p123 * PointsByHits[3];
 };
 
-interface HistoryPlayer {
-	"nhlPlayerId": number;
-	"fullName": string;
-	"team": string;
-	"opponent": string;
-	"scored": boolean;
-	"note": string;
-	"availableTimes": string[];
+// An archived day as the server's index of the archive lists it: a day with a snapshot and final scores
+interface ArchiveDay {
+	date: string;
+	season: string;
+	format: ItemFormat;
 }
 
-interface HistoryManifestItem {
-	season: string;
-	format: string;
-	start: string;
-	end: string;
-	files: string[];
+// An archived day's results, from its scores file: who scored, and each team's opponent in a game played on its
+// schedule. A pick counts as scored when its player's id is among the scorers
+interface DayResults {
+	scorers: ReadonlySet<number>;
+	opponents: ReadonlyMap<string, string>;
 }
+
+// A snapshot's pick lists as the cron saved them, each entry with the team the pick-list feed gave it, and when the
+// feed drew them
+type SnapshotLists = Record<PickGroup, Array<Picks.OddsItem & { team: string }>> & { dateTimeAvailable?: string };
 
 type PickGroup = '1' | '2' | '3';
 const AllPickGroup: PickGroup[] = ['1', '2', '3'];
@@ -238,6 +238,46 @@ const fetchOptionalJson = async <T>(src: string): Promise<T | null> => {
 	}
 };
 
+// The archived days, oldest first, as the server's index lists them: each day with a snapshot whose scores are
+// final, from the first day snapshots were kept
+const loadArchiveDays = async (formatFilter: Format = 'all'): Promise<ArchiveDay[]> => {
+	const days = await fetchJson<ArchiveDay[]>('./data/days.json');
+	const oldestDate = new Date("2026-04-09"); // Oldest recorded backup date
+	return days.filter((day) => {
+		const date = new Date(day.date);
+		return !isNaN(date.valueOf()) && date >= oldestDate && (formatFilter === 'all' || day.format === formatFilter);
+	});
+};
+
+// An archived day's results from its scores file. A game off its schedule gives no opponent, so its players have
+// no game that day
+const loadDayResults = async (date: string): Promise<DayResults> => {
+	const scores = await fetchJson<{
+		date: string;
+		games: Array<{ away: string; home: string; schedule: string; scorers: number[] }>;
+	}>(`./data/${date}/scores.json`);
+	if (scores.date !== date) throw new Error(`The scores file for ${date} holds ${scores.date}`);
+
+	const scorers = new Set<number>();
+	const opponents = new Map<string, string>();
+	for (const game of scores.games) {
+		for (const playerId of game.scorers) scorers.add(playerId);
+		if (game.schedule !== 'OK') continue;
+		opponents.set(game.away, game.home);
+		opponents.set(game.home, game.away);
+	}
+	return { scorers, opponents };
+};
+
+// A snapshot's lists, unless the feed drew them on an earlier day: a snapshot keeps those when the day's first draw
+// posts late, and that day's results say nothing about them
+const loadSnapshotLists = async (date: string, folder: string): Promise<SnapshotLists | null> => {
+	const helper = await fetchOptionalJson<SnapshotLists>(`${folder}/helper.json`);
+	if (!helper) return null;
+	if (typeof helper.dateTimeAvailable === 'string' && helper.dateTimeAvailable.slice(0, 10) !== date) return null;
+	return helper;
+};
+
 const getGameStartTimeGroups = async (date: string): Promise<string[]> => {
 	const data = await fetchOptionalJson<{
 		gameWeek: Array<{
@@ -265,27 +305,17 @@ const createAuditBuckets = (): Record<LogStatsKey, AccumulateOutcome> => (
 	Object.fromEntries(LogStatsKeys.map((key) => [key, new AccumulateOutcome()])) as Record<LogStatsKey, AccumulateOutcome>
 );
 
-const countGamesFromHelper = (
-	helper: Record<PickGroup, Picks.OddsItem[]>,
-	playerSets: Map<string, Map<number, HistoryPlayer>>
-): number => {
+const countGamesFromHelper = (helper: SnapshotLists, opponents: ReadonlyMap<string, string>): number => {
 	const teams = new Set<string>();
 	let gameCount = 0;
 
 	for (const sid of AllPickGroup) {
-		const outcomes = playerSets.get(sid);
-		if (!outcomes) continue;
-
 		for (const item of helper[sid] ?? []) {
-			const player = outcomes.get(item.playerId);
-			if (!player) {
-				console.error("Player not found:", item);
-				continue;
-			}
-			if (teams.has(player.team)) continue;
+			const opponent = opponents.get(item.team);
+			if (opponent === undefined || teams.has(item.team)) continue;
 
-			teams.add(player.team);
-			teams.add(player.opponent);
+			teams.add(item.team);
+			teams.add(opponent);
 			gameCount++;
 		}
 	}
@@ -426,36 +456,14 @@ export const runHistoricalStrategyAudit = async (
 		formatFilter = 'all',
 	} = options;
 
-	const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
-	const oldestDate = new Date("2026-04-09"); // Oldest recorded backup date
-	const historyByDate = new Map<string, string>();
-	for (const item of historyManifest) {
-		if (formatFilter !== 'all' && item.format !== formatFilter) continue;
-
-		for (const file of item.files) {
-			const components = file.split('_');
-			if (components.length !== 3) continue;
-			const name = components[1];
-			const date = new Date(name);
-			if (isNaN(date.valueOf())) continue;
-			if (date < oldestDate) continue;
-			historyByDate.set(name, file);
-		}
-	}
+	const archiveDays = await loadArchiveDays(formatFilter);
 
 	const stats = createAuditBuckets();
 	const daysWithSlots = new Set<string>();
 
-	for (const [date, historyFile] of historyByDate) {
+	for (const { date } of archiveDays) {
 		try {
-			const history = await fetchJson<{
-				playerLists: Array<{ id: number; players: HistoryPlayer[] }>;
-			}>(`./history/${historyFile}`);
-
-			const playerSets = new Map<string, Map<number, HistoryPlayer>>();
-			for (const list of history.playerLists) {
-				playerSets.set(String(list.id), new Map(list.players.map((player) => [Math.abs(player.nhlPlayerId), player])));
-			}
+			const results = await loadDayResults(date);
 
 			const gameStartTimes = await getGameStartTimeGroups(date);
 
@@ -465,7 +473,7 @@ export const runHistoricalStrategyAudit = async (
 					const folderTime = gameStartTimes[slotIndex];
 
 					const folder = `./data/${date}/${folderTime}`;
-					const helper = await fetchOptionalJson<Record<PickGroup, Picks.OddsItem[]>>(`${folder}/helper.json`);
+					const helper = await loadSnapshotLists(date, folder);
 					if (!helper) continue;
 
 					// A book without a file in this window prices no one there, as an empty one would
@@ -482,13 +490,10 @@ export const runHistoricalStrategyAudit = async (
 
 					const rows: SnapshotOddsRow[] = [];
 					for (const sid of AllPickGroup) {
-						const outcomes = playerSets.get(sid);
-						if (!outcomes) continue;
-
 						for (const item of helper[sid] ?? []) {
-							const player = outcomes.get(item.playerId);
-							if (!player) {
-								console.error("Player not found:", item);
+							const opponent = results.opponents.get(item.team);
+							if (opponent === undefined) {
+								console.error("No game that day for the player's team:", item);
 								continue;
 							}
 
@@ -510,9 +515,9 @@ export const runHistoricalStrategyAudit = async (
 							rows.push(new SnapshotOddsRow({
 								sid,
 								id: item.playerId,
-								team: player.team,
-								opponent: player.opponent,
-								scored: player.scored,
+								team: item.team,
+								opponent,
+								scored: results.scorers.has(item.playerId),
 								prices,
 								betAvg: null,
 								betCount: 0,
@@ -537,7 +542,7 @@ export const runHistoricalStrategyAudit = async (
 					}
 
 					// Mirror gamesCount by deduping games from helper teams only.
-					const helperGameCount = countGamesFromHelper(helper, playerSets);
+					const helperGameCount = countGamesFromHelper(helper, results.opponents);
 					const gameCount = helperGameCount;
 					if (gameCount === 0) continue;
 
@@ -1646,35 +1651,14 @@ const fitPairLifts = (days: string[], playersByDay: PlayerDay[][]): PairLifts =>
 }
 
 export const runSimulation = async (minSportsbooks: number): Promise<PairLifts> => {
-	const historyManifest = await fetchJson<HistoryManifestItem[]>('./history/history.json');
-	const oldestDate = new Date("2026-04-09");
-	const historyByDate = new Map<string, string>();
-
-	for (const item of historyManifest) {
-		for (const file of item.files) {
-			const components = file.split('_');
-			if (components.length !== 3) continue;
-			const name = components[1];
-			const date = new Date(name);
-			if (isNaN(date.valueOf())) continue;
-			if (date < oldestDate) continue;
-			historyByDate.set(name, file);
-		}
-	}
+	const archiveDays = await loadArchiveDays();
 
 	const days: string[] = [];
 	const playersByDay: PlayerDay[][] = [];
 
-	for (const [date, historyFile] of historyByDate) {
+	for (const { date } of archiveDays) {
 		try {
-			const history = await fetchJson<{
-				playerLists: Array<{ id: number; players: HistoryPlayer[] }>;
-			}>(`./history/${historyFile}`);
-
-			const playerSets = new Map<string, Map<number, HistoryPlayer>>();
-			for (const list of history.playerLists) {
-				playerSets.set(String(list.id), new Map(list.players.map((player) => [Math.abs(player.nhlPlayerId), player])));
-			}
+			const results = await loadDayResults(date);
 
 			const gameStartTimes = await getGameStartTimeGroups(date);
 
@@ -1684,7 +1668,7 @@ export const runSimulation = async (minSportsbooks: number): Promise<PairLifts> 
 					const folderTime = gameStartTimes[slotIndex];
 					const folder = `./data/${date}/${folderTime}`;
 
-					const helper = await fetchOptionalJson<Record<PickGroup, Picks.OddsItem[]>>(`${folder}/helper.json`);
+					const helper = await loadSnapshotLists(date, folder);
 					if (!helper) continue;
 
 					// A book without a file in this window prices no one there, as an empty one would
@@ -1701,13 +1685,10 @@ export const runSimulation = async (minSportsbooks: number): Promise<PairLifts> 
 
 					const rows: SnapshotOddsRow[] = [];
 					for (const sid of AllPickGroup) {
-						const outcomes = playerSets.get(sid);
-						if (!outcomes) continue;
-
 						for (const item of helper[sid] ?? []) {
-							const player = outcomes.get(item.playerId);
-							if (!player) {
-								console.error("Player not found:", item);
+							const opponent = results.opponents.get(item.team);
+							if (opponent === undefined) {
+								console.error("No game that day for the player's team:", item);
 								continue;
 							}
 
@@ -1729,9 +1710,9 @@ export const runSimulation = async (minSportsbooks: number): Promise<PairLifts> 
 							rows.push(new SnapshotOddsRow({
 								sid,
 								id: item.playerId,
-								team: player.team,
-								opponent: player.opponent,
-								scored: player.scored,
+								team: item.team,
+								opponent,
+								scored: results.scorers.has(item.playerId),
 								prices,
 								betAvg: null,
 								betCount: 0,
@@ -1753,7 +1734,7 @@ export const runSimulation = async (minSportsbooks: number): Promise<PairLifts> 
 							: null;
 					}
 
-					const gameCount = countGamesFromHelper(helper, playerSets);
+					const gameCount = countGamesFromHelper(helper, results.opponents);
 					if (gameCount === 0) continue;
 
 					const set1 = rows.filter((row) => row.sid === '1' && row.betAvg !== null && row.betCount >= minSportsbooks);

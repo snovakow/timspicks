@@ -22,7 +22,6 @@ $csrfToken = $_SESSION['csrf_token'];
 	<div id="form">
 		<select id="option">
 			<option value="update">Update</option>
-			<option value="history">History</option>
 		</select>
 		<input type="text" id="name" />
 		<input type="password" id="input" />
