@@ -15,8 +15,8 @@ App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hor
 - [History and the correlation lifts](docs/history-and-correlation.md) — how the
   archive and the fitted correlation lifts are regenerated, in what order, why
   a run can come out byte-identical, and which archived prices were backfilled
-- [Changelog](CHANGELOG.md) — the release notes: what each version changed for
-  the people who use the app, newest first
+- [Changelog](CHANGELOG.md) — the release notes: what each version offers the
+  people who use the app, newest first
 
 ## Skills
 
