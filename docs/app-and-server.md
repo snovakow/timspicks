@@ -342,7 +342,7 @@ a reload. Only goals the contest counts are marked, so a shootout goal isn't one
 The score feed lists a shootout's deciding goal with the rest, and the scores
 step leaves it out.
 
-With the Show My Picks setting on, a player's name in each of the three pick
+With the My Picks setting on, a player's name in each of the three pick
 tables also marks his row as the pick entered in the contest's own app: one row a
 table, moved by marking another and cleared by marking it again. The setting
 stands apart from the history, which only adds rows to mark: a started game's and

@@ -15,7 +15,7 @@ interface SettingsPanelProps {
 	onXgEnabledChange: (value: boolean) => void;
 	historyEnabled: boolean;
 	onHistoryEnabledChange: (value: boolean) => void;
-	// Show My Picks: the marked picks in the pick tables and the my-picks table
+	// My Picks: the marked picks in the pick tables and the my-picks table
 	myPicksEnabled: boolean;
 	onMyPicksEnabledChange: (value: boolean) => void;
 	playersTableEnabled: boolean;
@@ -73,10 +73,10 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 						checked={myPicksEnabled}
 						onChange={(e) => onMyPicksEnabledChange(e.target.checked)}
 					/>
-					<span>Show My Picks</span>
+					<span>My Picks</span>
 				</label>
 				<div className="settings-description">
-					Tap or click a player's name in a pick table to mark him as your pick, and again to clear it. Show Today's History keeps a started game's players there to mark. Your latest picks are listed above the tables with their results until you mark the next day's, and closing that list turns this off.
+					Tap or click a player's name in a pick table to mark him as your pick, and again to clear it. Today's History keeps a started game's players there to mark. Your latest picks are listed above the tables with their results until you mark the next day's, and closing that list turns this off.
 				</div>
 			</div>
 			<div className="settings-group">
@@ -86,7 +86,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 						checked={playersTableEnabled}
 						onChange={(e) => onPlayersTableEnabledChange(e.target.checked)}
 					/>
-					<span>Show Players Table</span>
+					<span>Players Table</span>
 				</label>
 				<div className="settings-description">
 					Add a Players table of every player on today's teams that the sportsbooks price, with each one's pick list and start time.
@@ -99,7 +99,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 						checked={historyEnabled}
 						onChange={(e) => onHistoryEnabledChange(e.target.checked)}
 					/>
-					<span>Show Today's History</span>
+					<span>Today's History</span>
 				</label>
 				<div className="settings-description">
 					Keep the games that have started and their players in the tables, greyed out, along with the players a redraw dropped from a list, and list each earlier slot's stats in the Stats. A check marks a player who has scored, and a cross one whose game ended without a goal.
@@ -125,7 +125,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 						checked={showPercentage}
 						onChange={(e) => onShowPercentageChange(e.target.checked)}
 					/>
-					<span>Show Probabilities</span>
+					<span>Probabilities</span>
 				</label>
 				<div className="settings-description">
 					Show sportsbook odds as implied probability percentages, otherwise as American odds.

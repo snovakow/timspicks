@@ -427,7 +427,7 @@ function App() {
 		end well after that.
 	*/
 	const [entered, setEntered] = useState<EnteredPicks.EnteredStore>(() => EnteredPicks.load());
-	// Show My Picks, which closing the my-picks table turns off too. Off, it leaves the lists unmarked and the
+	// My Picks, which closing the my-picks table turns off too. Off, it leaves the lists unmarked and the
 	// my-picks table hidden for the page's life, and deletes nothing
 	const [myPicksEnabled, setMyPicksEnabled] = useState(true);
 	const scheduleDate = data?.scheduleDate ?? null;

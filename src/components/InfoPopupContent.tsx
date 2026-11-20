@@ -39,12 +39,12 @@ export default function InfoPopupContent() {
 					to help judge whether to lock picks early or wait for later opportunities.
 				</p>
 				<p>
-					With <strong>Show My Picks</strong> on in the <strong>Settings</strong>, tapping or clicking a player's name in a pick table
-					marks him as your pick, one in each table, and doing it again clears the mark. <strong>Show Today's History</strong> keeps
+					With <strong>My Picks</strong> on in the <strong>Settings</strong>, tapping or clicking a player's name in a pick table
+					marks him as your pick, one in each table, and doing it again clears the mark. <strong>Today's History</strong> keeps
 					a started game's players in the tables to mark. Your picks are kept in this browser only.
 					The latest are listed above the tables with their results, as <strong>Today's Picks</strong> or <strong>Yesterday's Picks</strong>,
 					or under their date when older, until you mark the next day's, so a late game's result still shows after midnight.
-					Closing the list turns <strong>Show My Picks</strong> off, hiding the marks in the tables too, until it's turned back on.
+					Closing the list turns <strong>My Picks</strong> off, hiding the marks in the tables too, until it's turned back on.
 				</p>
 			</section>
 
@@ -65,7 +65,7 @@ export default function InfoPopupContent() {
 					</p>
 					<p>
 						In the <strong>Settings</strong>,
-						use the <strong>Show Probabilities</strong> toggle to switch between percentage and American odds display,
+						use the <strong>Probabilities</strong> toggle to switch between percentage and American odds display,
 						and the <strong>Normalize Sportsbooks</strong> to toggle normalized percentages.
 					</p>
 				</section>
@@ -84,7 +84,7 @@ export default function InfoPopupContent() {
 					With none or all of them selected, every sportsbook is averaged.
 				</p>
 				<p>
-					Once a game starts, it and its players leave the tables and the stats. With <strong>Show Today's History</strong> on
+					Once a game starts, it and its players leave the tables and the stats. With <strong>Today's History</strong> on
 					in the <strong>Settings</strong>, they stay in the tables greyed out, as do the players a redraw dropped from a list,
 					and each earlier slot is listed below the stats with its top picks' Streak, opening to that slot's full stats.
 				</p>

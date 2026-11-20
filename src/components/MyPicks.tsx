@@ -35,7 +35,7 @@ export default function MyPicks(props: {
 		<section className='my-picks' aria-labelledby='my-picks-title'>
 			<div className='my-picks-header'>
 				<h2 id='my-picks-title' className='my-picks-title'>{title}</h2>
-				<button type='button' className='my-picks-close' onClick={onClose} aria-label='Turn off Show My Picks' title='Turn off Show My Picks'>
+				<button type='button' className='my-picks-close' onClick={onClose} aria-label='Turn off My Picks' title='Turn off My Picks'>
 					&times;
 				</button>
 			</div>
