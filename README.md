@@ -8,13 +8,14 @@ App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hor
   games start, scoring, and the strategies the app optimizes for
 - [The app and the server](docs/app-and-server.md) — the feeds, the book list
   and where each book's prices come from, what lands on disk, the update
-  cadence, the history archive, and how a change reaches the live site
+  cadence, the archive, and how a change reaches the live site
 - [Deploying](docs/deployment.md) — the daily merge, build and copy routine,
   changing a book's mode, the checks before a merge, and what changes at each
   end of a season
-- [History and the correlation lifts](docs/history-and-correlation.md) — how the
-  archive and the fitted correlation lifts are regenerated, in what order, why
-  a run can come out byte-identical, and which archived prices were backfilled
+- [The archive and the correlation lifts](docs/archive-and-correlation.md) — how
+  the archive grows and is checked, how the fitted correlation lifts are
+  regenerated and in what order, why a run can come out byte-identical, which
+  seasons it holds, and which archived prices were backfilled
 - [Changelog](CHANGELOG.md) — the release notes: what each version offers the
   people who use the app, newest first
 
@@ -28,8 +29,9 @@ Agent skills for working on the repo and the live server:
   release's notes to the changelog and numbers the version by what the release
   holds, and lists what to copy to the live server, without pushing
 - `/health-server` — when the live data looks stale, the cron may have stopped,
-  or a deploy needs confirming: a read-only check of the cron log and the places
-  cron failures hide, the live data and the banner visitors see, and whether the
+  the archive may be missing a day, or a deploy needs confirming: a read-only
+  check of the cron log and the places cron failures hide, the live data and the
+  banner visitors see, whether the archive holds every day, and whether the
   deployed files match `main`
 - `/health-odds` — when a player shows no odds from a book, or a book may have
   changed its format: pulls every book fresh, from its own site or the
