@@ -427,8 +427,8 @@ function App() {
 		end well after that.
 	*/
 	const [entered, setEntered] = useState<EnteredPicks.EnteredStore>(() => EnteredPicks.load());
-	// My Picks, which closing the my-picks table turns off too. Off, it leaves the lists unmarked and the
-	// my-picks table hidden for the page's life, and deletes nothing
+	// My Picks, turned on and off in the settings alone. Off, it leaves the lists unmarked and the my-picks
+	// table hidden for the page's life, and deletes nothing
 	const [myPicksEnabled, setMyPicksEnabled] = useState(true);
 	const scheduleDate = data?.scheduleDate ?? null;
 	const myPicksDate = myPicksEnabled && data ? EnteredPicks.latestDay(entered, scheduleDate) : null;
@@ -943,7 +943,7 @@ function App() {
 				)}
 
 				{myPicksDay && myPicksDate !== null && (
-					<MyPicks date={myPicksDate} today={myPicksToday} loadedDate={scheduleDate} picks={myPicksDay} scores={myPicksScores} darkTheme={darkTheme} onClose={() => setMyPicksEnabled(false)} />
+					<MyPicks date={myPicksDate} today={myPicksToday} loadedDate={scheduleDate} picks={myPicksDay} scores={myPicksScores} darkTheme={darkTheme} />
 				)}
 
 				<CollapsibleSection title="Games">

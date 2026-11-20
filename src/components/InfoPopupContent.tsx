@@ -44,7 +44,7 @@ export default function InfoPopupContent() {
 					a started game's players in the tables to mark. Your picks are kept in this browser only.
 					The latest are listed above the tables with their results, as <strong>Today's Picks</strong> or <strong>Yesterday's Picks</strong>,
 					or under their date when older, until you mark the next day's, so a late game's result still shows after midnight.
-					Closing the list turns <strong>My Picks</strong> off, hiding the marks in the tables too, until it's turned back on.
+					Turning <strong>My Picks</strong> off hides the list and the marks in the tables, and deletes nothing.
 				</p>
 			</section>
 
