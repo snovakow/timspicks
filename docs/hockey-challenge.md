@@ -2,9 +2,11 @@
 
 How the contest works, and how this app reasons about it. The app is advisory
 only: it ranks candidates from odds, and the picks are entered by hand in the
-contest's own app. It has no notion of a pick being entered or locked — the
-highlights it draws are its own recommendation, recomputed from scratch and
-never saved.
+contest's own app. It has no notion of a pick being locked, and the highlights
+it draws are its own recommendation, recomputed from scratch and never saved.
+The one thing it records is the player in each list that the user marks as the
+pick they entered, kept in the browser to show whether he scored; the marks feed
+nothing back into the recommendation.
 
 ## Three picks a game day
 
@@ -86,7 +88,8 @@ Per game day, by number of correct picks:
 | 3       | 100    |
 
 At least one correct pick on seven straight days earns a free donut a day for a
-week. Nothing in the app tracks a streak; the Streak strategy is a single-day
+week. Nothing in the app tracks a streak: the marked picks are shown with their
+results for a day and never counted, and the Streak strategy is a single-day
 proxy for it.
 
 These are the 2026-27 values. The 2025-26 season paid 25 and 50 points for one

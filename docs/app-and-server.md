@@ -97,22 +97,27 @@ at ET midnight.
 ### The scores step
 
 One step sits outside all of the above. Goals come in while no run is due, and
-after the day's last start no run comes at all, so the update script fetches the
-day's scores on every call, ahead of the gate, and only while a game is in play:
-from its start until the score feed calls it official. That comes some time after
-the game ends, so a goal credited to another player on review still lands. A game
-the feed never calls official is followed for a fixed time after its start and
-then dropped, and a game off its normal schedule isn't followed at all.
+after the day's last start no run comes at all, so the update script fetches
+scores on every call, ahead of the gate, and only while a game is in play: from
+its start until the score feed calls it official. That comes some time after the
+game ends, so a goal credited to another player on review still lands. A game the
+feed never calls official is followed for a fixed time after its start and then
+dropped, and a game off its normal schedule isn't followed at all.
 
-The scores file names the day it holds, and that day is followed to its end, so
-games still going at midnight are seen through. The next day's file replaces it
-once one of that day's games has started.
+Each day's scores go in a file in that day's folder, which only that day's fetch
+writes, so a later day can never replace them. The step looks at yesterday as
+well as today, so games still going at midnight are seen through, and no game is
+followed long enough to reach further back. Until a day's first fetch, whether
+its games are in play comes from its schedule: the schedule file while it holds
+that day, then the copy its snapshots saved. The admin page's Update fetches
+today's scores even with nothing in play, and yesterday's only while one of its
+games still is.
 
 The step is no part of a run. It writes no log line and leaves the run state
-alone, and a failed fetch, or a reply that isn't the day asked for, leaves the
-file as it was, so a failure costs only that minute's scores. The file carries
-the time it was last written, which is the only trace of a feed that has stopped
-answering.
+alone, and a failed fetch, or a reply that isn't the day asked for, leaves that
+day's file as it was, so a failure costs only that minute's scores. The file
+carries the time it was last written, which is the only trace of a feed that has
+stopped answering.
 
 ## The feeds
 
@@ -122,7 +127,7 @@ answering.
 | the pick-list feed | `helper.json` | keyed by the feed's own list ids |
 | the player feed | `players/<id>.json` | one file per player |
 | the roster feed | `rosters.json` | the skaters on each of today's teams, fetched once a day per team; a reply with no skaters counts as failed |
-| the score feed | `scores.json` | each of the day's games with its state and the players with a goal; see the scores step above |
+| the score feed | `<Y-m-d>/scores.json` | each of that day's games with its state and the players with a goal; see the scores step above |
 | each book | `data/bet1.json`, `bet2.json` and on | flat arrays of player names and odds |
 
 Player files are refreshed only when missing or when the player has changed
@@ -220,11 +225,11 @@ data/
   games.json         today's schedule
   helper.json        today's three pick lists
   rosters.json       today's teams' skaters, for the player table
-  scores.json        the day's game states and goal scorers, for the goal marks
   bet1.json ...      today's odds, one file per book the list shows
   process.json       run state
   <Y-m-d>/
     games.json       that day's schedule
+    scores.json      that day's game states and goal scorers, for the goal marks
     <HHmm>/
       bet1.json ...
       helper.json
@@ -329,13 +334,38 @@ those slots.
 
 Today's history also marks each player's result, at the end of his name: a check
 once he has scored, a cross once his game has ended without a goal from him, and
-nothing until then. The marks come from the scores file, which the page reads
-when the history is on and a game has started, and again as often as the cron
-rewrites it while the page is in view and a game is in play, so they follow the
-games without a reload. A scores file for another day is passed over: before the
-day's first fetch it still holds the day before. Only goals the contest counts
-are marked, so a shootout goal isn't one. The score feed lists a shootout's
-deciding goal with the rest, and the scores step leaves it out.
+nothing until then. The marks come from the day's scores file, which the page
+reads when the history is on and a game has started, and again as often as the
+cron rewrites it while the page is in view and a game is in play, so they follow
+the games without a reload. Only goals the contest counts are marked, so a
+shootout goal isn't one. The score feed lists a shootout's deciding goal with the
+rest, and the scores step leaves it out.
+
+With the history on, a player's name in each of the three pick tables also marks
+his row as the pick entered in the contest's own app: one row a table, moved by
+marking another and cleared by marking it again. A started game's row and a
+dropped player's can be marked too, since a pick can be recorded late. The mark
+changes no highlight and no stat, and the player table takes none. While the
+lists are an earlier day's, before the day's first draw has posted, the names
+mark nothing, so no mark goes to a player the real lists may not hold.
+
+The marks are the one thing the page keeps between loads. They sit in the
+browser's local storage under one key, by the schedule's ET date, each with the
+player's id, name, team and logos, which is all a mark needs once that day's lists
+are gone. Nothing is sent to the server. What is read back is checked like any
+feed, and a browser that refuses storage keeps the marks for the life of the page.
+Only the latest days are kept, enough for every day whose picks can still show.
+
+The marked picks are also listed in a table of their own above the games, each
+with its goal mark. Once one of the loaded day's games has started it holds that
+day's; before that it holds the latest earlier day's, as yesterday's or under its
+date, since the next day's lists arrive on the first load after midnight and a
+late game can still be going then. An earlier day's results come from its own
+scores file, followed from the starts the file gives, as the page holds no
+schedule for that day. Once one of the loaded day's games has started, the earlier
+days' marks are deleted. Closing the table hides that one and deletes nothing: the
+next one due shows by itself, today's at the first start and yesterday's once the
+day turns, and a setting shows a closed one again.
 
 ## The admin page
 
