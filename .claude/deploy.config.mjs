@@ -21,9 +21,9 @@ const isFile = (path) => { try { return statSync(path).isFile(); } catch { retur
 const sleep = (ms) => { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
 
 export default {
-	// The server owns these: cron writes the data and players folders, the History action builds the archive,
-	// and the credentials file is rewritten in place
-	neverCopy: ['data', 'history', 'players', 'auth.json'],
+	// The server owns these: cron writes the data and players folders, the archive among them, and the
+	// credentials file is rewritten in place
+	neverCopy: ['data', 'players', 'auth.json'],
 
 	// Overrides for when the folders can't be found from the cron line, the same as the survey's
 	options: ['update', 'lib'],

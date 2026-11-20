@@ -16,7 +16,7 @@ This skill runs in this checkout, on the machine that serves the site, like heal
 - **Names.** Every listed player finds his price in each book that prices his game. A book that spells him differently from the roster drops out for him silently, on the site and in the archive replays.
 
 It may change `oddsNameMap` in `src/dataProcessor.ts`, and the book parsers in `public/fetch_lib.php` when a format changed. Never:
-- copy, deploy, move or delete anything in the live or update folders, or write to `data/`, `players/`, `history/` or `auth.json` anywhere
+- copy, deploy, move or delete anything in the live or update folders, or write to `data/`, `players/` or `auth.json` anywhere
 - request `update.php`, `fetch_service.php` or `fetch.php` over HTTP
 - edit `src/correlationData.ts`, which the user regenerates
 - commit: the user commits, and `/commit` reviews the batch
