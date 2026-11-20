@@ -20,9 +20,6 @@ $csrfToken = $_SESSION['csrf_token'];
 
 <body>
 	<div id="form">
-		<select id="option">
-			<option value="update">Update</option>
-		</select>
 		<input type="text" id="name" />
 		<input type="password" id="input" />
 		<button id="button">Submit</button>
@@ -81,10 +78,6 @@ $csrfToken = $_SESSION['csrf_token'];
 		button.addEventListener('click', async () => {
 			if (button.disabled) return;
 
-			const option = document.getElementById('option');
-			const options = option.value;
-			if (!options) return;
-
 			button.disabled = true;
 			button.textContent = 'Working...';
 
@@ -93,7 +86,7 @@ $csrfToken = $_SESSION['csrf_token'];
 			responseElement.scrollTop = 0;
 
 			try {
-				const result = await sendRequest(options.split(",").join("&"));
+				const result = await sendRequest("update");
 				if (result) {
 					const tempDiv = document.createElement('div');
 					tempDiv.innerHTML = result;
