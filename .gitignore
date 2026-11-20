@@ -7,5 +7,4 @@ dist
 # App produced files
 data
 players
-history
 auth.json

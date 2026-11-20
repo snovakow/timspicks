@@ -65,7 +65,7 @@ Older history in the window is listed in the sections, but only flagged within t
 
 **Deploy.** The live files are held against the ref, never against this working tree, because unreleased work on `development` isn't meant to be live.
 - The update folder only needs `update.php`. The seeder files stay local, so they're compared only when present.
-- The live folder is compared without `data/`, `history/`, `players/` and `auth.json`, which a deploy never copies.
+- The live folder is compared without `data/`, `players/` and `auth.json`, which a deploy never copies.
 - The bundler names a script after the folder it was built in as well as its contents. So assets are matched by content, and `index.html` is compared with the live names swapped in.
 - Leftover assets from older builds are harmless.
 - `/deploy` installs exactly what the lockfile pins, while the reference build here uses this checkout's `node_modules`. When those differ, the report notes it, and a "same version, different build" front end is that drift, not a different commit.

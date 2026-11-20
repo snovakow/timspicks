@@ -47,7 +47,7 @@ const BIG_LOGS = 50e9;
 const LOW_DISK = 10e9;
 
 const ET = 'America/New_York';
-const NEVER_COPY = ['data', 'history', 'players', 'auth.json'];
+const NEVER_COPY = ['data', 'players', 'auth.json'];
 // docs/deployment.md: the scraping library and the book list it reads go out back to back with update.php,
 // ahead of the rest of the live folder
 const LIB_FIRST = ['fetch_lib.php', 'sportsbooks.json'];
