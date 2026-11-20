@@ -15,6 +15,8 @@ App to help make Tim Hortons Hockey Challenge picks in the Tims app. The Tim Hor
 - [History and the correlation lifts](docs/history-and-correlation.md) — how the
   archive and the fitted correlation lifts are regenerated, in what order, why
   a run can come out byte-identical, and which archived prices were backfilled
+- [Changelog](CHANGELOG.md) — the release notes: what each version changed for
+  the people who use the app, newest first
 
 ## Skills
 
@@ -22,8 +24,9 @@ Agent skills for working on the repo and the live server:
 
 - `/commit` — when a batch is ready to deploy, as the first message of a new
   thread: reviews and commits everything since the last version commit, brings
-  the README and docs up to date, ends with a version commit, and lists what to
-  copy to the live server, without pushing
+  the README and docs up to date, ends with a version commit that adds the
+  release's notes to the changelog and numbers the version by what the release
+  holds, and lists what to copy to the live server, without pushing
 - `/health-server` — when the live data looks stale, the cron may have stopped,
   or a deploy needs confirming: a read-only check of the cron log and the places
   cron failures hide, the live data and the banner visitors see, and whether the
