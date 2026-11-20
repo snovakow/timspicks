@@ -335,37 +335,42 @@ those slots.
 Today's history also marks each player's result, at the end of his name: a check
 once he has scored, a cross once his game has ended without a goal from him, and
 nothing until then. The marks come from the day's scores file, which the page
-reads when the history is on and a game has started, and again as often as the
-cron rewrites it while the page is in view and a game is in play, so they follow
-the games without a reload. Only goals the contest counts are marked, so a
-shootout goal isn't one. The score feed lists a shootout's deciding goal with the
-rest, and the scores step leaves it out.
+reads once a game has started, while the history is on or the my-picks table,
+described below, shows the day's picks, and again as often as the cron rewrites it
+while the page is in view and a game is in play, so they follow the games without
+a reload. Only goals the contest counts are marked, so a shootout goal isn't one.
+The score feed lists a shootout's deciding goal with the rest, and the scores
+step leaves it out.
 
-With the history on, a player's name in each of the three pick tables also marks
-his row as the pick entered in the contest's own app: one row a table, moved by
-marking another and cleared by marking it again. A started game's row and a
-dropped player's can be marked too, since a pick can be recorded late. The mark
-changes no highlight and no stat, and the player table takes none. While the
-lists are an earlier day's, before the day's first draw has posted, the names
-mark nothing, so no mark goes to a player the real lists may not hold.
+With the Show My Picks setting on, a player's name in each of the three pick
+tables also marks his row as the pick entered in the contest's own app: one row a
+table, moved by marking another and cleared by marking it again. The setting
+stands apart from the history, which only adds rows to mark: a started game's and
+a dropped player's, since a pick can be recorded late. The mark changes no
+highlight and no stat, and the player table takes none. While the lists are an
+earlier day's, before the day's first draw has posted, the names mark nothing, so
+no mark goes to a player the real lists may not hold. With the setting off, which
+lasts the page's life like the other settings, the names mark nothing and no mark
+or my-picks table shows, and nothing is deleted.
 
 The marks are the one thing the page keeps between loads. They sit in the
 browser's local storage under one key, by the schedule's ET date, each with the
 player's id, name, team and logos, which is all a mark needs once that day's lists
 are gone. Nothing is sent to the server. What is read back is checked like any
 feed, and a browser that refuses storage keeps the marks for the life of the page.
-Only the latest days are kept, enough for every day whose picks can still show.
+Only the latest days are kept, enough for the one the my-picks table shows and
+the one before it, which shows again if the later day's marks are all cleared.
 
 The marked picks are also listed in a table of their own above the games, each
-with its goal mark. Once one of the loaded day's games has started it holds that
-day's; before that it holds the latest earlier day's, as yesterday's or under its
-date, since the next day's lists arrive on the first load after midnight and a
-late game can still be going then. An earlier day's results come from its own
+with its goal mark, with the history on or off. It holds the latest day's with a
+mark: the loaded day's once one is marked, and until then an earlier day's,
+however many of the loaded day's games have started, titled as yesterday's or,
+when older, by its date. The next day's lists arrive on the first load after
+midnight and a late game can still be going then, so a day's results stay up
+until the next day's picks are made. An earlier day's results come from its own
 scores file, followed from the starts the file gives, as the page holds no
-schedule for that day. Once one of the loaded day's games has started, the earlier
-days' marks are deleted. Closing the table hides that one and deletes nothing: the
-next one due shows by itself, today's at the first start and yesterday's once the
-day turns, and a setting shows a closed one again.
+schedule for that day. Closing the table turns the setting off, which deletes
+nothing, and turning it back on shows the table again.
 
 ## The admin page
 

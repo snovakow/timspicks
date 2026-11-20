@@ -89,8 +89,8 @@ Per game day, by number of correct picks:
 
 At least one correct pick on seven straight days earns a free donut a day for a
 week. Nothing in the app tracks a streak: the marked picks are shown with their
-results for a day and never counted, and the Streak strategy is a single-day
-proxy for it.
+results until the next day's are marked and are never counted, and the Streak
+strategy is a single-day proxy for it.
 
 These are the 2026-27 values. The 2025-26 season paid 25 and 50 points for one
 and two correct, and a week of free coffee for the streak.
