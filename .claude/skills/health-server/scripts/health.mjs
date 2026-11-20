@@ -31,6 +31,8 @@ const BACKUP_HOUR = 3;
 const STALE_AFTER = 26 * 60 * 60 * 1000;
 const RUN_GRACE = 10 * 60 * 1000;
 const REDRAW_GRACE = 10 * 60 * 1000;
+// public/fetch_lib.php: how long after its start the cron follows a game the score feed never calls official
+const SCORES_FOLLOW = 8 * 60 * 60 * 1000;
 
 // This survey's own tolerances
 const HOUR = 60 * 60 * 1000;
@@ -735,6 +737,50 @@ guard('data', () => {
 			+ `${pending.length ? `; not due yet: ${pending.join(' ')}` : ''}${problems.length ? `; ${problems.join('; ')}` : ''}`
 			+ `${extra.length ? `; also ${extra.join(' ')}, not in the schedule` : ''}`);
 	}
+
+	// The archive, over every day rather than the window, since a hole stays until Update fills it. A day with a
+	// snapshot joins the index once its scores file is final: the day's own, recording its format, with every game
+	// official or off its normal schedule. Only regular season and playoff days are listed
+	say('');
+	const snapshotDays = listDir(dataDir).filter((name) => /^\d{4}-\d{2}-\d{2}$/.test(name)).sort()
+		.filter((day) => listDir(join(dataDir, day)).some((name) => /^\d{4}$/.test(name) && isFile(join(dataDir, day, name, 'helper.json'))));
+	const index = readJson(join(dataDir, 'days.json'));
+	const indexed = Array.isArray(index) ? index.map((entry) => entry?.date) : null;
+	const settledGames = (games) => games.length > 0 && games.every((game) => game?.schedule !== 'OK' || game?.state === 'OFF');
+	const followed = (game) => {
+		const start = Date.parse(game.start);
+		return game.schedule === 'OK' && game.state !== 'OFF' && start <= now && now < start + SCORES_FOLLOW;
+	};
+	const qualifying = [];
+	const unfinal = [];
+	const inPlay = [];
+	const otherFormat = [];
+	for (const day of snapshotDays) {
+		const saved = readJson(join(dataDir, day, 'scores.json'));
+		const scores = saved?.date === day && Array.isArray(saved.games) ? saved : null;
+		if (!scores || !('format' in scores) || !settledGames(scores.games)) {
+			// Until a day's first fetch its games come from its schedule, as the cron reads them
+			const games = scores?.games ?? (scheduleFor(day)?.games ?? []).map((game) => ({ start: game.startTimeUTC, schedule: game.gameScheduleState ?? 'OK' }));
+			(day >= today || games.some(followed) ? inPlay : unfinal).push(day);
+		} else if (['regular', 'playoff'].includes(scores.format) && typeof scores.season === 'string') qualifying.push(day);
+		else otherFormat.push(day);
+	}
+	if (!indexed) {
+		say(`Archive index: missing, with ${plural(qualifying.length, 'day')} ready to list`);
+		warn('The archive\'s index (data/days.json) is missing, so the replays have no days; Update on the admin page writes it');
+	} else {
+		say(`Archive index: ${plural(indexed.length, 'day')}${indexed.length ? `, ${indexed[0]} to ${indexed.at(-1)}` : ''}`);
+		const unlisted = qualifying.filter((day) => !indexed.includes(day));
+		const stale = indexed.filter((day) => !qualifying.includes(day));
+		if (unlisted.length) warn(`The archive's index leaves out ${few(unlisted, 4)}, whose scores are final; Update on the admin page rebuilds it`);
+		if (stale.length) warn(`The archive's index lists ${few(stale, 4)}, without a snapshot or final scores; Update on the admin page rebuilds it`);
+	}
+	if (unfinal.length) {
+		say(`Days with snapshots and no final scores: ${few(unfinal)}`);
+		warn(`${plural(unfinal.length, 'day')} with snapshots ${unfinal.length === 1 ? 'has' : 'have'} no final scores, so the archive leaves ${unfinal.length === 1 ? 'it' : 'them'} out (${few(unfinal, 4)}); Update on the admin page fetches them`);
+	}
+	if (inPlay.length) say(`Scores still followed by the cron: ${few(inPlay)}`);
+	if (otherFormat.length) say(`Days with snapshots that weren't regular season or playoff days, left out of the archive: ${few(otherFormat)}`);
 });
 
 // --- Deploy: the live and update folders against a build of the ref -------------------------------

@@ -1,6 +1,6 @@
 ---
 name: health-server
-description: Check the live server's health from the machine it runs on. Reads the cron log and the places cron failures hide (the PHP error log, the web server's access log and cron mail), the live data folder (run state, today's feeds, the site banner, snapshot folders), and whether the files deployed to the live and update folders match main. Read-only. Use when asked whether the live site or the cron is healthy, why the live data looks stale, or whether a deploy is complete.
+description: Check the live server's health from the machine it runs on. Reads the cron log and the places cron failures hide (the PHP error log, the web server's access log and cron mail), the live data folder (run state, today's feeds, the site banner, snapshot folders, the archive's index and final scores), and whether the files deployed to the live and update folders match main. Read-only. Use when asked whether the live site or the cron is healthy, why the live data looks stale, whether the archive is missing a day, or whether a deploy is complete.
 argument-hint: "[ref] [--days N] [--no-build]"
 model: opus
 effort: max
@@ -13,7 +13,7 @@ Arguments: $ARGUMENTS
 
 This skill runs on the live server itself, in this checkout, which is also where batches are built. It only reads. Never:
 - copy, deploy, move or delete anything in the live or update folders
-- edit the crontab, or anything in `data/`, `players/`, `history/` or `auth.json`
+- edit the crontab, or anything in `data/`, `players/` or `auth.json`
 - request `update.php`, `fetch_service.php` or `fetch.php` over HTTP, because each one runs the scrapers or acts on the live data
 - print what `auth.json` holds
 
@@ -61,6 +61,7 @@ Older history in the window is listed in the sections, but only flagged within t
 - Every listed player needs `players/<id>.json`. One missing file stops the whole page from loading.
 - **Books** are the ones the book list beside the live scraping library doesn't turn off, with each one's mode on the "Book list" line. A list the library can't read stops every run at the books. A live folder without one runs a scraper from before the list, so the checkout's stands in, and the deploy check shows what's behind. A book that's off isn't checked, since nothing updates its file.
 - **Snapshots.** Each `data/<date>/<HHMM>` folder is named for a game's ET start and written by the runs before it (docs/app-and-server.md, "What lands on disk"). The first folder of the day waits for the first run after 3 a.m. A folder still missing after its game started can't be recovered by the cron. Backfilling is described in docs/deployment.md, under "Beginning a season"; a backfilled book is marked in the folder's `backfill.json`.
+- **Archive.** Every day with a snapshot needs a final scores file, and the archive's index, `data/days.json`, has to list each such day that was a regular season or playoff day (docs/app-and-server.md, "The archive"). This covers every day, not just the window, and is flagged whatever its age, because a missing day stays out of the archive until it's filled. A day whose games the cron is still following isn't flagged. A day without final scores is one the cron missed while its games were on: Update on the admin page fetches it again, a few days per Update. An index that leaves out a final day, or lists a day without one, is put right by any Update, which rebuilds it from the day folders.
 
 **Deploy.** The live files are held against the ref, never against this working tree, because unreleased work on `development` isn't meant to be live.
 - The update folder only needs `update.php`. The seeder files stay local, so they're compared only when present.
