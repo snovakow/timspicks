@@ -27,8 +27,8 @@ Run in a fresh thread, as the first thing in it. A thread that made the changes 
 
   A version commit made before the changelog began is judged without it. Everything after the newest such commit is under review, however much a commit looks like a version commit. A subject that mentions "version", a bump made by hand, or `Version X.Y.Z` with a trailer are all ordinary range commits. Before the first version commit exists, the baseline is the newest pushed commit.
 - **Rewriting.** A commit can be rewritten only if it comes after the baseline and isn't reachable from any remote branch, because rewriting a pushed commit would take a force push. The scan prints this rewrite base. Pushed commits in the range are still reviewed, and their problems reported.
-- **Changelog.** `CHANGELOG.md`, at the root, is the release notes: one section for each version commit, newest first, written for the people who use the app rather than for whoever maintains it. A section sums up the whole release as short bullets under up to three headings: **Features**, what is new to do or see; **Fixes**, what was wrong and now works; **Backend improvements**, what changed behind the page, such as the server's fetches, the recorded history, the skills and the docs. Keep it high level, as an app store's release notes are: one plain line a bullet, nothing technical or detailed, no file names, identifiers or commit hashes, one bullet for several commits that made one change, and no heading with nothing under it. Step 3 applies to every line. A section is written in its version commit and nowhere else, and a changelog change found anywhere else in the range is moved there (step 8). The file starts with the run that creates it: releases made before it get no section.
-- **Release level.** A section says what kind of release it describes, and that gives the version. Nothing but fixes and backend improvements: the last number goes up, `x.x.#`. A feature among them: the middle number goes up and the last returns to 0, `x.#.0`. A major release, one that changes the app as a whole or marks a milestone, such as `1.0.0` when it is ready for the general public: the first number goes up and the others return to 0, `#.0.0`. A major is the user's to call: where the release reads as one, ask before writing the number. A version in the arguments overrides the level.
+- **Changelog.** `CHANGELOG.md`, at the root, is the release notes: one section for each version commit, newest first, telling the people who use the app what that version offers. It is not a record of the work, which the commit history already is. Step 6 is how a section is written. A section is committed in its version commit and nowhere else: a changelog change found anywhere else in the range, in the working tree or in a commit, is moved there in step 8, and an edit to an older section is the user's correction, kept as it stands. The file starts with the run that creates it: releases made before it get no section.
+- **Release level.** A section shows what kind of release it is, and that gives the version. A feature among its bullets: the middle number goes up and the last returns to 0, `x.#.0`. No feature: the last number goes up, `x.x.#`. A major release, one that changes the app as a whole or marks a milestone, such as `1.0.0` when it is ready for the general public: the first number goes up and the others return to 0, `#.0.0`. A major is the user's to call: where the release reads as one, ask before writing the number, and let the section's first bullet say what the milestone is. A version in the arguments overrides the level, and the section is written the same way whatever the number.
 - **Order.** Plan the batch before staging anything. Fixes to existing commits come first, then new commits, then the prose commits — README and `docs/` — if any are needed. The version commit, with the changelog section, always comes last.
 
 ## 1. Survey
@@ -126,8 +126,8 @@ Keep its voice, follow step 3 for anything you add, and leave the external link 
 template section as they are. The Documentation and Skills lists are part of what you maintain: keep
 the first pointing at whatever `docs/` holds and at `CHANGELOG.md`, which the run's version commit
 creates if it isn't there yet, and the second naming every skill under `.claude/skills/`, each with
-when to use it. Never invent results. The README change is its own
-commit, after the code and before the version commit.
+when to use it. Never invent results. The README change is its own commit, after the code and before
+the version commit.
 
 ## 5a. The pages under `docs/`
 
@@ -167,32 +167,50 @@ counted separately, and dangling paths, where a page names a file that no longer
 
 The version commit holds the release's section of `CHANGELOG.md` and the number that section calls for.
 
-- **Section.** Write it as *How the pieces fit* describes, from the whole release: every range commit and everything this run commits. It goes at the top of the file, above the newest section, under a heading with the version and the date of the commit. If the file doesn't exist yet, create it in the shape below with this section alone, and write nothing for the releases before it. Notes kept from step 1 or taken out of a commit in step 8 go in where the release bears them out.
-- **Number.** If the arguments contain a version like `0.1.0`, use exactly that, and ask if it isn't higher than the current one. Otherwise the release level gives it from the last version commit's version: `0.4.9` becomes `0.4.10` for fixes and backend improvements, `0.5.0` for a feature, and `1.0.0` for a major release the user has confirmed. The scan prints all three. Treat any other words in the arguments as hints for the messages and the section.
-- **Set it** with `npm version <x.y.z> --no-git-tag-version`. That updates `package.json` and `package-lock.json` without tagging or committing.
-- **Commit** just those two files and `CHANGELOG.md`, with the message `Version X.Y.Z` and nothing else: no body, no trailer, author as configured. It's the last commit.
+### What a changelog section says
 
-The changelog's shape. A heading with no bullets is left out:
+A section is for someone using the app who wants to know what a version offers. That reader may be new to it, has not seen an earlier version, and will not read the code. The commit messages hold the detail for anyone who wants it, so the section does not repeat them. What goes in, and how it is worded, both follow from that reader.
+
+#### What goes in
+
+What that reader would notice and care about gets a bullet of its own, under the version's heading, with no headings beneath it:
+
+- a feature: something new to do or see on the page
+- a bug fix, where a user could clearly have seen the fault
+
+Everything else is summed up or left out:
+
+- Smaller changes a user might still notice, where something already there works or looks a little better or a fault few would have met is gone, are never listed one by one. In a section with no feature they are summed up in one bullet that names their kind in general terms and nothing more: `Bug fixes`, `User interface improvements` for how it looks, `App improvements` for how it behaves, in the singular for a single change and joined where two kinds apply. In a section with a feature they are left out.
+- What no user would notice, such as the server's fetches, the recorded history, the skills, the docs or these notes themselves, is left out. A release that holds nothing else gets the one bullet `Backend improvements`, so that every version has its section.
+
+#### How it is worded
+
+- A bullet describes the app as this version leaves it, not the change that got it there. The reader never saw the earlier version, so whatever only means something beside it tells them nothing: how a thing used to behave, what it lacked, what it replaced, a condition that mattered only under an old restriction. What decides is what a phrase refers to, never which words it uses: the same words are in place where they describe how the feature itself behaves. So a feature freed from a restriction is presented as it stands, and a fix as what works or what was added, not as the fault that is gone.
+- It names the thing first, as the page shows it, and then says what it is or does in a few words, the way a feature list would. It does not walk through how the feature works. A clipped phrase is enough, with articles and helping verbs left out as a headline leaves them out, and no full stop at the end.
+- It describes the app, not the reader: what is on screen is the app's own, and the reader is neither addressed nor made its owner, except where the app's own name for a thing does so.
+- Every word carries meaning. One that only adds force is dropped, and nothing technical goes in: no file names, identifiers or commit hashes.
+- Step 3 applies to every line.
+
+#### The file
+
+A changelog started by a run has this shape and holds that run's section alone. The heading carries the version and the day of the version commit:
 
 ```markdown
 # Changelog
 
-What changed in each release, newest first.
+Version Release Notes
 
-## 1.4.0 - 2027-03-09
+## X.Y.Z - YYYY-MM-DD
 
-### Features
-
-- One short line for each thing there is now to do or see.
-
-### Fixes
-
-- One for each thing that was wrong and now works.
-
-### Backend improvements
-
-- One for each change behind the page.
+- One bullet for each note
 ```
+
+### The version commit
+
+- **Section.** Write it from the whole release: every range commit and everything this run commits. It goes at the top of the file, above the newest section. If the file doesn't exist yet, create it with this section alone, and write nothing for the releases before it. Notes kept from step 1 or taken out of a commit in step 8 are held to the same rules: what the release bears out and a user would care to know gets its bullet, and the rest goes.
+- **Number.** If the arguments contain a version like `0.1.0`, use exactly that, and ask if it isn't higher than the current one. Otherwise the release level gives it from the last version commit's version: `0.4.9` becomes `0.4.10` where no feature is listed, `0.5.0` for a feature, and `1.0.0` for a major release the user has confirmed. The scan prints all three. Treat any other words in the arguments as hints for the messages and the section.
+- **Set it** with `npm version <x.y.z> --no-git-tag-version`. That updates `package.json` and `package-lock.json` without tagging or committing.
+- **Commit** just those two files and `CHANGELOG.md`, with the message `Version X.Y.Z` and nothing else: no body, no trailer, author as configured. It's the last commit.
 
 ## 7. Plan the commits
 
@@ -210,9 +228,10 @@ path to a group, and give each group its subject. That plan is what step 8 execu
 - Reword-only and fix-only work isn't a group; it belongs to step 8.2.
 - `CHANGELOG.md` belongs to no group. It's committed in the version commit and nowhere else; unstage
   it if it's staged.
-- Draft the changelog section with the plan, from the range commits and the groups together. Read
-  the release level off the draft, and say which version the run will write before staging
-  anything. If the draft reads as a major release and the arguments give no version, ask now.
+- Draft the changelog section with the plan, as step 6 describes, from the range commits and the
+  groups together. Read the release level off the draft, and give the draft and the version the
+  run will write before staging anything. If the draft reads as a major release and the arguments
+  give no version, ask now.
 
 If the batch is a single concern, say so and make one commit. Don't split a coherent change to look
 tidy.
@@ -224,7 +243,7 @@ tidy.
    - **The tip:** stage the fixed files, then run `git commit --amend -F <message file>`. For a message-only change, use `git commit --amend --only -F <message file>`, which leaves the index alone.
    - **An older commit, content fix:** edit, stage only the fix, and run `git commit --fixup=<sha>`.
    - **An older commit, message fix:** write `amend! <sha>`, a blank line and the new message to a file, then run `git commit --allow-empty --only -F <file>`.
-   - **A `CHANGELOG.md` change in a rewritable commit** comes out of it, to go in the version commit; the scan lists these. Keep the text as notes for the section. Then undo that commit's change to the file, setting it back to what the commit's parent holds or removing it where the parent has none, stage that alone, and run `git commit --fixup=<sha>`, so the fold takes the change out. A commit with nothing else in it gets no fixup, since a fold can't empty a commit: ask, naming it by hash and subject, and on yes drop it before the fold with `git rebase --autostash --onto <its parent> <its hash>`. In a pushed commit the change stays where it is, the version commit rewrites the section in place, and the report says so.
+   - **A `CHANGELOG.md` change in a rewritable commit** comes out of it, to go in the version commit; the scan lists these. Keep what it changed: a section it added is notes for this run's section, and an edit to an older section goes back in unchanged when the version commit is made. Then undo that commit's change to the file, setting it back to what the commit's parent holds or removing it where the parent has none, stage that alone, and run `git commit --fixup=<sha>`, so the fold takes the change out. A commit with nothing else in it gets no fixup, since a fold can't empty a commit: ask, naming it by hash and subject, and on yes drop it before the fold with `git rebase --autostash --onto <its parent> <its hash>`. In a pushed commit the change stays where it is, the version commit rewrites the section in place, and the report says so.
    - **Then fold the fixups in:** `GIT_EDITOR=true git rebase --autosquash --autostash <rewrite base>`. Check afterwards that the `fixup!` commits are gone, because an older git (2.37, for one) ignores `--autosquash` unless the rebase is interactive: it reports success, rewrites nothing and leaves them sitting at the tip. If that happens, run `GIT_SEQUENCE_EDITOR=true GIT_EDITOR=true git rebase -i --autosquash --autostash <rewrite base>`, which honours it and still needs no editor.
    - If the rebase stops on a conflict, run `git rebase --abort` and ask. If a merge commit sits anywhere but the tip, report it and ask rather than flatten it. If a fix touches a file that also has uncommitted edits, `git stash push --include-untracked` first and `git stash pop` after.
    - Keep message files outside the repo (the thread's scratchpad if there is one), so they never get committed.
@@ -245,7 +264,7 @@ Reread the final messages.
 Then report, briefly:
 - the commits made, and rewritten commits as old → new sha with what changed
 - problems in pushed commits that couldn't be fixed
-- the version change, the release level it was read as and what in the release made it that, and the changelog section
+- the version change and the changelog section as written, with how each change in the release was read, as a feature, a fix a user could see, a small change or backend work, so that a misreading shows
 - any feature-flag changes
 - new site or brand names in code, files left uncommitted, and the checks that ran
 - anything in `docs/` that step 5a couldn't settle, such as a claim only the user can confirm

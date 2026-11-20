@@ -134,7 +134,7 @@ const expectedVersion = officialVersion ?? (baseline ? versionAt(baseline) : nul
 // The three versions the release could take, one per release level. The changelog section the
 // run writes says which.
 const [major, minor, patch] = expectedVersion.split('.').map(Number);
-const nextVersions = `${major}.${minor}.${patch + 1} for fixes and backend improvements, ${major}.${minor + 1}.0 for a feature, ${major + 1}.0.0 for a major release`;
+const nextVersions = `${major}.${minor}.${patch + 1} for bug fixes and improvements, ${major}.${minor + 1}.0 for a feature, ${major + 1}.0.0 for a major release`;
 const changelogNow = changelogVersion(readText(CHANGELOG));
 
 // --- Range: commits after the baseline, plus the working tree ------------------------------------
