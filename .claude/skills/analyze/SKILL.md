@@ -23,7 +23,7 @@ The strategies are the app's: Streak is at least one correct pick, Points scores
 It only reads. Never:
 - edit `src/correlationData.ts`, or `analyze` in `src/features.ts`: the user regenerates the lifts
 - change code to act on a finding. Report it, and leave the decision to the user
-- write to `data/`, `history/`, `players/` or `auth.json` anywhere, or copy between the live folder and `public/`
+- write to `data/`, `players/` or `auth.json` anywhere, or copy between the live folder and `public/`
 - request `update.php`, `fetch_service.php` or `fetch.php` over HTTP
 
 The repo is public. The report shows local paths and the books' names, so keep both out of anything tracked.
@@ -33,14 +33,14 @@ The repo is public. The report shows local paths and the books' names, so keep b
     node .claude/skills/analyze/scripts/analyze.mjs $ARGUMENTS
 
 It takes about 25 seconds.
-- `--since`, `--until`: only these days, inclusive. `--since` with a season's first day, from the history index, keeps that season alone.
+- `--since`, `--until`: only these days, inclusive. `--since` with a season's first day, from the archive's index, keeps that season alone.
 - `--format regular` or `--format playoff`: that format alone. The default run already compares the two, in the report's section 4.
 - `--root <site folder>`, repeatable: read only these folders, in this order, instead of the live folder and then `public/`. `--root public` sees exactly what a GENERATE run on the dev server sees.
 - `--live <dir>`: the live folder, when discovery fails.
 - `--out <dir>`: save the rebuilt windows (`windows.json`, each with the books backfilled there), every number (`results.json`, with the backfilled windows by book) and this archive's lifts (`lifts.json`). Use a scratchpad folder.
 - `--seed N`, `--boot N`: the resampling seed (1) and bootstrap draws (10,000).
 
-History days come from every site folder's `history/`, so a day fetched into only one of them still counts. Each day's snapshots come from the live folder first, which the cron writes, then `public/`. The live folder is found the way health-server finds it. The app's own code does the matching and scoring, loaded from `src/` through Vite: the name matcher, the strategies' values, the valuing of tickets with the lifts, and `runSimulation` itself.
+Archived days come from every site folder's index of the archive, `data/days.json`, so a day listed in only one of them still counts, and each day's scores come from the first folder that lists it. A day without final scores is in no index, so it's missing here until Update on the admin page fills it in; `/health-server` lists those days. Each day's snapshots come from the live folder first, which the cron writes, then `public/`. The live folder is found the way health-server finds it. The app's own code does the matching and scoring, loaded from `src/` through Vite: the name matcher, the strategies' values, the valuing of tickets with the lifts, and `runSimulation` itself.
 
 ## 2. Reading the report
 
@@ -48,7 +48,7 @@ History days come from every site folder's `history/`, so a day fetched into onl
 
 - **Rebuild check.** It must say the rebuilt windows give `runSimulation`'s lifts exactly. The script runs the app's lift fitting over the same archive and compares all six values: the two lifts and what they were fitted on. A failure means the rebuild no longer mirrors the app, usually after a change to the archive replays. Report it and draw no conclusions.
 - **`src/correlationData.ts`** says whether the lifts in the working tree were fitted on this archive, and names each value that differs. Lifts generated on the dev server read `public/`, which lacks any day only the live folder holds. `--root public` checks whether they match what the dev server saw.
-- **Skipped windows** are the ones the app's replays skip too. A history day with no usable window has no snapshots, so its results are missing from everything below. A window without a book's file isn't skipped: that book prices no one there, as in the replays, and the Books line lists such windows.
+- **Skipped windows** are the ones the app's replays skip too. An archived day with no usable window is missing from everything below. A window without a book's file isn't skipped: that book prices no one there, as in the replays, and the Books line lists such windows.
 - **Backfilled closing prices** lists exactly which books' prices were filled in after the games, in how many windows on which days, from the snapshot folders' `backfill.json`. A day backfilled in only some of its windows is named with them. Every analysis below uses those prices, as the app's replays do, except where it says otherwise.
 
 ### How significance is decided
@@ -133,7 +133,7 @@ Keep it short, and lead with the bottom line, from the script's Significant resu
 Then a line per question, the formats and the backfilled prices included: the verdict, the one or two numbers behind it (the effect with its 95% interval, and the Holm-adjusted p), and what it means for the app in a few words. For example: nothing in correlation is significant, so there's no case for turning it on. The correlation line also gives the near-top teammate lift against the other pairs' and its Holm p. The time-slot line also gives the odds-timing result (secondary), with the Avg's Brier gain, its Holm p, and the "Last window, same players" Streak rates. The format line says whether any result differs between the regular season and the playoffs, and names the closest difference with its Holm p. The backfilled-prices line says which books and days hold backfilled closing prices (one clause, from the header), whether section 5 could compare yet, and, when it could, whether any result differs on the captured days; name any sportsbook result the Conclusion set aside as resting on backfilled prices.
 
 Then add, only when they apply:
-- A failed rebuild check, or a gap in the archive: history days without snapshots, or lifts in `src/correlationData.ts` that weren't fitted on this archive. Say which values differ. Regenerating them is the user's step.
+- A failed rebuild check, or a gap in the archive: archived days with no usable window, or lifts in `src/correlationData.ts` that weren't fitted on this archive. Say which values differ. Regenerating them is the user's step.
 - The closest result to significance, when its Holm p is under 0.2, and what keeps it from significance: few days, or days shared with another comparison. Say whether it points the same way in the regular season and the playoffs, from the report's section 4.
 
 Leave out the method, the tables and the per-subset numbers unless asked.

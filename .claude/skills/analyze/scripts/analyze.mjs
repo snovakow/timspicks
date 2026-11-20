@@ -333,39 +333,28 @@ const oldestDay = cutoffs.at(-1) ?? null;
 if (!cutoffs.length) notes.push("Couldn't read the archive's earliest date from src/picksOptimizer.ts, so every archived day was read");
 else if (new Set(cutoffs).size > 1) notes.push(`src/picksOptimizer.ts holds different earliest dates (${[...new Set(cutoffs)].join(', ')}); the lift fitting's, ${oldestDay}, was used`);
 
-// --- The archive: history days from every site folder, snapshots from the first that has them ----
+// --- The archive: the days every site folder's index lists, snapshots from the first that has them -
 
-const dayOfFile = (file) => {
-	const parts = String(file).split('_');
-	return parts.length === 3 && isDay(parts[1]) ? parts[1] : null;
-};
-const historyPath = new Map();
-const ranges = new Map();
+// Each folder's index lists the days whose snapshots and final scores it holds. A day's scores come from the first
+// folder whose index lists it, since another folder can hold a copy written before the day's games were final
+const scoresRoot = new Map();
+const archiveDays = new Map();
 for (const root of roots) {
-	const index = readJson(join(root, 'history', 'history.json'));
+	const index = readJson(join(root, 'data', 'days.json'));
 	if (!Array.isArray(index)) continue;
-	for (const item of index) {
-		const key = `${item.season}|${item.format}`;
-		if (!ranges.has(key)) ranges.set(key, { season: item.season, format: item.format, files: new Set() });
-		for (const file of item.files ?? []) {
-			const path = join(root, 'history', file);
-			if (!dayOfFile(file) || !isFile(path)) continue;
-			if (!historyPath.has(file)) historyPath.set(file, path);
-			ranges.get(key).files.add(file);
-		}
+	for (const entry of index) {
+		if (!isDay(entry?.date) || archiveDays.has(entry.date) || !isFile(join(root, 'data', entry.date, 'scores.json'))) continue;
+		archiveDays.set(entry.date, { date: entry.date, season: entry.season, format: entry.format });
+		scoresRoot.set(entry.date, root);
 	}
 }
 const keepDay = (day) => (!oldestDay || day >= oldestDay) && (!options.since || day >= options.since) && (!options.until || day <= options.until);
-// The index both replays are served: each range with the days any folder holds, oldest first
-const manifest = [...ranges.values()]
-	.filter((range) => !options.format || range.format === options.format)
-	.map((range) => {
-		const files = [...range.files].filter((file) => keepDay(dayOfFile(file))).sort((a, b) => dayOfFile(a).localeCompare(dayOfFile(b)));
-		return { season: range.season, format: range.format, start: dayOfFile(files[0] ?? ''), end: dayOfFile(files.at(-1) ?? ''), files };
-	})
-	.filter((range) => range.files.length)
-	.sort((a, b) => a.start.localeCompare(b.start));
+// The index both replays are served: the days any folder lists, oldest first
+const manifest = [...archiveDays.values()]
+	.filter((entry) => keepDay(entry.date) && (!options.format || entry.format === options.format))
+	.sort((a, b) => a.date.localeCompare(b.date));
 if (!manifest.length) stop(`No archived days to analyze in ${roots.map(shortPath).join(' or ') || 'any site folder'} with these options`);
+const archiveDay = new Map(manifest.map((entry) => [entry.date, entry]));
 
 // A day's schedule comes from the first folder that has it, and so do its snapshots, unless only a later folder has one
 const dayRoots = new Map();
@@ -385,9 +374,12 @@ const slotRoot = (day, slot) => {
 };
 const archivePath = (src) => {
 	const rel = String(src).replace(/^\.\//, '').replace(/[?#].*$/, '');
-	if (rel === 'history/history.json') return 'manifest';
-	let match = /^history\/([^/]+)$/.exec(rel);
-	if (match) return historyPath.get(match[1]) ?? null;
+	if (rel === 'data/days.json') return 'manifest';
+	let match = /^data\/(\d{4}-\d{2}-\d{2})\/scores\.json$/.exec(rel);
+	if (match) {
+		const root = scoresRoot.get(match[1]);
+		return root ? join(root, 'data', match[1], 'scores.json') : null;
+	}
 	match = /^data\/(\d{4}-\d{2}-\d{2})\/([^/]+\.json)$/.exec(rel);
 	if (match) {
 		const root = dayRoot(match[1]);
@@ -505,18 +497,16 @@ const startTimes = (day) => {
 	}
 	return [...groups].sort();
 };
-const coverage = { days: [], noWindows: [], missingFiles: [], missingBooks: {}, noPlayers: [], emptyList: [], notInHistory: 0, borrowed: [] };
-const countGames = (helper, playerSets) => {
+const coverage = { days: [], noWindows: [], missingFiles: [], missingBooks: {}, earlierDraw: [], noPlayers: [], emptyList: [], noGame: 0, borrowed: [] };
+const countGames = (helper, opponents) => {
 	const teams = new Set();
 	let games = 0;
 	for (const sid of LISTS) {
-		const outcomes = playerSets.get(sid);
-		if (!outcomes) continue;
 		for (const item of helper[sid] ?? []) {
-			const player = outcomes.get(item.playerId);
-			if (!player || teams.has(player.team)) continue;
-			teams.add(player.team);
-			teams.add(player.opponent);
+			const opponent = opponents.get(item.team);
+			if (opponent === undefined || teams.has(item.team)) continue;
+			teams.add(item.team);
+			teams.add(opponent);
 			games += 1;
 		}
 	}
@@ -551,24 +541,24 @@ const scoreOf = (group) => ({
 const ticketOf = (combos) => combos.map((combo) => `${combo.pick1.id}:${combo.pick2.id}:${combo.pick3.id}`).sort().join('|');
 const idsOf = (combos) => combos.map((combo) => [combo.pick1.id, combo.pick2.id, combo.pick3.id]);
 
-const historyByDay = new Map();
-const formatOf = new Map();
-for (const range of manifest) {
-	for (const file of range.files) {
-		historyByDay.set(dayOfFile(file), file);
-		formatOf.set(dayOfFile(file), range.format);
-	}
-}
+const formatOf = new Map(manifest.map((entry) => [entry.date, entry.format]));
 const windows = [];
-for (const [day, file] of historyByDay) {
-	const history = archiveJson(`./history/${file}`);
-	if (!Array.isArray(history?.playerLists)) {
-		coverage.noWindows.push(`${day} (unreadable history)`);
+for (const { date: day } of manifest) {
+	// The day's results, as the app's replays read them: who scored, and each team's opponent in a game on its schedule
+	const scores = archiveJson(`./data/${day}/scores.json`);
+	if (scores?.date !== day || !Array.isArray(scores.games)) {
+		coverage.noWindows.push(`${day} (unreadable scores)`);
 		continue;
 	}
 	coverage.days.push(day);
-	const playerSets = new Map();
-	for (const list of history.playerLists) playerSets.set(String(list.id), new Map((list.players ?? []).map((player) => [Math.abs(player.nhlPlayerId), player])));
+	const scorers = new Set();
+	const opponents = new Map();
+	for (const game of scores.games) {
+		for (const id of game.scorers ?? []) scorers.add(id);
+		if (game.schedule !== 'OK') continue;
+		opponents.set(game.away, game.home);
+		opponents.set(game.home, game.away);
+	}
 	const slots = startTimes(day);
 	let kept = 0;
 	for (let slotIndex = 0; slotIndex < slots.length; slotIndex += 1) {
@@ -577,6 +567,11 @@ for (const [day, file] of historyByDay) {
 		const helper = archiveJson(`${folder}/helper.json`);
 		if (!helper) {
 			coverage.missingFiles.push(`${day} ${time}`);
+			continue;
+		}
+		// Lists the feed drew on an earlier day, which a snapshot keeps when the day's first draw posts late
+		if (typeof helper.dateTimeAvailable === 'string' && helper.dateTimeAvailable.slice(0, 10) !== day) {
+			coverage.earlierDraw.push(`${day} ${time}`);
 			continue;
 		}
 		// A book without a file prices no one in this window, as in the app's replays
@@ -594,12 +589,10 @@ for (const [day, file] of historyByDay) {
 		});
 		const rows = [];
 		for (const sid of LISTS) {
-			const outcomes = playerSets.get(sid);
-			if (!outcomes) continue;
 			for (const item of helper[sid] ?? []) {
-				const player = outcomes.get(item.playerId);
-				if (!player) {
-					coverage.notInHistory += 1;
+				const opponent = opponents.get(item.team);
+				if (opponent === undefined) {
+					coverage.noGame += 1;
 					continue;
 				}
 				const name = `${item.firstName} ${item.lastName}`;
@@ -615,7 +608,7 @@ for (const [day, file] of historyByDay) {
 					}
 				}
 				rows.push(new Row({
-					sid, id: item.playerId, name, team: player.team, opponent: player.opponent, scored: player.scored,
+					sid, id: item.playerId, name, team: item.team, opponent, scored: scorers.has(item.playerId),
 					...Object.fromEntries(BOOKS.map((book, index) => [book, probs[index]])), betAvg: null, betCount: 0,
 				}));
 			}
@@ -635,7 +628,7 @@ for (const [day, file] of historyByDay) {
 				row[key] = prices.length ? prices.reduce((sum, value) => sum + value, 0) / prices.length : null;
 			}
 		}
-		const gameCount = countGames(helper, playerSets);
+		const gameCount = countGames(helper, opponents);
 		if (gameCount === 0) {
 			coverage.noPlayers.push(`${day} ${time}`);
 			continue;
@@ -1684,22 +1677,23 @@ results.conclusion = conclusion;
 
 const daysByFormat = new Map();
 for (const day of coverage.days) {
-	const key = `${manifest.find((range) => range.files.some((file) => dayOfFile(file) === day))?.season} ${formatOf.get(day)}`;
+	const key = `${archiveDay.get(day)?.season} ${formatOf.get(day)}`;
 	daysByFormat.set(key, (daysByFormat.get(key) ?? 0) + 1);
 }
 say(`# Archive analysis, ${etStamp(new Date())} ET`);
 say('');
-say(`History: ${plural(coverage.days.length, 'day')}, ${coverage.days[0]} to ${coverage.days.at(-1)} (${[...daysByFormat].map(([key, count]) => `${key} ${count}`).join(', ')})`);
-say(`Snapshots: ${roots.map(rootName).join(', then ')}; history from all of them`);
+say(`Archive: ${plural(coverage.days.length, 'day')}, ${coverage.days[0]} to ${coverage.days.at(-1)} (${[...daysByFormat].map(([key, count]) => `${key} ${count}`).join(', ')})`);
+say(`Snapshots: ${roots.map(rootName).join(', then ')}; the days any of their indexes list, each day's scores from the first that lists it`);
 say(`Windows: ${plural(windows.length, 'window')} on ${plural(days.length, 'day')}, ${plural(common.length, 'window')} with a ticket from all ${SUBSET_KEYS.length} subsets of the books`);
 const skipped = [
 	coverage.missingFiles.length && `${coverage.missingFiles.length} without a list (${coverage.missingFiles.slice(0, SHOW).join(', ')}${coverage.missingFiles.length > SHOW ? ', …' : ''})`,
-	coverage.noPlayers.length && `${coverage.noPlayers.length} with no listed player found in that day's history`,
+	coverage.earlierDraw.length && `${coverage.earlierDraw.length} with lists drawn on an earlier day (${coverage.earlierDraw.slice(0, SHOW).join(', ')}${coverage.earlierDraw.length > SHOW ? ', …' : ''})`,
+	coverage.noPlayers.length && `${coverage.noPlayers.length} with no listed player whose team played that day`,
 	coverage.emptyList.length && `${coverage.emptyList.length} with a list where no player had ${minSportsbooks}+ books (${coverage.emptyList.slice(0, SHOW).join(', ')})`,
 ].filter(Boolean);
 if (skipped.length) say(`  skipped, as the app's replays skip them: ${skipped.join('; ')}`);
-if (coverage.noWindows.length) say(`  history days with no usable window: ${coverage.noWindows.join(', ')}`);
-if (coverage.notInHistory) say(`  ${plural(coverage.notInHistory, 'list entry', 'list entries')} missing from that day's history, skipped as the app skips them`);
+if (coverage.noWindows.length) say(`  archived days with no usable window: ${coverage.noWindows.join(', ')}`);
+if (coverage.noGame) say(`  ${plural(coverage.noGame, 'list entry', 'list entries')} whose team had no game on its schedule that day, skipped as the app skips them`);
 if (coverage.borrowed.length) say(`  snapshot folders taken from a later folder: ${coverage.borrowed.join(', ')}`);
 say(`Books: ${BOOKS.map((book) => `${book} (${app.Sportsbooks?.[book]?.title ?? '?'})`).join(', ')}; Avg is their average for players priced by ${minSportsbooks}+, and a smaller subset averages its books that price the player`);
 const missingBooks = Object.entries(coverage.missingBooks);
