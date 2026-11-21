@@ -2,6 +2,10 @@
 
 Version Release Notes
 
+## 0.6.6 - 2026-11-20
+
+- User interface improvement
+
 ## 0.6.5 - 2026-11-20
 
 - Backend improvements
