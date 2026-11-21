@@ -328,9 +328,8 @@ function App() {
 				setPassedStart(latestStart(gamesList.map((game) => game.time.getTime()), Date.now()));
 				setError(null);
 			} catch (error: unknown) {
-				if (error instanceof Error && error.message === DataProcessor.NO_GAMES_ERROR) {
-					console.warn('No games found for today. Displaying empty tables.');
-				} else {
+				// A day without games is a normal state, which the empty tables and the games section show by themselves
+				if (!(error instanceof Error && error.message === DataProcessor.NO_GAMES_ERROR)) {
 					console.error('Failed to load initial data:', error);
 					setError('Failed to load game data. Please refresh the page.');
 				}
