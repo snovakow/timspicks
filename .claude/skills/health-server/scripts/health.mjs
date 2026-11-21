@@ -272,10 +272,43 @@ else if (!lib || !validUpdate(updateDir, lib)) fail(`${updateDir} has no update.
 if (updateOthers.length) warn(`More than one update folder matched; this report checks ${updateDir}`);
 if (liveDir && !isDir(liveDir)) fail(`The live folder ${liveDir} doesn't exist`);
 
+// --- Schedules: each day's games, which say what a day's runs had to do -------------------------
+
+/*
+	A day's schedule: the live games.json while it holds today, otherwise the copy saved with that day's snapshots.
+	A day without a snapshot saves no copy, and every day without games is one, so the copy saved on one of the six
+	days before it stands in: each copy holds the schedule's whole week. null means no copy reaches the day
+*/
+const scheduleOf = (gamesJson, day = null) => {
+	const week = day === null ? gamesJson?.gameWeek?.[0] : gamesJson?.gameWeek?.find((entry) => entry?.date === day);
+	const games = (Array.isArray(week?.games) ? week.games : []).filter((game) => !isNaN(new Date(game?.startTimeUTC)));
+	games.sort((a, b) => new Date(a.startTimeUTC) - new Date(b.startTimeUTC));
+	return { day: typeof week?.date === 'string' ? week.date : null, games, times: games.map((game) => new Date(game.startTimeUTC)) };
+};
+const liveGames = dataDir ? readJson(join(dataDir, 'games.json')) : null;
+const liveSchedule = scheduleOf(liveGames);
+const savedSchedules = new Map();
+const scheduleFor = (day) => {
+	if (day === today && liveSchedule.day === today) return liveSchedule;
+	if (!savedSchedules.has(day)) {
+		let found = null;
+		for (let back = 0; dataDir && !found && back <= 6; back += 1) {
+			const saved = readJson(join(dataDir, shiftDay(day, -back), 'games.json'));
+			if (Array.isArray(saved?.gameWeek) && saved.gameWeek.some((entry) => entry?.date === day)) found = scheduleOf(saved, day);
+		}
+		savedSchedules.set(day, found);
+	}
+	return savedSchedules.get(day);
+};
+// A day the schedule lists no games for, as opposed to one whose schedule isn't known
+const noGamesOn = (day) => scheduleFor(day)?.games.length === 0;
+
 // --- The cron log: one line per run that did work -----------------------------------------------
 
 const LOG_LINE = /^\*\*\* (\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}) ([AP]M): ?(.*)$/;
 const SNAPSHOT_PATH = /\/data\/\d{4}-\d{2}-\d{2}\/\d{4}$/;
+// The schedule step's errors name the schedule feed or the file it writes
+const SCHEDULE_STEP = /\/schedule\/|\/games\.json\b/;
 const logTail = logPath ? readTail(logPath) : null;
 const runs = [];
 const unexpected = [];
@@ -290,25 +323,16 @@ for (const line of (logTail?.text ?? '').split(/\r?\n/)) {
 	const time = zonedTime(Number(year), Number(month), Number(day), (Number(hour) % 12) + (half === 'PM' ? 12 : 0), Number(minute), 0, ET);
 	// A run ends on a snapshot path, a "Complete" line or a step's "written to" line; anything else is a step's error
 	const ok = SNAPSHOT_PATH.test(message) || /^Complete\b/.test(message) || /\b(?:has|have) been (?:merged and )?written to /.test(message);
-	runs.push({ time, message, ok });
+	/*
+		A day without games is done once a run has its schedule. update.php ends that run there, complete; an older
+		one went on to the pick lists, which the feed answers with an error on such a day, so an error after the
+		schedule step ended a run that had already done all the day needed
+	*/
+	const pastSchedule = !ok && !SCHEDULE_STEP.test(message) && noGamesOn(etDay(time));
+	runs.push({ time, message, ok: ok || pastSchedule, pastSchedule });
 }
 // The log covers a day when its first run comes before that day starts
 const logCovers = (day) => runs.length > 0 && runs[0].time <= dayStart(day);
-
-// A day's schedule: the live games.json while it holds today, otherwise the copy saved with that day's snapshots
-const scheduleOf = (gamesJson) => {
-	const week = gamesJson?.gameWeek?.[0];
-	const games = (Array.isArray(week?.games) ? week.games : []).filter((game) => !isNaN(new Date(game?.startTimeUTC)));
-	games.sort((a, b) => new Date(a.startTimeUTC) - new Date(b.startTimeUTC));
-	return { day: typeof week?.date === 'string' ? week.date : null, games, times: games.map((game) => new Date(game.startTimeUTC)) };
-};
-const liveGames = dataDir ? readJson(join(dataDir, 'games.json')) : null;
-const liveSchedule = scheduleOf(liveGames);
-const scheduleFor = (day) => {
-	if (day === today && liveSchedule.day === today) return liveSchedule;
-	const saved = dataDir ? readJson(join(dataDir, day, 'games.json')) : null;
-	return saved ? scheduleOf(saved) : null;
-};
 
 section('Cron');
 guard('cron', () => {
@@ -323,7 +347,8 @@ guard('cron', () => {
 		const last = runs.at(-1);
 		const lastOk = runs.findLast((entry) => entry.ok);
 		say(`Cron log: ${sizeOf(logTail.size)}, ${plural(runs.length, 'run')}${logTail.partial ? ' in its last 4 MB' : ''}${runs.length ? `, from ${etStamp(runs[0].time)}` : ''}`);
-		say(`Last run: ${last ? `${at(last.time)}, ${last.ok ? 'ok' : 'failed'}: ${clip(maskHosts(last.message), 120)}` : 'none'}`);
+		const outcome = (entry) => (entry.pastSchedule ? 'ok, no games that day; it had the schedule, then' : entry.ok ? 'ok' : 'failed');
+		say(`Last run: ${last ? `${at(last.time)}, ${outcome(last)}: ${clip(maskHosts(last.message), 120)}` : 'none'}`);
 		say(`Last success: ${lastOk ? at(lastOk.time) : 'none in the log'}`);
 
 		const failed = runs.filter((entry) => !entry.ok && entry.time >= windowStart);
@@ -389,7 +414,7 @@ guard('cron', () => {
 			const failedThatDay = dayRuns.filter((entry) => !entry.ok).length;
 			// Not flagged on its own: a manual update resets the hourly clock without a cron log line, and the
 			// failures behind a real gap show up as a cron silence, a PHP error or an overdue run
-			say(`${day}  ${String(dayRuns.length).padStart(4)}  ${String(failedThatDay).padStart(6)}  ${gaps.length ? gaps.join(', ') : schedule?.times.length ? 'none' : 'no games on file'}`);
+			say(`${day}  ${String(dayRuns.length).padStart(4)}  ${String(failedThatDay).padStart(6)}  ${gaps.length ? gaps.join(', ') : schedule?.times.length ? 'none' : schedule ? 'no games' : 'no schedule saved'}`);
 		}
 	}
 
@@ -555,13 +580,18 @@ guard('data', () => {
 	const failingSince = timeOf(proc?.failingSince);
 	const runWarnings = Array.isArray(proc?.warnings) ? proc.warnings.filter((warning) => typeof warning === 'string') : [];
 	if (!processed) fail('process.json is missing or has no valid "processed" time, so the site can\'t say when data was updated');
+	const schedule = liveSchedule;
+	// A day without games: its schedule is the whole update, so the lists and odds stay as the last day with games left them
+	const noGamesToday = schedule.day === today && !schedule.games.length;
 	say(`Last complete run: ${at(processed)}`);
-	if (started && (!processed || started > processed)) say(`Unfinished run: started ${at(started)}${failingSince ? `, failing since ${at(failingSince)}` : ''}`);
+	if (started && (!processed || started > processed)) {
+		const pastSchedule = noGamesToday && started >= dayStart(today) && runs.findLast((entry) => entry.time >= dayStart(today))?.pastSchedule;
+		say(`Unfinished run: started ${at(started)}${failingSince ? `, failing since ${at(failingSince)}` : ''}${pastSchedule ? '; it had today\'s schedule, which lists no games, so the day needs nothing more' : ''}`);
+	}
 	say(`Warnings from the last run: ${runWarnings.length ? '' : 'none'}`);
 	for (const warning of runWarnings.slice(0, 8)) say(`    ${clip(maskHosts(warning), 140)}`);
 
 	const helper = readJson(join(dataDir, 'helper.json'));
-	const schedule = liveSchedule;
 	const todays = schedule.day === today ? schedule.times : null;
 	const lastStart = schedule.times.at(-1) ?? null;
 	const gamesLeft = !!todays?.some((time) => time > now);
@@ -574,22 +604,26 @@ guard('data', () => {
 	const staleBanner = !!(processed && lastStart && schedule.times.some((time) => time < lastStart && time > processed && now - time > REDRAW_GRACE));
 	const earlierDraw = drawn !== null && schedule.day !== null && drawn.slice(0, 10) !== schedule.day;
 	const dayLocked = !!(lastStart && now >= lastStart && !stopped);
-	const notices = [];
-	if (!schedule.games.length) notices.push('no games listed, so the site shows none');
-	if (dayLocked) notices.push('all of today\'s games have started, so picks are locked (normal at this hour)');
-	if (unfinished || stopped || ((staleBanner || earlierDraw) && !dayLocked)) {
-		const text = unfinished ? 'The latest update didn\'t finish'
-			: stopped ? 'There hasn\'t been an update in over a day'
-				: earlierDraw ? 'Today\'s pick lists haven\'t posted yet'
-					: 'A game has started since the last update';
-		notices.push(text);
-		(unfinished || stopped ? fail : warn)(`The site's banner says: ${text}`);
+	if (!schedule.games.length) {
+		// The loader stops at an empty schedule before it works out the status, whatever process.json holds
+		say('Site banner now: none; with no games listed, the page says "No games today" and shows no status');
+	} else {
+		const notices = [];
+		if (dayLocked) notices.push('all of today\'s games have started, so picks are locked (normal at this hour)');
+		if (unfinished || stopped || ((staleBanner || earlierDraw) && !dayLocked)) {
+			const text = unfinished ? 'The latest update didn\'t finish'
+				: stopped ? 'There hasn\'t been an update in over a day'
+					: earlierDraw ? 'Today\'s pick lists haven\'t posted yet'
+						: 'A game has started since the last update';
+			notices.push(text);
+			(unfinished || stopped ? fail : warn)(`The site's banner says: ${text}`);
+		}
+		if (runWarnings.length) {
+			notices.push(`${plural(runWarnings.length, 'warning')} from the last update`);
+			warn(`The site's banner lists ${plural(runWarnings.length, 'warning')} from the last update`);
+		}
+		say(`Site banner now: ${notices.length ? notices.join('; ') : 'none'}`);
 	}
-	if (runWarnings.length) {
-		notices.push(`${plural(runWarnings.length, 'warning')} from the last update`);
-		warn(`The site's banner lists ${plural(runWarnings.length, 'warning')} from the last update`);
-	}
-	say(`Site banner now: ${notices.length ? notices.join('; ') : 'none'}`);
 
 	// update.php's staleList(): a listed team whose game started more than one buffer ago
 	const startedTeams = new Map();
@@ -613,7 +647,7 @@ guard('data', () => {
 	else if (!todays) {
 		due = failedDate && now - failedDate < UPDATE_PERIOD ? new Date(failedDate.getTime() + UPDATE_PERIOD) : new Date(midnight.getTime() + UPDATE_BUFFER);
 		dueNote = `games.json holds ${schedule.day ?? 'no'} schedule, so the next call runs in full`;
-	} else if (!todays.length) dueNote = 'no games today, so the cron has nothing to update';
+	} else if (!todays.length) dueNote = 'no games today, so the run that fetched the schedule was the day\'s whole update';
 	else if (now >= todays.at(-1) - UPDATE_BUFFER) dueNote = 'the day\'s last game has started, so the cron rests until midnight';
 	else if (!lastRunDate) {
 		due = new Date(midnight.getTime() + UPDATE_BUFFER);
@@ -644,7 +678,7 @@ guard('data', () => {
 		fail('helper.json is missing or unreadable, so the site has no pick lists');
 	} else {
 		const sizes = LISTS.map((key) => (Array.isArray(helper[key]) ? helper[key].length : 0));
-		say(`Pick lists: ${sizes.join(' / ')}, ${drawn ? `drawn ${drawn.replace('T', ' ').slice(0, 16)} ET` : 'no draw stamp'}`);
+		say(`Pick lists: ${sizes.join(' / ')}, ${drawn ? `drawn ${drawn.replace('T', ' ').slice(0, 16)} ET` : 'no draw stamp'}${noGamesToday ? ', kept from the last day with games, since a day without games has no draw' : ''}`);
 		if (gamesLeft && sizes.some((size) => size === 0)) warn(`A pick list is empty while today's games remain: ${sizes.join(' / ')}`);
 		if (staleTeams.length && !dayLocked) {
 			const oldest = new Date(Math.min(...staleTeams.map((team) => startedTeams.get(team))));
@@ -670,9 +704,9 @@ guard('data', () => {
 		books.push(`${book} ${offers.length}`);
 		if (!offers.length && gamesLeft) warn(`${book}.json is empty while today's games remain`);
 		const modified = statOf(path)?.mtime;
-		if (processed && modified && processed - modified > 10 * 60 * 1000) warn(`${book}.json wasn't rewritten by the last complete run; it last changed ${at(modified)}`);
+		if (!noGamesToday && processed && modified && processed - modified > 10 * 60 * 1000) warn(`${book}.json wasn't rewritten by the last complete run; it last changed ${at(modified)}`);
 	}
-	say(`Books: ${books.join(', ')}`);
+	say(`Books: ${books.join(', ')}${noGamesToday ? ', kept from the last day with games, since a day without games fetches none' : ''}`);
 
 	// The app loads players/<id>.json for every listed player, and one missing file fails the whole load
 	const ids = [...new Set(listed.map((row) => row?.playerId).filter((id) => Number.isInteger(id) && id > 0))];
@@ -695,7 +729,9 @@ guard('data', () => {
 		const daySchedule = scheduleFor(day);
 		const flag = day === today || dayStart(day) >= dayStart(etDay(flagSince));
 		if (!daySchedule?.times.length) {
-			if (folders.length) say(`${day}: ${folders.join(' ')}, with no schedule saved`);
+			if (folders.length) say(`${day}: ${folders.join(' ')}, ${daySchedule ? 'though the schedule lists no games' : 'with no schedule saved'}`);
+			// A day the schedule lists no games for has no slot to snapshot
+			else if (daySchedule) say(`${day}: no games`);
 			else if (runs.some((entry) => etDay(entry.time) === day)) say(`${day}: no games (the cron ran, and wrote no snapshot)`);
 			else if (day !== today && logCovers(day)) {
 				say(`${day}: no snapshots and no cron output`);
