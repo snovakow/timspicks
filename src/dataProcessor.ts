@@ -22,7 +22,15 @@ type GameListingData = {
 	}[];
 };
 
-export const NO_GAMES_ERROR = "NO_GAMES" as const;
+// Thrown when the schedule's day has no games, with that day's ET date so the page still knows which day it is
+export class NoGamesError extends Error {
+	readonly date: string | null;
+	constructor(date: string | null) {
+		super('NO_GAMES');
+		this.name = 'NoGamesError';
+		this.date = date;
+	}
+}
 
 export interface DataStatus {
 	processed: Date;
@@ -288,7 +296,8 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 	}
 	const games: GameDataInput[] = gamesJson.gameWeek[0].games || [];
 	if (!Array.isArray(games) || games.length === 0) {
-		throw new Error(NO_GAMES_ERROR);
+		const date = gamesJson.gameWeek[0].date;
+		throw new NoGamesError(typeof date === 'string' ? date : null);
 	}
 
 	if (!Array.isArray(games) || !games.every(isGamesListingItem)) {

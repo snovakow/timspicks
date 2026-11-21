@@ -20,7 +20,7 @@ export default function MyPicks(props: {
 	date: string,
 	// The day is the one the page loaded, rather than an earlier one
 	today: boolean,
-	// The day the page loaded, or null when it has no games
+	// The day the page loaded, with or without games, or null when its lists failed to load
 	loadedDate: string | null,
 	picks: EnteredDay,
 	// The day's scores, or null until they're read

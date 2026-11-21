@@ -329,13 +329,15 @@ function App() {
 				setError(null);
 			} catch (error: unknown) {
 				// A day without games is a normal state, which the empty tables and the games section show by themselves
-				if (!(error instanceof Error && error.message === DataProcessor.NO_GAMES_ERROR)) {
+				const noGames = error instanceof DataProcessor.NoGamesError;
+				if (!noGames) {
 					console.error('Failed to load initial data:', error);
 					setError('Failed to load game data. Please refresh the page.');
 				}
 				setData({
 					gamesList: [],
-					scheduleDate: null,
+					// A day without games is still the loaded day, which the my-picks title counts from
+					scheduleDate: noGames ? error.date : null,
 					roster: [],
 					fetched,
 					playerList: [],
