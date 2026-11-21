@@ -252,8 +252,9 @@ function swapInFile(string $local_file, string $contents)
 	earlier day's scores.
 
 	A day joins the archive through its index, days.json, which the fetch that finds the day's last game
-	official rebuilds. $force is the admin page's Update: it fetches today with nothing in play, fills in
-	earlier days whose scores aren't final, and rebuilds the index whatever happened.
+	official rebuilds. $force is the admin page's Update: it fetches today with nothing in play, unless the
+	schedule lists no games for today, fills in earlier days whose scores aren't final, and rebuilds the
+	index whatever happened.
 
 	A failed fetch, or a reply that isn't the day asked for, leaves that day's file as it was. A file is
 	swapped in whole, since the page reads it while games are on.
@@ -273,7 +274,8 @@ function updateScores(DateTime $now, string $basePath, bool $force = false)
 	foreach ([$yesterday, $today] as $date) {
 		// A day's file holds its games' states, and until its first fetch they come from its schedule
 		$games = savedScores($basePath, $date)['games'] ?? scheduledScores($basePath, $date);
-		if (!$inPlay($games) && !($force && $date === $today)) continue;
+		// A day without games has no scores, and the feed answers it with none, so even Update leaves it alone
+		if (!$inPlay($games) && !($force && $date === $today && scheduledGames($now, $basePath) !== 0)) continue;
 
 		$result = fetchScores($now, $date, "$basePath/$date/scores.json");
 		if ($result['error'] !== null) {

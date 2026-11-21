@@ -201,6 +201,8 @@ try {
     d. Inside the game window, a failed run or a list the feed hadn't redrawn yet
        retries on $retryPeriod instead of $updatePeriod, and so does a list left over from
        an earlier day in the hour after midnight.
+    e. A day the schedule lists no games is done once a run has its schedule: that run
+       ends there, complete, and no other run follows until midnight.
 */
 $updatePeriod = 60 * 60;
 $retryPeriod = 5 * 60;
@@ -229,6 +231,7 @@ $period = $updatePeriod;
 
 $gameTimes = processGames($now, $basePath);
 if ($lastRunDate !== null && $gameTimes !== null) {
+    // e. The run that fetched this schedule was the day's whole update
     if (count($gameTimes) === 0) {
         if ($minOutput) die();
         logEnd($now, "No games found");
@@ -304,6 +307,16 @@ startRun($now, $basePath);
 /* Games */
 $output = updateGames($now, $basePath);
 $warnings = array_merge($warnings, logStep($now, $output, $minOutput));
+
+/*
+    e. A day without games has no draw, and the pick-list feed answers it with an error rather
+    than a list, so the schedule is the whole run. The lists and odds stay as the last day with
+    games left them, and the page shows none of them, only that there are no games.
+*/
+if (scheduledGames($now, $basePath) === 0) {
+    processed($now, $basePath, $warnings);
+    logEnd($now, "Complete, no games today");
+}
 
 $ch = curl_init();
 

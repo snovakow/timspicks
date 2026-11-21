@@ -79,9 +79,10 @@ if ($live) {
 	$warnings = array_merge($warnings, printOutput($output));
 }
 
-/* Scores: today's whether or not a game is in play, yesterday's while one of its games still is, and every earlier
-   day with a snapshot whose scores aren't final, then the archive's index. A failure is shown here and stops
-   nothing, and it stays out of the run's warnings, as the cron's scores step is no part of a run */
+/* Scores: today's whether or not a game is in play, unless today has no games, yesterday's while one of its games
+   still is, and every earlier day with a snapshot whose scores aren't final, then the archive's index. A failure
+   is shown here and stops nothing, and it stays out of the run's warnings, as the cron's scores step is no part
+   of a run */
 if ($live) {
 	$output = updateScores($now, $basePath, true);
 	echo '<h3>' . $output['title'] . '</h3>';
@@ -89,16 +90,24 @@ if ($live) {
 	if (isset($output['content'])) echo $output['content'];
 }
 
+/* A day without games has no draw, and the pick-list feed answers it with an error rather than a list, so the
+   schedule and the scores are the whole run, as they are on the cron */
+$noGames = $live && scheduledGames($now, $basePath) === 0;
+if ($noGames) {
+	echo '<h3>No games today</h3>No pick lists or odds to fetch';
+	processed($now, $basePath, $warnings);
+}
+
 $ch = curl_init();
 
 /* Picks */
-if ($live) {
+if ($live && !$noGames) {
 	$output = updatePicks($ch, $basePath, './players', $savesrc);
 	$warnings = array_merge($warnings, printOutput($output));
 }
 
 /* Sportsbooks, each through the source its mode in the book list names */
-if ($live) {
+if ($live && !$noGames) {
 	$endOfDay = new DateTime('tomorrow midnight', $timezone);
 	foreach (updateBooks($now, $endOfDay, $ch, $basePath, $savesrc) as $output) {
 		$warnings = array_merge($warnings, printOutput($output));
@@ -106,7 +115,7 @@ if ($live) {
 }
 
 /* Backup */
-if ($live) {
+if ($live && !$noGames) {
 	$output = backup($now, $timezone, $basePath, $warnings);
 	$warnings = array_merge($warnings, printOutput($output));
 }
