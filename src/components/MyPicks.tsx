@@ -34,14 +34,13 @@ export default function MyPicks(props: {
 	return (
 		<CollapsibleSection title={title}>
 			<div className="scrollable-table-wrapper section-container">
-				<table>
+				<table className='my-picks-table'>
 					<tbody>
-						{PickTables.map((table, index) => {
+						{PickTables.map((table) => {
 							const pick = picks[table];
 							const logo = pick ? (darkTheme ? pick.logoDark : pick.logoLight) : null;
 							return (
-								// Striped as the other tables' rows are
-								<tr key={table} className={index % 2 === 0 ? 'row-color' : 'row-color-alt'}>
+								<tr key={table}>
 									<td className='my-picks-list'>#{table}</td>
 									<td>
 										{pick ? (

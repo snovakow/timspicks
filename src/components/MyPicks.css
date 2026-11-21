@@ -1,8 +1,27 @@
+/* Set apart from the pick lists as a card in the entered picks' blue, with a thin border and rounded corners,
+   its three fixed rows unstriped in the tint an entered row has in the lists. Rounded corners need separate
+   borders, so the lines between the rows sit on the cells rather than the rows */
+.my-picks-table {
+	border: 1px solid color-mix(in srgb, var(--entered-accent) 45%, transparent);
+	border-collapse: separate;
+	border-spacing: 0;
+	border-radius: 10px;
+}
+
+.my-picks-table tr {
+	border-bottom: none;
+	background-color: var(--entered-tint);
+}
+
+.my-picks-table tr:not(:last-child) > td {
+	border-bottom: 1px solid color-mix(in srgb, var(--entered-accent) 20%, transparent);
+}
+
 /* A pick's list, ahead of its player */
 .my-picks-list {
 	padding-right: 0;
 	font-weight: 700;
-	opacity: 0.7;
+	color: var(--entered-accent);
 }
 
 .my-picks-none {
