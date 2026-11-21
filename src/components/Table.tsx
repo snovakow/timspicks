@@ -2,16 +2,13 @@ import { AllStrategyModes, LogStatsKeys, StrategyLabels, type LogStatsKey, type 
 import type { Team } from "./logo";
 import type { DayScores } from '../dataProcessor';
 import * as Feature from '../features';
-import { timeFormat } from '../utility';
+import { startTime } from '../utility';
 
 import "./Table.css";
 import "./sportsbook.css";
 
 export const precision = 1;
 export const comboPrecision = 2;
-
-// Every start time cell's text
-const startTime = new Intl.DateTimeFormat([], timeFormat);
 
 export interface LocalizedText {
 	default: string;

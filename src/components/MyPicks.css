@@ -24,6 +24,11 @@
 	color: var(--entered-accent);
 }
 
+/* A pick's game start, after his goal mark */
+.my-picks-start {
+	white-space: nowrap;
+}
+
 .my-picks-none {
 	opacity: 0.6;
 	font-style: italic;

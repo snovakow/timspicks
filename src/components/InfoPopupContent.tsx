@@ -42,7 +42,7 @@ export default function InfoPopupContent() {
 					With <strong>My Picks</strong> on in the <strong>Settings</strong>, tapping or clicking a player's name in a pick table
 					marks him as your pick, one in each table, and doing it again clears the mark. <strong>Today's History</strong> keeps
 					a started game's players in the tables to mark. Your picks are kept in this browser only.
-					The latest are listed above the tables with their results, as <strong>Today's Picks</strong> or <strong>Yesterday's Picks</strong>,
+					The latest are listed above the tables with their game start times and results, as <strong>Today's Picks</strong> or <strong>Yesterday's Picks</strong>,
 					or under their date when older, until you mark the next day's, so a late game's result still shows after midnight.
 					Turning <strong>My Picks</strong> off hides the list and the marks in the tables, and deletes nothing.
 				</p>

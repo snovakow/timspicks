@@ -409,6 +409,8 @@ export interface DayScores {
 	settled: ReadonlySet<string>;
 	// The starts, in ms, of the games still to settle, which is how a day the page has no schedule for is followed
 	following: readonly number[];
+	// Each team's start, in ms, which times the picks of a day the page has no schedule for
+	starts: ReadonlyMap<string, number>;
 }
 
 // How long after its start a game is followed when it is never called official, as the cron follows it
@@ -425,19 +427,21 @@ export const loadScores = async (date: string): Promise<DayScores | null> => {
 	const over = new Set<string>();
 	const settled = new Set<string>();
 	const following: number[] = [];
+	const starts = new Map<string, number>();
 	for (const game of value.games) {
 		if (!isRecord(game) || typeof game.away !== 'string' || typeof game.home !== 'string') return null;
 		const official = game.state === 'OFF';
+		const start = typeof game.start === 'string' ? Date.parse(game.start) : NaN;
 		for (const team of [game.away, game.home]) {
 			if (official || game.state === 'FINAL') over.add(team);
 			if (official || game.schedule !== 'OK') settled.add(team);
+			if (!isNaN(start)) starts.set(team, start);
 		}
-		const start = typeof game.start === 'string' ? Date.parse(game.start) : NaN;
 		if (!official && game.schedule === 'OK' && !isNaN(start)) following.push(start);
 		if (!Array.isArray(game.scorers)) return null;
 		for (const playerId of game.scorers) if (typeof playerId === 'number') scorers.add(playerId);
 	}
-	return { date, scorers, over, settled, following };
+	return { date, scorers, over, settled, following, starts };
 };
 
 // True while a game's scores can still change: started, not settled, and within the time a game is followed

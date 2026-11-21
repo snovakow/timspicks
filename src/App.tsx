@@ -443,6 +443,20 @@ function App() {
 	const earlierScores = useDayScores(myPicksDate !== null && !myPicksToday ? myPicksDate : null, null);
 	const myPicksScores = myPicksToday ? loadedScores : earlierScores;
 
+	// Each team's start on the my-picks table's day: the loaded day's from its schedule, there before any score
+	// is read, and an earlier day's from its scores file, as the page has no schedule for that day
+	const loadedStarts = useMemo(() => {
+		const starts = new Map<string, number>();
+		for (const game of data?.gamesList ?? []) {
+			const time = game.time.getTime();
+			if (isNaN(time)) continue;
+			starts.set(game.away.code, time);
+			starts.set(game.home.code, time);
+		}
+		return starts;
+	}, [data]);
+	const myPicksStarts = myPicksToday ? loadedStarts : earlierScores?.starts ?? null;
+
 	// Initialize sort configs - use ref to avoid recreating
 	const sortConfig1Ref = useRef<Picks.SortConfig>({ keyOrder: [] });
 	const sortConfig2Ref = useRef<Picks.SortConfig>({ keyOrder: [] });
@@ -784,7 +798,7 @@ function App() {
 		...oddsColumns,
 		{ key: "betAvg", title: "Avg", sort: true },
 		{ key: "pick", title: "Pick", sort: false },
-		{ key: "gameTime", title: "Start", sort: true },
+		{ key: "gameTime", title: "Start", sort: false },
 	];
 
 	/*
@@ -944,7 +958,7 @@ function App() {
 				)}
 
 				{myPicksDay && myPicksDate !== null && (
-					<MyPicks date={myPicksDate} today={myPicksToday} loadedDate={scheduleDate} picks={myPicksDay} scores={myPicksScores} darkTheme={darkTheme} />
+					<MyPicks date={myPicksDate} today={myPicksToday} loadedDate={scheduleDate} picks={myPicksDay} scores={myPicksScores} starts={myPicksStarts} darkTheme={darkTheme} />
 				)}
 
 				<CollapsibleSection title="Games">

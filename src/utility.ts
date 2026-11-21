@@ -16,3 +16,6 @@ export const getEntries = <T extends object>(obj: T) => Object.entries(obj) as E
 
 // How the page shows a start time
 export const timeFormat: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+
+// Every start time cell's text
+export const startTime = new Intl.DateTimeFormat([], timeFormat);
