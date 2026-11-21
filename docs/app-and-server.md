@@ -365,15 +365,17 @@ Only the latest days are kept, enough for the one the my-picks table shows and
 the one before it, which shows again if the later day's marks are all cleared.
 
 The marked picks are also listed in a table of their own above the games, each
-with its goal mark, with the history on or off. It holds the latest day's with a
-mark: the loaded day's once one is marked, and until then an earlier day's,
-however many of the loaded day's games have started, titled as yesterday's or,
-when older, by its date. The next day's lists arrive on the first load after
-midnight and a late game can still be going then, so a day's results stay up
-until the next day's picks are made. An earlier day's results come from its own
-scores file, followed from the starts the file gives, as the page holds no
-schedule for that day. The table is a section like the others, collapsed by its
-title, and the setting alone turns the marking and the table off.
+with its goal mark and its game's start time, with the history on or off. It
+holds the latest day's with a mark: the loaded day's once one is marked, and
+until then an earlier day's, however many of the loaded day's games have
+started, titled as yesterday's or, when older, by its date. The next day's lists
+arrive on the first load after midnight and a late game can still be going then,
+so a day's results stay up until the next day's picks are made. The loaded day's
+start times come from its schedule. An earlier day's come from its own scores
+file, as do its results, followed from the starts the file gives, as the page
+holds no schedule for that day. The table is a section like the others,
+collapsed by its title, and the setting alone turns the marking and the table
+off.
 
 ## The admin page
 
