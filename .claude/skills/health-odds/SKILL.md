@@ -55,6 +55,7 @@ It opens with a verdict and an **Attention** list:
 - A game that started before the pull is expected to be empty, because books take a game's player markets down at puck drop.
 - Books post player markets at their own pace, so an empty book for an upcoming game is flagged only once two other books price it.
 - If the book's raw response does price that game's anytime market, that's a FAIL: the parser missed it.
+- On a day the schedule lists no games, the books have no markets for today, so Markets has nothing to trace and no listed player has a game to match. That's the normal state for such a day, not a part of the check that couldn't run. The pull still shows whether each book answered, any market a book lists is for later days' games, and the snapshot sweep runs as on any other day.
 
 **Markets.** Each parsed entry is traced to the raw selection with the same name and price, so this shows what was actually read, not what the parser looks for.
 - **Read** is the market the entries came from, with whatever the book states about how it settles (period, line, side), and the count per game against the prices that market holds. Expect one market per game, named as the anytime goal scorer market, settling on the whole game and on one or more goals, overtime included.
@@ -126,7 +127,7 @@ Only when the report shows a book's format changed and you've found the new shap
 
 Report only the outcome. Leave out per-book verdicts, the evidence behind a fix, and how a change reaches the site.
 
-If every part of the check ran and nothing needed fixing, the whole report is one line: **Clean.** A finding that turns out fine once confirmed (step 3) isn't a problem.
+If every part of the check ran and nothing needed fixing, the whole report is one line: **Clean.** A finding that turns out fine once confirmed (step 3) isn't a problem. A day without games isn't one either, and its empty markets and lists count as parts that ran: the line still reads Clean, and adds that the day had no games, so the reader knows only the snapshots had anything to check.
 
 Otherwise, two lists:
 - **Problems**, most severe first, one line each: what's wrong, then either "fixed" (by a change listed below) or why it's left. Leads left alone, as namesakes or key conflicts, go here. So does any part of the check that couldn't run: a book whose fetch failed, names skipped, no live folder.

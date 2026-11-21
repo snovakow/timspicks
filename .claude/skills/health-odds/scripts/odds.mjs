@@ -380,7 +380,8 @@ const readers = {
 			labels.set(match[1], `${attribute('away-team-fullname')} @ ${attribute('home-team-fullname')}`);
 		}
 		const files = listDir(dir).filter((name) => name.startsWith(`src_comparison_${region}_`) && name.endsWith('.html')).sort();
-		if (!files.length) return { error: labels.size ? `no ${region} odds tabs were saved, so the parser read no games` : 'the matchups page lists no games' };
+		// noGamePages: the responses hold no game to read, as on a day without games
+		if (!files.length) return { error: labels.size ? `no ${region} odds tabs were saved, so the parser read no games` : 'the matchups page lists no games', noGamePages: true };
 		const markets = [];
 		const notes = [];
 		for (const file of files) {
@@ -450,7 +451,9 @@ const readers = {
 	bet2(dir) {
 		const files = listDir(dir).filter((name) => /^src_bet2_\d+\.json$/.test(name)).sort();
 		if (!files.length) {
-			return { error: readJson(join(dir, 'src_bet2.json')) ? 'no event pages were saved, so the parser fetched no games' : 'src_bet2.json is missing or not JSON' };
+			return readJson(join(dir, 'src_bet2.json'))
+				? { error: 'no event pages were saved, so the parser fetched no games', noGamePages: true }
+				: { error: 'src_bet2.json is missing or not JSON' };
 		}
 		const markets = [];
 		const notes = [];
@@ -486,7 +489,9 @@ const readers = {
 	bet3(dir) {
 		const files = listDir(dir).filter((name) => /^src_bet3_\d+\.json$/.test(name) && name !== 'src_bet3_0.json').sort();
 		if (!files.length) {
-			return { error: readJson(join(dir, 'src_bet3_0.json')) ? 'no fixture pages were saved, so the parser fetched no games' : 'src_bet3_0.json is missing or not JSON' };
+			return readJson(join(dir, 'src_bet3_0.json'))
+				? { error: 'no fixture pages were saved, so the parser fetched no games', noGamePages: true }
+				: { error: 'src_bet3_0.json is missing or not JSON' };
 		}
 		const markets = [];
 		const notes = [];
@@ -618,7 +623,7 @@ const books = BOOKS.map((key) => {
 	const raw = readJson(file);
 	const book = {
 		key, step, exists: isFile(file), raw, entries: validItems(raw), invalid: Array.isArray(raw) ? raw.length - validItems(raw).length : null,
-		markets: [], notes: [], readerError: null, extra: 0, unattributed: [], ambiguous: 0, families: [], byGame: new Map(), offSchedule: 0,
+		markets: [], notes: [], readerError: null, noGamePages: false, extra: 0, unattributed: [], ambiguous: 0, families: [], byGame: new Map(), offSchedule: 0,
 	};
 	if (!book.exists) return book;
 	let read;
@@ -629,6 +634,7 @@ const books = BOOKS.map((key) => {
 		read = { error: `the reader stopped: ${clip(String(error?.message ?? error), 160)}` };
 	}
 	book.readerError = read.error ?? null;
+	book.noGamePages = !!read.noGamePages;
 	book.markets = read.markets ?? [];
 	book.notes = read.notes ?? [];
 	book.extra = read.extra ?? 0;
@@ -778,6 +784,11 @@ for (const book of books) {
 	}
 	if (book.invalid) fail(`${title(book.key)}: ${plural(book.invalid, 'entry', 'entries')} aren't a name and a numeric price, which the app rejects, failing the whole page`);
 	if (book.readerError) {
+		// A day without games leaves a book no game pages to save, which is the day's normal state
+		if (book.noGamePages && scheduleFile && !games.length && !book.entries.length) {
+			say('No games today, so there were no game pages to read.');
+			continue;
+		}
 		say(`The raw responses couldn't be read: ${book.readerError}`);
 		if (book.entries.length) warn(`${title(book.key)}'s raw responses don't have the shape this check reads (${clip(book.readerError, 100)}); inspect them by hand`);
 		continue;
@@ -797,6 +808,7 @@ for (const book of books) {
 	}
 	if (left.length) {
 		say(`Left: ${few(left.map((family) => `"${family.name}"${family.anytime ? ' (anytime-like)' : ''} ${family.priced}`), 7)}`);
+		if (scheduleFile && !games.length) say('No games today, so these are for later days\' games.');
 		for (const family of left.filter((candidate) => candidate.anytime)) {
 			const slots = [...family.games.values()].filter((slot) => slot.game && !slot.game.started && book.byGame.get(slot.game.id)?.length);
 			if (slots.length) warn(`${title(book.key)} also prices "${family.name}" for ${slots.map((slot) => slot.label).join(', ')}, which the parser left; check it isn't the market to read`);
@@ -1039,7 +1051,8 @@ await guard('today\'s names', () => {
 	section('Names, today\'s lists');
 	if (!app) return say('Skipped: the app\'s code didn\'t load.');
 	if (!helperToday) return say(`Skipped: no ${shortPath(helperPath)}.`);
-	if (!games.length) return say('Skipped: no games on today\'s schedule.');
+	if (!scheduleFile) return say('Skipped: no schedule to read.');
+	if (!games.length) return say('No games today, so no listed player has a game to match.');
 	const players = listed(helperToday).map((player) => ({ ...player, game: gameByTeam.get(player.json?.currentTeamAbbrev ?? player.team) ?? gameByTeam.get(player.team) ?? null }));
 	const playing = players.filter((player) => player.game);
 	const missingFiles = playing.filter((player) => !player.json);
