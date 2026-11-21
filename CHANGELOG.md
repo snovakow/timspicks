@@ -2,6 +2,10 @@
 
 Version Release Notes
 
+## 0.7.0 - 2026-11-21
+
+- Game start time beside each pick in Today's Picks
+
 ## 0.6.7 - 2026-11-20
 
 - Bug fix
