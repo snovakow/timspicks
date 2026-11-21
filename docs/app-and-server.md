@@ -44,6 +44,7 @@ around moments when a fetch would be pointless.
 - Never within the buffer of a game start time, or of midnight.
 - Inside the game window, a run that failed or a list the feed hadn't redrawn
   yet waits only the retry period.
+- A day the schedule lists no games is done once a run has its schedule.
 
 Only the midnight buffer is checked on its own, before anything reads the
 schedule file. The rest of the gate needs both the run state and a today-dated
@@ -80,6 +81,13 @@ cron doesn't pull every few minutes until the last game. The app runs the same
 check against the schedule's date and reports that today's lists haven't posted
 yet. A stored list written before the stamp was kept counts as current.
 
+A day the schedule lists no games has no draw at all, and the pick-list feed
+answers it with an error rather than a list. So the run that fetches such a day's
+schedule ends there, complete, without the pick lists or the books, and no other
+run follows until midnight. The lists and odds from the last day with games stay
+on disk, and the page shows none of them, only that there are no games.
+That is the whole of a day without games, not a failure.
+
 The net effect is one run per update period plus one shortly after each game
 start, with a floor of one per retry period while a list is stale or a feed is
 failing inside the window — nowhere near the 1,440 times a day cron fires. Fewer
@@ -110,8 +118,9 @@ well as today, so games still going at midnight are seen through, and no game is
 followed long enough to reach further back. Until a day's first fetch, whether
 its games are in play comes from its schedule: the schedule file while it holds
 that day, then the copy its snapshots saved. The admin page's Update fetches
-today's scores even with nothing in play, yesterday's only while one of its
-games still is, and any earlier day the archive lacks (see the archive, below).
+today's scores even with nothing in play, unless the schedule lists no games for
+today, yesterday's only while one of its games still is, and any earlier day the
+archive lacks (see the archive, below).
 
 The step is no part of a run. It writes no log line and leaves the run state
 alone, and a failed fetch, or a reply that isn't the day asked for, leaves that
@@ -256,9 +265,10 @@ to tell the two apart.
 The run-state file carries when a run began, when it last finished, and any
 warnings it raised. The front end reads it and shows a notice when the data is
 over a day old, a run didn't finish, a game has started since the last run, or
-the last run had warnings. A run that dies partway, including one whose snapshot
-copy fails, leaves its start stamp behind, and the next cron attempt measures its
-wait from it.
+the last run had warnings. On a day the schedule lists no games the page says
+only that, with no notice, since none of them applies. A run that dies partway,
+including one whose snapshot copy fails, leaves its start stamp behind, and the
+next cron attempt measures its wait from it.
 
 Each attempt restamps the start, and inside the game window failures retry
 quickly, so the start stamp alone would never age past the banner's grace while a
@@ -369,7 +379,8 @@ title, and the setting alone turns the marking and the table off.
 
 An admin page sits in the site folder. It mints a CSRF token and posts
 credentials to the scraping service to run **Update**: the same sequence cron
-runs, with no throttling. It is a manual force-refresh, and the way to fill in an
+runs, with no throttling, which on a day without games ends after the schedule
+and the scores. It is a manual force-refresh, and the way to fill in an
 archived day the cron missed (see the archive, below).
 
 Credentials live in a gitignored file holding a name and a bcrypt hash, and it is
