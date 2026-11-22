@@ -2,6 +2,10 @@
 
 Version Release Notes
 
+## 0.8.0 - 2026-11-22
+
+- Start column in the pick tables, with each player's game start time
+
 ## 0.7.1 - 2026-11-21
 
 - Bug fix
