@@ -791,6 +791,7 @@ function App() {
 		{ key: "fullName", title: "Player", sort: true },
 		...oddsColumns,
 		{ key: "betAvg", title: "Avg", sort: true },
+		{ key: "gameTime", title: "Start", sort: false },
 	];
 
 	const columnsPlayer: Picks.ColumnData[] = [

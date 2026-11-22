@@ -361,7 +361,7 @@ export function Table(props: {
 
 							{LogStatsKeys.map((key) => renderBetCell(key, player.display[key] ?? '-', picks ? row.highlight.has(key) : undefined, picks ? visibleStrategyFor(row, key) : undefined))}
 							{!picks && (<td>{(row.pick === 0 ? "-" : row.pick)}</td>)}
-							{!picks && (<td className="cell-container">{startTime.format(row.gameTime)}</td>)}
+							<td className="cell-container">{startTime.format(player.gameTime)}</td>
 						</tr>
 					)
 				})}
