@@ -249,6 +249,19 @@ const calculateStats = (
 	const gameCount = gamesCount(table1Rows, table2Rows, table3Rows);
 	if (gameCount === 0) return null;
 
+	// A list with no priced player leaves no ticket to make, but each other list's top price is still the
+	// top ticket's pick there, so it keeps its highlight and Top mark
+	if (choices1.length === 0 || choices2.length === 0 || choices3.length === 0) {
+		for (const choices of [choices1, choices2, choices3]) {
+			let max = 0;
+			for (const choice of choices) if (choice.prob > max) max = choice.prob;
+			const top = new Set(choices.filter((choice) => choice.prob === max).map((choice) => choice.pick));
+			addPlayersToHighlight(top);
+			for (const pick of top) setStrategy(pick, 'top');
+		}
+		return null;
+	}
+
 	const candidates = calcCandidates();
 	const top = new ComboGroup<Picks.PickOdds>();
 	for (const candidate of candidates) top.add(candidate);
