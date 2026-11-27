@@ -1,0 +1,4 @@
+# The admin page's login, which fetch_service.php reads from disk. No request over the web gets it
+<Files "auth.json">
+	Require all denied
+</Files>
