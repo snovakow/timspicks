@@ -2,6 +2,11 @@
 
 Version Release Notes
 
+## 1.0.0 - 2026-11-27
+
+- Calendar of past game days, each with its games, the players its pick lists held, and their odds and results
+- Yesterday's Picks on that day in the Calendar, where that day's picks can still be marked
+
 ## 0.8.0 - 2026-11-22
 
 - Start column in the pick tables, with each player's game start time
