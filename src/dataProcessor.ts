@@ -1,6 +1,7 @@
 import { isTeam, type Team } from './components/logo';
 import * as Picks from './components/Table';
 import { SportsbookKeys, Sportsbooks, type SportsbookKey } from './dataTypes';
+import { addDays, isDay } from './utility';
 
 // Raw player structure from playerId.json, and of each player in rosters.json
 export type RawPlayerJson = {
@@ -197,6 +198,13 @@ export const slotFolder = (time: Date): string => {
 	return `${dateMap.hour}${dateMap.minute}`;
 };
 
+// The order the games table lists a day's games in: by start, then by the away team's name
+const byStart = (a: Picks.GameData, b: Picks.GameData): number => {
+	const time = a.time.getTime() - b.time.getTime();
+	if (time !== 0) return time;
+	return a.away.name.localeCompare(b.away.name);
+};
+
 const gameMapOf = (games: Picks.GameData[]): Map<Team, Picks.GameData> => {
 	const gameMap = new Map<Team, Picks.GameData>();
 	for (const game of games) {
@@ -235,7 +243,6 @@ type GamesAndPlayers = {
 	scheduleDate: string | null;
 	dataStatus: DataStatus | null;
 	processed: Date | null;
-	lastGameStart: Date | null;
 };
 
 // Async loader/validator for games.json that merges players into each game
@@ -326,11 +333,7 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 		if (player) playersList.push(player);
 	}
 
-	gamesList.sort((a: Picks.GameData, b: Picks.GameData): number => {
-		const time = a.time.getTime() - b.time.getTime();
-		if (time !== 0) return time;
-		return a.away.name.localeCompare(b.away.name);
-	});
+	gamesList.sort(byStart);
 
 	/*
 		The first run after midnight can land before the feed posts the day's first draw, which it
@@ -350,7 +353,6 @@ const loadGamesAndPlayers = async (processSrc: string, helperSrc: string, gamesS
 		scheduleDate: typeof scheduleDate === 'string' ? scheduleDate : null,
 		dataStatus,
 		processed: cutoff,
-		lastGameStart: getLastGameStart(gameTimes),
 	};
 };
 
@@ -361,7 +363,6 @@ interface InitialData {
 	scheduleDate: string | null;
 	dataStatus: DataStatus | null;
 	processed: Date | null;
-	lastGameStart: Date | null;
 	// Each shown book's odds file, by key
 	playerOdds: Partial<Record<SportsbookKey, SportsbookOddsItem[]>>;
 	roster: RawPlayerJson[];
@@ -395,6 +396,66 @@ const loadRoster = async (): Promise<RawPlayerJson[]> => {
 };
 
 /*
+	The days the archive holds, oldest first, from its index: each day with a snapshot and final scores. None when
+	the index is missing or malformed, since only the calendar reads it, which then offers the loaded day alone.
+*/
+export const loadArchiveDays = async (): Promise<string[]> => {
+	try {
+		const value: unknown = await (await fetchData('./data/days.json')).json();
+		if (!Array.isArray(value)) return [];
+		const days = value.flatMap((entry) => isRecord(entry) && typeof entry.date === 'string' && isDay(entry.date) ? [entry.date] : []);
+		return [...new Set(days)].sort();
+	} catch {
+		return [];
+	}
+};
+
+// The games a schedule file lists for one day of its week, or null when the file doesn't cover that day
+const weekGames = (value: unknown, date: string): unknown[] | null => {
+	if (!isGameDataInput(value)) return null;
+	const week = value.gameWeek.find((entry) => entry.date === date);
+	return week ? week.games : null;
+};
+
+// A day's games as the schedule saved with its snapshots lists them, in the order the loaded day's are
+const loadDayGames = async (date: string): Promise<Picks.GameData[]> => {
+	const src = `./data/${date}/games.json`;
+	const games = weekGames(await loadData(src), date);
+	if (games === null || !games.every(isGamesListingItem)) throw new Error(`Invalid games listing data format in ${src}`);
+	return games.map((game) => new Picks.GameData(game)).sort(byStart);
+};
+
+/*
+	Whether a day the archive's index lacks had games. The index takes a day only once its games are all
+	official, so the day before the loaded one can have games and no entry yet, while its last game is still
+	going after midnight. The schedule saved with the latest indexed day before it lists that day's week, so it
+	tells such a day from one without games, and no day folder that doesn't exist is asked for. A day more than a
+	week past the latest indexed one is taken to have none.
+*/
+export const scheduledGames = async (date: string, archiveDays: readonly string[]): Promise<boolean> => {
+	const latest = archiveDays.filter((day) => day < date).pop();
+	if (latest === undefined || addDays(latest, 6) < date) return false;
+	try {
+		const games = weekGames(await (await fetchData(`./data/${latest}/games.json`)).json(), date);
+		return games !== null && games.length > 0;
+	} catch {
+		return false;
+	}
+};
+
+/*
+	An earlier day's games, for the calendar, which offers only days with games: null when the day's schedule
+	won't load, which leaves the page nothing of it to show. Its lists are its slots' snapshots alone.
+*/
+export const loadEarlierDay = async (date: string): Promise<Picks.GameData[] | null> => {
+	try {
+		return await loadDayGames(date);
+	} catch {
+		return null;
+	}
+};
+
+/*
 	A day's goal scorers as its scores file holds them: who has scored, and the teams whose game is over, which
 	is what tells a player who didn't score from one who hasn't yet. The scorers are those with a goal the
 	contest counts, so none from a shootout.
@@ -407,10 +468,6 @@ export interface DayScores {
 	over: ReadonlySet<string>;
 	// The teams whose game needs no further fetch: called official, or off its normal schedule
 	settled: ReadonlySet<string>;
-	// The starts, in ms, of the games still to settle, which is how a day the page has no schedule for is followed
-	following: readonly number[];
-	// Each team's start, in ms, which times the picks of a day the page has no schedule for
-	starts: ReadonlyMap<string, number>;
 }
 
 // How long after its start a game is followed when it is never called official, as the cron follows it
@@ -426,22 +483,17 @@ export const loadScores = async (date: string): Promise<DayScores | null> => {
 	const scorers = new Set<number>();
 	const over = new Set<string>();
 	const settled = new Set<string>();
-	const following: number[] = [];
-	const starts = new Map<string, number>();
 	for (const game of value.games) {
 		if (!isRecord(game) || typeof game.away !== 'string' || typeof game.home !== 'string') return null;
 		const official = game.state === 'OFF';
-		const start = typeof game.start === 'string' ? Date.parse(game.start) : NaN;
 		for (const team of [game.away, game.home]) {
 			if (official || game.state === 'FINAL') over.add(team);
 			if (official || game.schedule !== 'OK') settled.add(team);
-			if (!isNaN(start)) starts.set(team, start);
 		}
-		if (!official && game.schedule === 'OK' && !isNaN(start)) following.push(start);
 		if (!Array.isArray(game.scorers)) return null;
 		for (const playerId of game.scorers) if (typeof playerId === 'number') scorers.add(playerId);
 	}
-	return { date, scorers, over, settled, following, starts };
+	return { date, scorers, over, settled };
 };
 
 // True while a game's scores can still change: started, not settled, and within the time a game is followed
@@ -451,12 +503,6 @@ export const scoresInPlay = (games: Picks.GameData[], scores: DayScores | null, 
 		const start = game.time.getTime();
 		return start <= now && now < start + SCORES_FOLLOW_MS && !scores?.settled.has(game.home.code);
 	});
-};
-
-// The same for a day the page holds no schedule for, from the starts its own scores file gives, as the cron
-// follows it
-export const scoresFollowed = (scores: DayScores, now: number): boolean => {
-	return scores.following.some((start) => start <= now && now < start + SCORES_FOLLOW_MS);
 };
 
 /*
@@ -642,9 +688,15 @@ const eliasPettersson: Record<number, Partial<Record<SportsbookKey, string[]>>> 
 // The name whose players are priced by the table above rather than by name
 const idKeyedName = (fullName: string): boolean => fullName === "Elias Pettersson";
 
+/*
+	Each player's price from each book, by his name. A player built from a list entry rather than a player file
+	carries the pick-list feed's spelling, which can be the form the name map points to, so for him the map is
+	read both ways, as the archive replays read it.
+*/
 export const compilePlayerList = (
 	playerList: Picks.Player[],
-	playerOdds: Partial<Record<SportsbookKey, SportsbookOddsItem[]>>
+	playerOdds: Partial<Record<SportsbookKey, SportsbookOddsItem[]>>,
+	feedNames = false
 ) => {
 	const nameFind = (player: Picks.Player, oddsMap: Map<string, number>, key: SportsbookKey) => {
 		const process = (name: string | undefined): boolean => {
@@ -667,6 +719,9 @@ export const compilePlayerList = (
 
 		const mapped = oddsNameMap.get(player.fullName);
 		if (mapped && process(mapped)) return;
+
+		const reversed = feedNames ? oddsNameReverse.get(player.fullName) : undefined;
+		if (reversed && process(reversed)) return;
 
 		const firstLang: Set<string> = new Set();
 		for (const lang of Object.keys(player.firstName)) {
@@ -712,11 +767,28 @@ export interface PickLists {
 }
 
 /*
+	The players of a slot's list entries as the archive replays read them: by the name and team each entry
+	gives, with no player file. A player traded since keeps the team he had that day, and one whose file a later
+	season no longer holds is still there. One whose team has no game that day is left out.
+*/
+const entryPlayers = (picks: Picks.OddsItem[], gameMap: Map<Team, Picks.GameData>): Picks.Player[] => {
+	const players = new Map<number, Picks.Player>();
+	for (const pick of picks) {
+		const team: unknown = (pick as { team?: unknown }).team;
+		if (players.has(pick.playerId) || !isTeam(team)) continue;
+		const player = makePlayer({ playerId: pick.playerId, firstName: { default: pick.firstName }, lastName: { default: pick.lastName }, currentTeamAbbrev: team }, gameMap);
+		if (player) players.set(player.playerId, player);
+	}
+	return [...players.values()];
+};
+
+/*
 	A passed slot's lists and odds as its snapshot folder holds them, from the last run before
 	its start, or null when the folder has no lists. A book without a file there prices no one,
 	as in the archive replays, and a player whose file won't load is left out rather than the slot.
+	An earlier day's slot takes its players from its list entries instead, as the replays do.
 */
-export const loadSlot = async (date: string, start: Date, games: Picks.GameData[], roster: RawPlayerJson[]): Promise<PickLists | null> => {
+export const loadSlot = async (date: string, start: Date, games: Picks.GameData[], roster: RawPlayerJson[], fromEntries = false): Promise<PickLists | null> => {
 	const folder = `./data/${date}/${slotFolder(start)}`;
 	const loadOptional = async (src: string): Promise<unknown> => {
 		try { return await (await fetchData(src)).json(); }
@@ -733,17 +805,19 @@ export const loadSlot = async (date: string, start: Date, games: Picks.GameData[
 	const playerOdds = Object.fromEntries(SportsbookKeys.map((key, index) => [key, isOddsList(bookOdds[index]) ? bookOdds[index] : []]));
 	// Taken before the rows are mapped, since mapping can rewrite an entry's id
 	const unlisted = unlistedPlayers(roster, games, picks, playerOdds);
-	const playerIds = new Set(picks.map((pick) => pick.playerId));
-	const files = await Promise.allSettled([...playerIds].map(loadPlayerFile));
-	const playerList: Picks.Player[] = [];
-	for (const file of files) {
-		if (file.status !== 'fulfilled' || !isPlayerJson(file.value)) continue;
-		const player = makePlayer(file.value, gameMap);
-		if (player) playerList.push(player);
+	const playerList: Picks.Player[] = fromEntries ? entryPlayers(picks, gameMap) : [];
+	if (!fromEntries) {
+		const playerIds = new Set(picks.map((pick) => pick.playerId));
+		const files = await Promise.allSettled([...playerIds].map(loadPlayerFile));
+		for (const file of files) {
+			if (file.status !== 'fulfilled' || !isPlayerJson(file.value)) continue;
+			const player = makePlayer(file.value, gameMap);
+			if (player) playerList.push(player);
+		}
 	}
 
 	const rows = mapPlayers(playerList, helper, buildNormalizedNameMap(playerList));
-	compilePlayerList(playerList, playerOdds);
+	compilePlayerList(playerList, playerOdds, fromEntries);
 	return { playerList, unlistedPlayers: unlisted, ...rows };
 };
 

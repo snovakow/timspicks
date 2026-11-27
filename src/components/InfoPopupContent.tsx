@@ -41,10 +41,22 @@ export default function InfoPopupContent() {
 				<p>
 					With <strong>My Picks</strong> on in the <strong>Settings</strong>, tapping or clicking a player's name in a pick table
 					marks him as your pick, one in each table, and doing it again clears the mark. <strong>Today's History</strong> keeps
-					a started game's players in the tables to mark. Your picks are kept in this browser only.
-					The latest are listed above the tables with their game start times and results, as <strong>Today's Picks</strong> or <strong>Yesterday's Picks</strong>,
-					or under their date when older, until you mark the next day's, so a late game's result still shows after midnight.
+					a started game's players in the tables to mark. Your picks are kept in this browser only, today's and yesterday's.
+					Today's are listed above the tables as <strong>Today's Picks</strong>, with their game start times and results.
+					Yesterday's show as <strong>Yesterday's Picks</strong> on that day in the <strong>Calendar</strong>, where a late game's
+					result still comes in after midnight, and a pick missed there can still be marked.
 					Turning <strong>My Picks</strong> off hides the list and the marks in the tables, and deletes nothing.
+				</p>
+			</section>
+
+			<section className="info-popup-section">
+				<h3>Calendar</h3>
+				<p>
+					The <strong>Calendar</strong> button opens a calendar from the start of the app's archive to today, where each
+					day with games can be picked. Picking an earlier day shows its games, and in each pick table every player the
+					list held that day, with his odds from the last list that held him and a check if he scored or a cross if not.
+					The Players table lists the players in the day's pick lists, and the <strong>Stats</strong> list the day's slots.
+					Picking today returns to today's lists.
 				</p>
 			</section>
 

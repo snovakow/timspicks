@@ -7,7 +7,8 @@ import StatsPopupContent, { StatsSportsbookList, type SlotStats } from './compon
 import type { SportsbookLog, LogStatsKey, SportsbookKey, StrategyMode } from './dataTypes';
 import { SportsbookKeys, Sportsbooks } from './dataTypes';
 import SettingsPanel from './components/Settings';
-import { roundToPercent, probabilityToAmerican, getEntries, timeFormat } from './utility';
+import Calendar from './components/Calendar';
+import { roundToPercent, probabilityToAmerican, getEntries, timeFormat, addDays, fullDay } from './utility';
 import * as DataProcessor from './dataProcessor';
 import { precalculateLogStats, cloneLogStats, calculateBooksStats, calculateSelectedStats, streakLine } from './statsCalculations';
 import { bestPicks, logCorrelations, runSimulation } from './picksOptimizer';
@@ -22,8 +23,7 @@ import iconSettings from './images/settings_24dp_000000_FILL0_wght400_GRAD0_opsz
 import iconStats from './images/leaderboard_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconInfo from './images/info_i_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 import iconLegend from './images/legend_toggle_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
-import iconHockeyDark from './images/sports_hockey_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
-import iconHockeyLight from './images/sports_hockey_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg';
+import iconCalendar from './images/calendar_month_24dp_000000_FILL0_wght400_GRAD0_opsz24.svg';
 
 import './App.css';
 
@@ -177,6 +177,12 @@ const fillDisplay = (playerList: Picks.Player[], showPercentage: boolean, deVigE
 	}
 };
 
+// A day's distinct start times, which are also its slots, in order
+const startsOf = (games: Picks.GameData[]): number[] => {
+	const times = games.map((game) => game.time.getTime()).filter((time) => !isNaN(time));
+	return [...new Set(times)].sort((a, b) => a - b);
+};
+
 // The latest of the day's starts at or before now, or null before the first
 const latestStart = (startTimes: readonly number[], now: number): number | null => {
 	let latest: number | null = null;
@@ -186,6 +192,7 @@ const latestStart = (startTimes: readonly number[], now: number): number | null 
 	return latest;
 };
 
+// A day's games and lists. An earlier day's has no lists or roster of its own, only its slots' snapshots
 interface InitializedData extends DataProcessor.PickLists {
 	gamesList: Picks.GameData[];
 	scheduleDate: string | null;
@@ -194,6 +201,15 @@ interface InitializedData extends DataProcessor.PickLists {
 	// When the page fetched its lists, in ms. A slot that started after it can hold a newer draw than they do
 	fetched: number;
 }
+
+// An earlier day the calendar opened: its games, null for a day with games that wouldn't load, and when they loaded
+interface EarlierDay {
+	games: Picks.GameData[] | null;
+	fetched: number;
+}
+
+// The games of a day that isn't shown yet, one array for good so it never reads as a change
+const NO_GAMES: Picks.GameData[] = [];
 
 let xgMapCachePromise: Promise<Map<Team, number>> | null = null;
 const getXgMap = async (): Promise<Map<Team, number>> => {
@@ -204,10 +220,9 @@ const getXgMap = async (): Promise<Map<Team, number>> => {
 /*
 	A day's goal scorers, read from its scores file while a date is given. The cron rewrites a day's file each
 	minute while one of its games is in play, and the page reads it as often, while it is in view and the
-	scores can still change. The loaded day is followed by its schedule, and an earlier one, given no games, by
-	its own file, which is all the page holds of that day.
+	scores can still change, which the day's schedule tells.
 */
-function useDayScores(date: string | null, games: Picks.GameData[] | null): DataProcessor.DayScores | null {
+function useDayScores(date: string | null, games: Picks.GameData[]): DataProcessor.DayScores | null {
 	const [scores, setScores] = useState<DataProcessor.DayScores | null>(null);
 	useEffect(() => {
 		if (date === null) return;
@@ -218,9 +233,7 @@ function useDayScores(date: string | null, games: Picks.GameData[] | null): Data
 		let first = true;
 		// The day's scores as this effect last read them
 		let latest: DataProcessor.DayScores | null = null;
-		const inPlay = (now: number): boolean => games
-			? DataProcessor.scoresInPlay(games, latest, now)
-			: latest !== null && DataProcessor.scoresFollowed(latest, now);
+		const inPlay = (now: number): boolean => DataProcessor.scoresInPlay(games, latest, now);
 		const check = async () => {
 			if (loading || document.visibilityState !== 'visible') return;
 			if (!first && !inPlay(Date.now())) return;
@@ -261,14 +274,22 @@ function App() {
 			});
 		}
 	}, [xgEnabled]);
-	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	// The loaded day's data, null while the page loads
 	const [data, setData] = useState<InitializedData | null>(null);
 	const [dataStatus, setDataStatus] = useState<DataProcessor.DataStatus | null>(null);
 	const [processed, setProcessed] = useState<Date | null>(null);
-	const [lastGameStart, setLastGameStart] = useState<Date | null>(null);
-	// The latest start the clock has passed, in ms, which greys that game's rows and every earlier one's
+	// The latest start the clock has passed on the loaded day, in ms, which greys that game's rows and every earlier one's
 	const [passedStart, setPassedStart] = useState<number | null>(null);
+	// The days the archive holds, oldest first, which the calendar offers from the first of on
+	const [archiveDays, setArchiveDays] = useState<readonly string[]>([]);
+
+	/*
+		The picks marked as entered in the contest's own app, with the history on or off: the loaded day's, and the
+		day before's, which the calendar shows on that day. Every earlier day's are dropped once the page knows which
+		day it loaded.
+	*/
+	const [entered, setEntered] = useState<EnteredPicks.EnteredStore>(() => EnteredPicks.load());
 
 	const [showPercentage, setShowPercentage] = useState(true);
 	const [deVigEnabled, setDeVigEnabled] = useState(false);
@@ -293,6 +314,9 @@ function App() {
 	useEffect(() => {
 		const initializeData = async () => {
 			const fetched = Date.now();
+			DataProcessor.loadArchiveDays().then(setArchiveDays);
+			// The loaded day, with or without games
+			let loadedDay: string | null = null;
 			try {
 				const initialData = await DataProcessor.loadInitialData();
 				const playerList = initialData.playersListing;
@@ -323,10 +347,10 @@ function App() {
 				});
 				setDataStatus(initialData.dataStatus);
 				setProcessed(initialData.processed);
-				setLastGameStart(initialData.lastGameStart);
 				// Set alongside the data so a started game's rows never paint before the clock effect greys them
 				setPassedStart(latestStart(gamesList.map((game) => game.time.getTime()), Date.now()));
 				setError(null);
+				loadedDay = initialData.scheduleDate;
 			} catch (error: unknown) {
 				// A day without games is a normal state, which the empty tables and the games section show by themselves
 				const noGames = error instanceof DataProcessor.NoGamesError;
@@ -334,10 +358,11 @@ function App() {
 					console.error('Failed to load initial data:', error);
 					setError('Failed to load game data. Please refresh the page.');
 				}
+				loadedDay = noGames ? error.date : null;
 				setData({
 					gamesList: [],
-					// A day without games is still the loaded day, which the my-picks title counts from
-					scheduleDate: noGames ? error.date : null,
+					// A day without games is still the loaded day, which the calendar and the kept picks count from
+					scheduleDate: loadedDay,
 					roster: [],
 					fetched,
 					playerList: [],
@@ -347,18 +372,15 @@ function App() {
 					table3Rows: [],
 				});
 			} finally {
-				setIsLoading(false);
+				if (loadedDay !== null) setEntered(EnteredPicks.prune(loadedDay));
 			}
 		};
 
 		initializeData();
 	}, []);
 
-	// The day's distinct start times, which are also its slots, in order
-	const startTimes = useMemo(() => {
-		const times = (data?.gamesList ?? []).map((game) => game.time.getTime()).filter((time) => !isNaN(time));
-		return [...new Set(times)].sort((a, b) => a - b);
-	}, [data]);
+	// The loaded day's distinct start times, which are also its slots, in order
+	const startTimes = useMemo(() => startsOf(data?.gamesList ?? []), [data]);
 
 	/*
 		A start greys its game's rows before any run follows it, and the cron makes no runs between
@@ -394,68 +416,145 @@ function App() {
 		};
 	}, [startTimes]);
 
+	/*
+		The day the page shows: the loaded day, or an earlier one picked in the calendar. An earlier day shows as
+		today's history shows a day whose games have all started, each game's players from its slot's snapshot and
+		each player's result from the day's scores, whatever the history setting, but with nothing greyed, since
+		nothing on it can be picked. Its games and slots never change, so a load holds for the page's life, while
+		its scores are followed as the loaded day's are.
+	*/
+	const [shownDay, setShownDay] = useState<string | null>(null);
+	const [earlierDays, setEarlierDays] = useState<ReadonlyMap<string, EarlierDay>>(new Map());
+	const earlierLoads = useRef(new Set<string>());
+	useEffect(() => {
+		if (shownDay === null || earlierLoads.current.has(shownDay)) return;
+		const day = shownDay;
+		earlierLoads.current.add(day);
+		DataProcessor.loadEarlierDay(day).then((games) => {
+			setEarlierDays((prev) => new Map(prev).set(day, { games, fetched: Date.now() }));
+		});
+	}, [shownDay, earlierDays]);
+
+	const today = data?.scheduleDate ?? null;
+	const yesterday = today !== null ? addDays(today, -1) : null;
+
+	// The day before the loaded one had games the archive's index doesn't hold yet, since its last game isn't
+	// official, so the calendar offers it all the same
+	const [yesterdayPending, setYesterdayPending] = useState(false);
+	useEffect(() => {
+		if (yesterday === null || archiveDays.length === 0 || archiveDays.includes(yesterday)) return;
+		let stopped = false;
+		DataProcessor.scheduledGames(yesterday, archiveDays).then((games) => {
+			if (!stopped) setYesterdayPending(games);
+		});
+		return () => {
+			stopped = true;
+		};
+	}, [yesterday, archiveDays]);
+	const past = shownDay !== null;
+	const earlier = shownDay !== null ? earlierDays.get(shownDay) : undefined;
+	// The shown day's data, or null while an earlier day loads
+	const view = useMemo((): InitializedData | null => {
+		if (shownDay === null) return data;
+		if (!earlier) return null;
+		return {
+			gamesList: earlier.games ?? [],
+			scheduleDate: shownDay,
+			roster: [],
+			fetched: earlier.fetched,
+			playerList: [],
+			unlistedPlayers: [],
+			table1Rows: [],
+			table2Rows: [],
+			table3Rows: [],
+		};
+	}, [shownDay, data, earlier]);
+	const viewDate = view?.scheduleDate ?? null;
+	const viewGames = view?.gamesList ?? NO_GAMES;
+	const viewStarts = useMemo(() => past ? startsOf(viewGames) : startTimes, [past, viewGames, startTimes]);
+	// The shown day's last start, which an earlier day's clock has passed
+	const lastStart = viewStarts.length > 0 ? viewStarts[viewStarts.length - 1] : null;
+
+	// The run state is the loaded day's, which an earlier day has none of
+	const viewStatus = past ? null : dataStatus;
 	// Data stale enough to trip "stopped" is likely holding an earlier day's schedule, all of it long started,
 	// so as with calling the day locked, that notice takes precedence over greying its games
-	const passed = dataStatus?.stopped ? null : passedStart;
+	const passed = viewStatus?.stopped ? null : past ? lastStart : passedStart;
+	// The history setting is the loaded day's, as an earlier day is all history
+	const historyShown = past || historyEnabled;
 
 	// The passed slots' starts, oldest first
-	const passedSlots = useMemo(() => passed === null ? [] : startTimes.filter((time) => time <= passed), [startTimes, passed]);
+	const passedSlots = useMemo(() => passed === null ? [] : viewStarts.filter((time) => time <= passed), [viewStarts, passed]);
 
 	// The passed slots whose players the tables keep, which only the history does
-	const shownSlots = useMemo(() => historyEnabled ? passedSlots : [], [historyEnabled, passedSlots]);
+	const shownSlots = useMemo(() => historyShown ? passedSlots : [], [historyShown, passedSlots]);
 
-	// Each shown slot's snapshot: absent while it loads, null when the slot has none. A passed slot's
-	// folder is never written again, so a load holds for the page's life
+	// Each shown slot's snapshot, the loaded day's and every earlier day's opened, by start: absent while it
+	// loads, null when the slot has none. A passed slot's folder is never written again, so a load holds for
+	// the page's life
 	const [slotSnapshots, setSlotSnapshots] = useState<ReadonlyMap<number, DataProcessor.PickLists | null>>(new Map());
 	const slotLoads = useRef(new Set<number>());
 	useEffect(() => {
-		if (!data?.scheduleDate) return;
-		const date = data.scheduleDate;
-		const games = data.gamesList;
+		if (!view?.scheduleDate) return;
+		const date = view.scheduleDate;
+		const games = view.gamesList;
 		for (const start of shownSlots) {
 			if (slotLoads.current.has(start)) continue;
 			slotLoads.current.add(start);
-			DataProcessor.loadSlot(date, new Date(start), games, data.roster)
+			DataProcessor.loadSlot(date, new Date(start), games, view.roster, past)
 				.catch(() => null)
 				.then((slot) => setSlotSnapshots((prev) => new Map(prev).set(start, slot)));
 		}
-	}, [shownSlots, data]);
+	}, [shownSlots, view, past]);
 
-	/*
-		The picks marked as entered in the contest's own app, with the history on or off. The my-picks table
-		holds the latest day's, so an earlier day's until one of the loaded day's is marked, however many of its
-		games have started: the next day's lists arrive on the first load after midnight, and a late game can
-		end well after that.
-	*/
-	const [entered, setEntered] = useState<EnteredPicks.EnteredStore>(() => EnteredPicks.load());
 	// My Picks, turned on and off in the settings alone. Off, it leaves the lists unmarked and the my-picks
 	// table hidden for the page's life, and deletes nothing
 	const [myPicksEnabled, setMyPicksEnabled] = useState(true);
-	const scheduleDate = data?.scheduleDate ?? null;
-	const myPicksDate = myPicksEnabled && data ? EnteredPicks.latestDay(entered, scheduleDate) : null;
-	const myPicksToday = myPicksDate !== null && myPicksDate === scheduleDate;
-	const myPicksDay = myPicksDate !== null ? entered.days[myPicksDate] : undefined;
+	// The shown day's marked picks, which only the loaded day and the day before can hold. They mark their rows
+	// in the lists, and the my-picks table lists them
+	const viewPicks = myPicksEnabled && viewDate !== null && (viewDate === today || viewDate === yesterday) ? entered.days[viewDate] : undefined;
 
-	// The loaded day's goal scorers once a game has started, which mark the history's started rows and the
-	// my-picks table's picks of that day, and an earlier day's while the my-picks table shows it
-	const loadedScores = useDayScores(passed !== null && (historyEnabled || myPicksToday) ? scheduleDate : null, data?.gamesList ?? null);
-	const shownScores = historyEnabled ? loadedScores : null;
-	const earlierScores = useDayScores(myPicksDate !== null && !myPicksToday ? myPicksDate : null, null);
-	const myPicksScores = myPicksToday ? loadedScores : earlierScores;
+	// The shown day's goal scorers once a game has started, which mark the history's started rows and the
+	// my-picks table's picks
+	const viewScores = useDayScores(passed !== null && (historyShown || viewPicks !== undefined) ? viewDate : null, viewGames);
+	const shownScores = historyShown ? viewScores : null;
 
-	// Each team's start on the my-picks table's day: the loaded day's from its schedule, there before any score
-	// is read, and an earlier day's from its scores file, as the page has no schedule for that day
-	const loadedStarts = useMemo(() => {
+	// Each team's start on the shown day, from its schedule, there before any score is read
+	const viewTeamStarts = useMemo(() => {
 		const starts = new Map<string, number>();
-		for (const game of data?.gamesList ?? []) {
+		for (const game of viewGames) {
 			const time = game.time.getTime();
 			if (isNaN(time)) continue;
 			starts.set(game.away.code, time);
 			starts.set(game.home.code, time);
 		}
 		return starts;
-	}, [data]);
-	const myPicksStarts = myPicksToday ? loadedStarts : earlierScores?.starts ?? null;
+	}, [viewGames]);
+
+	// The calendar runs from the archive's first day to the loaded day, and offers the days the page has data
+	// for: the archive's, the day before the loaded one while its last game isn't official, and the loaded day,
+	// which it returns to with or without games
+	const firstDay = today !== null && archiveDays.length > 0 && archiveDays[0] < today ? archiveDays[0] : today;
+	const calendarDays = useMemo(() => {
+		const days = new Set(archiveDays);
+		if (yesterday !== null && yesterdayPending) days.add(yesterday);
+		if (today !== null) days.add(today);
+		return days;
+	}, [archiveDays, today, yesterday, yesterdayPending]);
+	const content = useRef<HTMLElement>(null);
+	// Shows a day from its top. A day that wouldn't load is tried again
+	const showDay = (day: string) => {
+		if (earlierDays.get(day)?.games === null) {
+			earlierLoads.current.delete(day);
+			setEarlierDays((prev) => {
+				const next = new Map(prev);
+				next.delete(day);
+				return next;
+			});
+		}
+		setShownDay(day === today ? null : day);
+		content.current?.scrollTo({ top: 0 });
+	};
 
 	// Initialize sort configs - use ref to avoid recreating
 	const sortConfig1Ref = useRef<Picks.SortConfig>({ keyOrder: [] });
@@ -472,10 +571,10 @@ function App() {
 	}, []);
 
 	const memoizedDisplayData = useMemo(() => {
-		if (!data) return null;
+		if (!view) return null;
 
-		const { gamesList, fetched } = data;
-		const current = clonePickLists(data);
+		const { gamesList, fetched } = view;
+		const current = clonePickLists(view);
 		fillDisplay(current.playerList, showPercentage, deVigEnabled);
 		fillDisplay(current.unlistedPlayers, showPercentage, deVigEnabled);
 
@@ -596,12 +695,12 @@ function App() {
 			table3Rows,
 			slots,
 		};
-	}, [data, showPercentage, deVigEnabled, needsSort1, needsSort2, needsSort3, needsSortPlayer, shownSlots, slotSnapshots]);
+	}, [view, showPercentage, deVigEnabled, needsSort1, needsSort2, needsSort3, needsSortPlayer, shownSlots, slotSnapshots]);
 
 	// Only stats popup uses 'key', others do not
 	const [showPopup, setShowPopup] = useState<{ visible: boolean; title: string; key?: LogStatsKey }>({ visible: false, title: 'Stats', key: 'betAvg' });
 	const [popupStats, setPopupStats] = useState<SportsbookLog | null>(null);
-	const [popupView, setPopupView] = useState<'info' | 'legend' | 'stats' | 'settings'>('stats');
+	const [popupView, setPopupView] = useState<'info' | 'legend' | 'stats' | 'settings' | 'calendar'>('stats');
 	// The books whose average the stats show; none selected averages them all
 	const [selectedStatsBooks, setSelectedStatsBooks] = useState<ReadonlySet<SportsbookKey>>(new Set());
 	// A book toggles either way: picked alone it also deselects every other book, while adding to the
@@ -668,7 +767,7 @@ function App() {
 
 	// Each passed slot's stats from its snapshot and the books the stats view has selected, oldest first
 	const slotStats = useMemo((): SlotStats[] => {
-		if (!historyEnabled || !memoizedDisplayData) return [];
+		if (!historyShown || !memoizedDisplayData) return [];
 		return passedSlots.map((start) => {
 			const time = new Date(start).toLocaleTimeString([], timeFormat);
 			const slot = memoizedDisplayData.slots.get(start);
@@ -684,7 +783,7 @@ function App() {
 			if (streak === null) return { start, time, summary: 'No stats', stats: null };
 			return { start, time, summary: streakLine(streak), stats };
 		});
-	}, [historyEnabled, memoizedDisplayData, passedSlots, slotSnapshots, statsBooks, minSportsbooks, correlationFactor]);
+	}, [historyShown, memoizedDisplayData, passedSlots, slotSnapshots, statsBooks, minSportsbooks, correlationFactor]);
 
 	if (memoizedDisplayData) {
 		// Run SIMULATE or ANALYZE only once after data has initialized
@@ -742,6 +841,11 @@ function App() {
 		setShowPopup({ visible: true, title: 'Settings' });
 	};
 
+	const openCalendarPopup = () => {
+		setPopupView('calendar');
+		setShowPopup({ visible: true, title: 'Calendar' });
+	};
+
 	const [darkTheme, setDarkTheme] = useState(() => {
 		return window.matchMedia('(prefers-color-scheme: dark)').matches;
 	});
@@ -764,21 +868,26 @@ function App() {
 		);
 	}
 
-	if (isLoading || !memoizedDisplayData) {
-		return (
-			<div className="loading-screen">
-				<p>Loading...</p>
-			</div>
-		);
-	}
-
-	const { gamesList: allGames, playerList: allPlayers } = memoizedDisplayData;
+	/*
+		The header shows from the start, and the content under it is a loading message until the shown day has
+		loaded: the loaded day once its data has, and an earlier day once its games and every slot's snapshot have,
+		rather than a slot at a time
+	*/
+	const dayLoading = !memoizedDisplayData || (past && shownSlots.some((start) => !slotSnapshots.has(start)));
+	const allGames = memoizedDisplayData?.gamesList ?? [];
+	const allPlayers = memoizedDisplayData?.playerList ?? [];
 
 	// Without the history, a started game and its players leave the tables, so they hold only what can still be picked
 	const isLive = (time: Date) => passed === null || time.getTime() > passed;
-	const gamesList = historyEnabled ? allGames : allGames.filter((game) => isLive(game.time));
-	const displayPlayerList = historyEnabled ? allPlayers : allPlayers.filter((player) => isLive(player.gameTime));
-	const { table1Rows, table2Rows, table3Rows } = historyEnabled || !liveRows ? memoizedDisplayData : liveRows;
+	const gamesList = historyShown ? allGames : allGames.filter((game) => isLive(game.time));
+	const displayPlayerList = historyShown ? allPlayers : allPlayers.filter((player) => isLive(player.gameTime));
+	const shownRows = historyShown || !liveRows ? memoizedDisplayData : liveRows;
+	const table1Rows = shownRows?.table1Rows ?? [];
+	const table2Rows = shownRows?.table2Rows ?? [];
+	const table3Rows = shownRows?.table3Rows ?? [];
+	// The latest start the tables grey from. None on an earlier day, where nothing is greyed, the players a redraw
+	// dropped included: none of its rows can be picked, so greying would say nothing
+	const greyedTo = past ? null : passed;
 
 	const oddsColumns: Picks.ColumnData[] = getEntries(Sportsbooks).map(([key, book]) => ({
 		key: key,
@@ -806,23 +915,25 @@ function App() {
 		Data stale enough to trip "stopped" is likely holding an earlier day's schedule, whose last
 		start is long past, so that notice takes precedence over calling the day locked.
 	*/
-	const dayDone = lastGameStart !== null && passedStart !== null && passedStart >= lastGameStart.getTime();
-	const dayLocked = dayDone && !dataStatus?.stopped;
+	const dayDone = lastStart !== null && passed !== null && passed >= lastStart;
+	const dayLocked = dayDone && !viewStatus?.stopped;
 	// A locked day leaves nothing in the tables without the history, so they say why instead
-	const lockedOut = dayLocked && !historyEnabled;
+	const lockedOut = dayLocked && !historyShown;
 	// Nothing is left to report once the locked day has swallowed the game-started notice
 	const bannerProblem = !!dataStatus && (dataStatus.unfinished || dataStatus.stopped || ((dataStatus.staleList || dataStatus.earlierDraw) && !dayLocked) || dataStatus.warnings.length > 0);
 	// A locked day with nothing wrong is the expected nightly state, and the update time is only
 	// worth showing as context for a problem
 	const lockedOnly = dayLocked && !bannerProblem;
 
-	// The loaded day's marked picks, which mark their rows in the lists
-	const todaysPicks = myPicksEnabled && scheduleDate !== null ? entered.days[scheduleDate] : undefined;
-	// A name marks a pick only in the loaded day's own lists, not in an earlier day's left up until its first draw
-	// posts. A started game's players are there to mark while the history keeps them, as a pick can be recorded late
-	const markable = myPicksEnabled && scheduleDate !== null && !dataStatus?.earlierDraw;
-	const enterPick = (table: EnteredPicks.PickTable) => !markable || scheduleDate === null ? undefined : (player: Picks.Player) => {
-		setEntered(EnteredPicks.toggle(scheduleDate, table, {
+	/*
+		A name marks a pick only on the days whose picks are kept, the loaded day and the day before, and on the
+		loaded day only in its own lists, not in an earlier day's left up until its first draw posts. A started
+		game's players are there to mark while the history keeps them, and the day before's all are, as a pick
+		can be recorded late.
+	*/
+	const markable = myPicksEnabled && viewDate !== null && (past ? viewDate === yesterday : !dataStatus?.earlierDraw);
+	const enterPick = (table: EnteredPicks.PickTable) => !markable || viewDate === null ? undefined : (player: Picks.Player) => {
+		setEntered(EnteredPicks.toggle(viewDate, table, {
 			playerId: player.playerId,
 			name: player.fullName,
 			team: player.team.code,
@@ -856,20 +967,30 @@ function App() {
 					</button>
 				</div>
 				<span className="header-title">
-					<img className="header-title-icon" src={darkTheme ? iconHockeyLight : iconHockeyDark} alt="" aria-hidden="true" />
 					<span className="header-title-text">
 						Tims Hockey Picks
 					</span>
 				</span>
 				<div className='toolBar toolbar-end'>
-					<button className={`button${Feature.correlation ? '' : ' button-disabled'}`} title="Legend" aria-label="Legend"
+					{Feature.correlation && (
+						<button className="button" title="Legend" aria-label="Legend"
+							onClick={
+								() => {
+									if (showPopup.visible && popupView === 'legend') closePopup();
+									else openLegendPopup();
+								}
+							}>
+							<img src={iconLegend} alt="ℹ️" aria-hidden="true" />
+						</button>
+					)}
+					<button className="button" title="Calendar" aria-label="Calendar"
 						onClick={
 							() => {
-								if (showPopup.visible && popupView === 'legend') closePopup();
-								else openLegendPopup();
+								if (showPopup.visible && popupView === 'calendar') closePopup();
+								else openCalendarPopup();
 							}
 						}>
-						<img src={iconLegend} alt="ℹ️" aria-hidden="true" />
+						<img src={iconCalendar} alt="📅" aria-hidden="true" />
 					</button>
 					<button className="button" title="Info" aria-label="Info"
 						onClick={
@@ -882,9 +1003,9 @@ function App() {
 					</button>
 				</div>
 			</header>
-			<main className='content'>
-				<Popup title={showPopup.title} showPopUp={showPopup.visible} closePopUp={closePopup} top={popupView === 'stats'}
-					pinned={popupView === 'stats' && popupStats && (!dayLocked || historyEnabled) && (
+			<main className='content' ref={content}>
+				<Popup title={showPopup.title} showPopUp={showPopup.visible} closePopUp={closePopup} top={popupView === 'stats' || popupView === 'calendar'}
+					pinned={popupView === 'stats' && popupStats && (!dayLocked || historyShown) && (
 						<StatsSportsbookList selected={selectedStatsBooks} onToggle={toggleStatsBook} />
 					)}>
 					{popupView === 'info' ? (
@@ -910,6 +1031,17 @@ function App() {
 							playersTableEnabled={playersTableEnabled}
 							onPlayersTableEnabledChange={setPlayersTableEnabled}
 						/>
+					) : popupView === 'calendar' ? (
+						// Opened while the page loads, the calendar waits for the loaded day it runs to
+						today !== null && firstDay !== null ? (
+							<Calendar first={firstDay} last={today} selected={shownDay ?? today} days={calendarDays}
+								onSelect={(day) => {
+									showDay(day);
+									closePopup();
+								}} />
+						) : (
+							<div className="no-games-message">Loading...</div>
+						)
 					) : (
 						<StatsPopupContent stats={booksStats ?? popupStats?.[statsBooks.length === 1 ? statsBooks[0] : 'betAvg'] ?? null} locked={dayLocked} slots={slotStats} />
 					)}
@@ -922,7 +1054,13 @@ function App() {
 					</section>
 				)}
 
-				{!Feature.offseasonBanner && (dataStatus || dayLocked) && (
+				{shownDay !== null && (
+					<section className="status-banner status-banner-info" role="status" aria-live="polite">
+						<p className="status-banner-primary">{fullDay(shownDay)}</p>
+					</section>
+				)}
+
+				{!Feature.offseasonBanner && !past && (dataStatus || dayLocked) && (
 					<section className={`status-banner${lockedOnly ? ' status-banner-info' : ''}`} role="status" aria-live="polite">
 						{processed && !lockedOnly && (
 							<p className="status-banner-primary">
@@ -958,58 +1096,67 @@ function App() {
 					</section>
 				)}
 
-				{myPicksDay && myPicksDate !== null && (
-					<MyPicks date={myPicksDate} today={myPicksToday} loadedDate={scheduleDate} picks={myPicksDay} scores={myPicksScores} starts={myPicksStarts} darkTheme={darkTheme} />
-				)}
+				{dayLoading ? (
+					<div className="content-loading">Loading...</div>
+				) : (
+					<>
+						{viewPicks && (
+							<MyPicks yesterday={viewDate !== today} picks={viewPicks} scores={viewScores} starts={viewTeamStarts} darkTheme={darkTheme} />
+						)}
 
-				<CollapsibleSection title="Games">
-					<div className="scrollable-table-wrapper section-container">
-						{lockedOut ? (
-							<div className="no-games-message">Today's games have all started</div>
-						) : gamesList.length === 0 ? (
-							<div className="no-games-message">No games today</div>
-						) : (
-							<Picks.Basic games={gamesList} passed={passed} darkTheme={darkTheme} xgMap={xgEnabled && xgMap ? xgMap : undefined} />
+						<CollapsibleSection title="Games">
+							<div className="scrollable-table-wrapper section-container">
+								{lockedOut ? (
+									<div className="no-games-message">Today's games have all started</div>
+								) : earlier?.games === null ? (
+									<div className="no-games-message">This day couldn't be loaded</div>
+								) : gamesList.length === 0 ? (
+									<div className="no-games-message">{past ? 'No games' : 'No games today'}</div>
+								) : (
+									// Expected goals are the season's so far, so an earlier day goes without them
+									<Picks.Basic games={gamesList} passed={greyedTo} darkTheme={darkTheme} xgMap={!past && xgEnabled && xgMap ? xgMap : undefined} />
+								)}
+							</div>
+						</CollapsibleSection>
+						<CollapsibleSection title="Pick #1">
+							<div className="scrollable-table-wrapper section-container">
+								{lockedOut ? (
+									<div className="no-games-message">Picks are locked</div>
+								) : (
+									<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={greyedTo} scores={shownScores} entered={viewPicks?.[1]?.playerId ?? null} onEnter={enterPick(1)} />
+								)}
+							</div>
+						</CollapsibleSection>
+						<CollapsibleSection title="Pick #2">
+							<div className="scrollable-table-wrapper section-container">
+								{lockedOut ? (
+									<div className="no-games-message">Picks are locked</div>
+								) : (
+									<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={greyedTo} scores={shownScores} entered={viewPicks?.[2]?.playerId ?? null} onEnter={enterPick(2)} />
+								)}
+							</div>
+						</CollapsibleSection>
+						<CollapsibleSection title="Pick #3">
+							<div className="scrollable-table-wrapper section-container">
+								{lockedOut ? (
+									<div className="no-games-message">Picks are locked</div>
+								) : (
+									<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={greyedTo} scores={shownScores} entered={viewPicks?.[3]?.playerId ?? null} onEnter={enterPick(3)} />
+								)}
+							</div>
+						</CollapsibleSection>
+						{playersTableEnabled && (
+							<CollapsibleSection title="Players">
+								<div className="scrollable-table-wrapper section-container">
+									{lockedOut ? (
+										<div className="no-games-message">Today's games have all started</div>
+									) : (
+										<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={greyedTo} scores={shownScores} />
+									)}
+								</div>
+							</CollapsibleSection>
 						)}
-					</div>
-				</CollapsibleSection>
-				<CollapsibleSection title="Pick #1">
-					<div className="scrollable-table-wrapper section-container">
-						{lockedOut ? (
-							<div className="no-games-message">Picks are locked</div>
-						) : (
-							<Picks.Table columns={columns} sortedRows={table1Rows} requestSort={requestSort1} sortConfig={sortConfig1Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} entered={todaysPicks?.[1]?.playerId ?? null} onEnter={enterPick(1)} />
-						)}
-					</div>
-				</CollapsibleSection>
-				<CollapsibleSection title="Pick #2">
-					<div className="scrollable-table-wrapper section-container">
-						{lockedOut ? (
-							<div className="no-games-message">Picks are locked</div>
-						) : (
-							<Picks.Table columns={columns} sortedRows={table2Rows} requestSort={requestSort2} sortConfig={sortConfig2Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} entered={todaysPicks?.[2]?.playerId ?? null} onEnter={enterPick(2)} />
-						)}
-					</div>
-				</CollapsibleSection>
-				<CollapsibleSection title="Pick #3">
-					<div className="scrollable-table-wrapper section-container">
-						{lockedOut ? (
-							<div className="no-games-message">Picks are locked</div>
-						) : (
-							<Picks.Table columns={columns} sortedRows={table3Rows} requestSort={requestSort3} sortConfig={sortConfig3Ref.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} entered={todaysPicks?.[3]?.playerId ?? null} onEnter={enterPick(3)} />
-						)}
-					</div>
-				</CollapsibleSection>
-				{playersTableEnabled && (
-					<CollapsibleSection title="Players">
-						<div className="scrollable-table-wrapper section-container">
-							{lockedOut ? (
-								<div className="no-games-message">Today's games have all started</div>
-							) : (
-								<Picks.Table columns={columnsPlayer} sortedRows={displayPlayerList} requestSort={requestSortPlayer} sortConfig={sortConfigPlayerRef.current} darkTheme={darkTheme} enabledStrategies={enabledStrategies} passed={passed} scores={shownScores} />
-							)}
-						</div>
-					</CollapsibleSection>
+					</>
 				)}
 
 				{Feature.correlation && includeCorrelationSlider && (

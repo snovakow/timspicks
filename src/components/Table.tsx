@@ -255,6 +255,8 @@ export function Table(props: {
 	sortConfig: SortConfig,
 	darkTheme: boolean,
 	enabledStrategies: Record<StrategyMode, boolean>,
+	// The latest start the clock has passed, in ms, which greys that game's rows and every earlier one's along
+	// with the rows a redraw dropped, or null when nothing is greyed
 	passed: number | null,
 	// The day's goal scorers, or null when the rows carry no goal marks
 	scores: DayScores | null,
@@ -339,7 +341,7 @@ export function Table(props: {
 					const rowKey = picks ? row.player.playerId : row.playerId;
 					const marked = picks && entered === player.playerId;
 					return (
-						<tr key={rowKey} className={rowClass(idx, started(player.gameTime, passed) || (picks && row.dropped), marked)}>
+						<tr key={rowKey} className={rowClass(idx, passed !== null && (started(player.gameTime, passed) || (picks && row.dropped)), marked)}>
 							<td className='cell-name'>
 								<span className='cell-container'>
 									<span className='cell-container cell-player'>

@@ -1,0 +1,91 @@
+/* The popup is light in either scheme, so the calendar's colours are fixed rather than light-dark pairs */
+.calendar {
+	--calendar-accent: #2563eb;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	width: 18.5rem;
+	max-width: 100%;
+	margin: 0 auto;
+	user-select: none;
+	-webkit-user-select: none;
+}
+
+.calendar-nav {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.calendar-month {
+	font-weight: 700;
+}
+
+.calendar-step {
+	width: 2.5rem;
+	height: 2.5rem;
+	justify-content: center;
+	padding: 0;
+	font-size: 1.6rem;
+	font-weight: 400;
+	line-height: 1;
+	background: none;
+	color: inherit;
+}
+
+.calendar-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 0.15rem;
+}
+
+.calendar-weekday {
+	padding-bottom: 0.25rem;
+	text-align: center;
+	text-decoration: none;
+	font-size: 0.8rem;
+	opacity: 0.6;
+}
+
+.calendar-day {
+	position: relative;
+	aspect-ratio: 1;
+	min-width: 0;
+	justify-content: center;
+	padding: 0;
+	border-radius: 50%;
+	background: none;
+	color: inherit;
+	font-weight: 400;
+	font-variant-numeric: tabular-nums;
+}
+
+.calendar-step:hover,
+.calendar-day:hover {
+	border-color: transparent;
+	background: rgba(37, 99, 235, 0.1);
+}
+
+.calendar-step:disabled,
+.calendar-day:disabled {
+	opacity: 0.25;
+	cursor: default;
+	background: none;
+}
+
+.calendar-step:focus-visible,
+.calendar-day:focus-visible {
+	outline: 2px solid var(--calendar-accent);
+	outline-offset: 1px;
+}
+
+.calendar-day-today {
+	box-shadow: inset 0 0 0 1.5px var(--calendar-accent);
+	font-weight: 700;
+}
+
+.calendar-day.calendar-day-selected {
+	background: var(--calendar-accent);
+	color: #fff;
+}
+

@@ -1,12 +1,14 @@
 import { isTeam, type Team } from './components/logo';
 import { isRecord } from './dataProcessor';
+import { addDays, isDay } from './utility';
 
 /*
 	The picks the user marks as the ones entered in the contest's own app, one per list and day, by the
-	schedule's ET date: the one thing the page keeps between loads. Each holds what the my-picks table shows of
-	it once that day's lists are gone. They live in this browser's local storage, which can refuse access, fill
-	up or hold anything at all, so what is read back is checked like a feed, and a failure leaves the store in
-	memory for the page's life. Every change reads the store afresh first, so one tab doesn't undo another's.
+	schedule's ET date: the one thing the page keeps between loads. Only the loaded day's and the day before's
+	are kept, the two days the my-picks table shows. Each holds what that table shows of it, so the table needs
+	nothing from the day's lists. They live in this browser's local storage, which can refuse access, fill up or
+	hold anything at all, so what is read back is checked like a feed, and a failure leaves the store in memory
+	for the page's life. Every change reads the store afresh first, so one tab doesn't undo another's.
 */
 
 export type PickTable = 1 | 2 | 3;
@@ -30,16 +32,7 @@ export interface EnteredStore {
 }
 
 const KEY = 'timspicks.entered';
-// The latest day, which the my-picks table shows, and the one before it, which it shows again once the
-// latest day's picks are all cleared
-const KEEP_DAYS = 2;
 const EMPTY: EnteredStore = { days: {} };
-
-const isDay = (value: string): boolean => {
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-	const time = Date.parse(`${value}T00:00:00Z`);
-	return !isNaN(time) && new Date(time).toISOString().startsWith(value);
-};
 
 const logoOf = (value: unknown): string | null => {
 	return typeof value === 'string' && value.length <= 300 && value.startsWith('https://') ? value : null;
@@ -51,13 +44,6 @@ const pickOf = (value: unknown): EnteredPick | null => {
 	if (typeof playerId !== 'number' || !Number.isSafeInteger(playerId)) return null;
 	if (typeof name !== 'string' || name.length === 0 || name.length > 80 || !isTeam(team)) return null;
 	return { playerId, name, team, logoLight: logoOf(value.logoLight), logoDark: logoOf(value.logoDark) };
-};
-
-// The latest days, which are the only ones a table can still show
-const latest = (store: EnteredStore): EnteredStore => {
-	const dates = Object.keys(store.days).sort().reverse();
-	if (dates.length <= KEEP_DAYS) return store;
-	return { ...store, days: Object.fromEntries(dates.slice(0, KEEP_DAYS).map((date) => [date, store.days[date]])) };
 };
 
 // What a stored value holds that passes the checks, a day and a pick at a time
@@ -77,7 +63,7 @@ const storeOf = (raw: string): EnteredStore => {
 		}
 		if (Object.keys(day).length > 0) days[date] = day;
 	}
-	return latest({ days });
+	return { days };
 };
 
 // The store as last read or written, which is all there is once storage has failed
@@ -126,11 +112,15 @@ export const toggle = (date: string, table: PickTable, pick: EnteredPick): Enter
 	const days: Record<string, EnteredDay> = { ...store.days };
 	if (Object.keys(day).length > 0) days[date] = day;
 	else delete days[date];
-	return write(latest({ ...store, days }));
+	return write({ ...store, days });
 };
 
-// The latest day with picks up to the one given, or of them all when the page has no day of its own
-export const latestDay = (store: EnteredStore, date: string | null): string | null => {
-	const dates = Object.keys(store.days).filter((day) => date === null || day <= date).sort();
-	return dates.length > 0 ? dates[dates.length - 1] : null;
+// Drops every day earlier than the one before the loaded day, once the page knows which day it loaded. Marks only
+// ever go to those two days, so nothing older builds up while the page is open
+export const prune = (today: string): EnteredStore => {
+	const store = read();
+	const from = addDays(today, -1);
+	const dates = Object.keys(store.days);
+	if (dates.every((date) => date >= from)) return store;
+	return write({ ...store, days: Object.fromEntries(dates.filter((date) => date >= from).map((date) => [date, store.days[date]])) });
 };

@@ -30,10 +30,6 @@ button:hover {
 	justify-content: center;
 }
 
-.button-disabled {
-	visibility: hidden;
-}
-
 .collapsible-header {
 	display: flex;
 	align-items: center;
@@ -101,11 +97,12 @@ button:hover {
 	width: 100%;
 }
 
+/* The visible height: on a phone 100vh also counts the browser's toolbars, which would put the message below the middle */
 .error-screen {
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	height: 100vh;
+	height: 100dvh;
 	flex-direction: column;
 	gap: 1rem;
 }
@@ -115,11 +112,16 @@ button:hover {
 	font-size: 1.1rem;
 }
 
-.loading-screen {
+/* In the middle of the scrollable area under the header, whatever banner is above it, which it lies over
+   without taking its clicks */
+.content-loading {
+	position: absolute;
+	inset: 0;
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	height: 100vh;
+	font-size: 1.2rem;
+	pointer-events: none;
 }
 
 .toolbar-start {

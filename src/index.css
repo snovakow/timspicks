@@ -4,6 +4,9 @@ body {
 }
 
 :root {
+	/* The links' colour, which the info banners tint with too */
+	--c-link: #646cff;
+
 	font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
 	line-height: 1.5;
 	font-weight: 400;
@@ -20,7 +23,7 @@ body {
 
 a {
 	font-weight: 500;
-	color: #646cff;
+	color: var(--c-link);
 	text-decoration: inherit;
 }
 
@@ -34,7 +37,7 @@ header {
 	grid-template-columns: auto 1fr auto;
 	align-items: center;
 
-	gap: 1rem;
+	gap: 0.5rem;
 	top: 0;
 	background-color: light-dark(hsl(351, 84%, 95%), hsl(351, 84%, 25%));
 	left: 0;
@@ -62,20 +65,11 @@ header {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 0.3rem;
 	min-width: 0;
 	flex: 1 1 0%;
 	max-width: 100%;
 	overflow: hidden;
 	font-size: clamp(1rem, 6vw, 1em);
-}
-
-.header-title-icon {
-	width: 1em;
-	height: 1em;
-	flex-shrink: 0;
-	max-width: 1em;
-	max-height: 1em;
 }
 
 .header-title-text {

@@ -76,7 +76,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
 					<span>My Picks</span>
 				</label>
 				<div className="settings-description">
-					Tap or click a player's name in a pick table to mark him as your pick, and again to clear it. Today's History keeps a started game's players there to mark. Your latest picks are listed above the tables with their results until you mark the next day's.
+					Tap or click a player's name in a pick table to mark him as your pick, and again to clear it. Today's History keeps a started game's players there to mark. Today's picks are listed above the tables with their results, and yesterday's on that day in the Calendar.
 				</div>
 			</div>
 			<div className="settings-group">
