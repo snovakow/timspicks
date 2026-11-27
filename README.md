@@ -98,7 +98,9 @@ Shows today's history, on by default and turned off in the settings: the started
 
 Marks each player in today's history with a check once he has scored, or a cross once his game ends without a goal from him, updated each minute while games are on
 
-Marks your pick in each of the three lists, on by default and turned off in the settings with My Picks: tap or click a player's name, even once his game has started if today's history keeps him listed, and the marks are kept in this browser; your latest picks are listed with their game start times and results above the tables until the next day's are marked, so a late game's result still shows after midnight
+Shows an earlier day picked from a calendar that runs from the start of the archive to today: the day's games, every player each pick list held that day with his odds from the last list that held him and his check or cross, and each of its slots' stats
+
+Marks your pick in each of the three lists, on by default and turned off in the settings with My Picks: tap or click a player's name, even once his game has started if today's history keeps him listed, and the marks are kept in this browser, today's and yesterday's; today's picks are listed with their game start times and results above the tables, and yesterday's on that day in the calendar, where a late game's result still comes in after midnight and a pick can still be marked
 
 # React + TypeScript + Vite
 
