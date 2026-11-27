@@ -387,7 +387,10 @@ archived day the cron missed (see the archive, below).
 
 Credentials live in a gitignored file holding a name and a bcrypt hash, and it is
 rewritten in place when the hash is upgraded. The seeder that writes it runs on a
-local dev server only and is never deployed.
+local dev server only and is never deployed. The file sits in the site folder,
+where only the PHP reads it, from disk, so an access rule kept in that folder
+refuses every web request for it. The rule travels with the other static files,
+so a deploy puts it in place.
 
 ## The archive
 
