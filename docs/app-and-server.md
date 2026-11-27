@@ -350,32 +350,56 @@ tables also marks his row as the pick entered in the contest's own app: one row 
 table, moved by marking another and cleared by marking it again. The setting
 stands apart from the history, which only adds rows to mark: a started game's and
 a dropped player's, since a pick can be recorded late. The mark changes no
-highlight and no stat, and the player table takes none. While the lists are an
-earlier day's, before the day's first draw has posted, the names mark nothing, so
-no mark goes to a player the real lists may not hold. With the setting off, which
-lasts the page's life like the other settings, the names mark nothing and no mark
-or my-picks table shows, and nothing is deleted.
+highlight and no stat, and the player table takes none. Names mark picks on two
+days only: the loaded day, and the day before it in the calendar, described
+below, where every player its lists held is there to mark. While the loaded day's
+lists are still an earlier day's, before its first draw has posted, its names
+mark nothing, so no mark goes to a player the real lists may not hold. With the
+setting off, which lasts the page's life like the other settings, the names mark
+nothing and no mark or my-picks table shows, and nothing is deleted.
 
 The marks are the one thing the page keeps between loads. They sit in the
 browser's local storage under one key, by the schedule's ET date, each with the
-player's id, name, team and logos, which is all a mark needs once that day's lists
-are gone. Nothing is sent to the server. What is read back is checked like any
-feed, and a browser that refuses storage keeps the marks for the life of the page.
-Only the latest days are kept, enough for the one the my-picks table shows and
-the one before it, which shows again if the later day's marks are all cleared.
+player's id, name, team and logos, which is all the my-picks table shows of it,
+so the table needs nothing from that day's lists. Nothing is sent to the server.
+What is read back is checked like any feed, and a browser that refuses storage
+keeps the marks for the life of the page. Only the two days a mark can go to are
+kept, the two the my-picks table shows, and an earlier day's marks are dropped
+once the page knows which day it loaded.
 
 The marked picks are also listed in a table of their own above the games, each
-with its goal mark and its game's start time, with the history on or off. It
-holds the latest day's with a mark: the loaded day's once one is marked, and
-until then an earlier day's, however many of the loaded day's games have
-started, titled as yesterday's or, when older, by its date. The next day's lists
-arrive on the first load after midnight and a late game can still be going then,
-so a day's results stay up until the next day's picks are made. The loaded day's
-start times come from its schedule. An earlier day's come from its own scores
-file, as do its results, followed from the starts the file gives, as the page
-holds no schedule for that day. The table is a section like the others,
-collapsed by its title, and the setting alone turns the marking and the table
-off.
+with its goal mark and its game's start time, with the history on or off: the
+loaded day's as today's, and the day before's as yesterday's, on that day in the
+calendar. The next day's lists arrive on the first load after midnight and a late
+game can still be going then, so the day before's results keep coming in there,
+and a pick recorded late can still be marked from its lists. Each day's start
+times come from its schedule. The table is a section like the others, collapsed
+by its title, and the setting alone turns the marking and the table off.
+
+The calendar shows an earlier day in place of the loaded one. It runs from the
+archive's first day to the loaded day and offers the days the page has data for:
+every day in the archive's index, the loaded day, with or without games, and the
+day before it while that day's last game isn't official yet. The index takes a
+day only once its games are all official, so for a while after midnight a late
+game keeps the day before out of it. A day without games has no folder, and a
+request for one would fail, so the page tells the two apart from the schedule
+saved with the latest indexed day before it, which covers that day's week.
+
+An earlier day shows the way today's history shows a day whose games have all
+started, with the history on or off: each game's players from its slot's
+snapshot, a player a redraw dropped with his prices from the latest slot that
+held him, each slot's stats, and each player's result from the day's scores file,
+followed while a game is in play as the loaded day's are. Nothing is greyed,
+since nothing on it can be picked. Its players come from the list entries
+themselves, by the name and team each gives, as the archive replays read them,
+rather than from the player files: a player traded since keeps the team he had
+that day, and one whose file a later season no longer holds is still listed. An
+entry's name can be the spelling a name mapping points to, so for its player the
+mappings are read both ways. The player table holds only the lists' players
+there, as the archive keeps no rosters, and the games table leaves out expected
+goals, which are the season's to date. A past day's folders are never written
+again, so a day loads once for the page's life, and one that wouldn't load says
+so and is tried again when it is picked.
 
 ## The admin page
 
@@ -394,8 +418,9 @@ so a deploy puts it in place.
 
 ## The archive
 
-The archive is each day's slot snapshots and scores file, kept for good, and it is
-what the app's archive replays and `/analyze` measure. The scores file records the
+The archive is each day's slot snapshots and scores file, kept for good. The
+page's calendar shows it, and it is what the app's archive replays and `/analyze`
+measure. The scores file records the
 day's season and whether it was a regular-season or a playoff day, as the score
 feed gives them. The archive's index lists every day whose folder holds a snapshot
 and whose scores are final: every game called official, or off its normal
